@@ -1,6 +1,8 @@
 from bs4 import BeautifulSoup
+from sendemail import send_email
 import requests
 import json
+import re
 
 
 
@@ -8,14 +10,16 @@ ramones = {
     "item name": "Ramones",
     "brand": "Rick Owens",
     "size": 42,
-    "search_query": "rick+owens+ramones"
+    "search_query": "rick+owens+ramones",
+    "market_price": 800
 }
 
 pod_shorts = {
     "item name": "Pod Shorts",
     "brand": "Rick Owens",
     "size": 42,
-    "search_query": "pods"
+    "search_query": "pods",
+    "market_price": 200
 }
 
 def yahoo_jp_scrape(item_dict):
@@ -42,6 +46,7 @@ def yahoo_jp_scrape(item_dict):
 
     alllinks = soup.find_all('a', class_='Product__titleLink js-browseHistory-add js-rapid-override')
 
+    allimages = soup.find_all('img', class_='Product__imageData')
 
     new_links = []
     for link in alllinks:
@@ -60,10 +65,39 @@ def yahoo_jp_scrape(item_dict):
     # for link in alllinks:
     #     print(link['href'])
 
-    for title, price, link in zip(alltitles,allprices,new_links):
-        print("Title:",title.text.strip())
-        print("Price:",price.text)
-        print("Product Link:",link)
+    listing_dict = {}
+    
+    body = []
+    for title, price, link, image in zip(alltitles,allprices,new_links,allimages):
+        num_price = re.sub(r'[^0-9]','', price.text)
+        price_usd = int(num_price) * 0.0062
+        pct_cheaper = ((item_dict['market_price'] - price_usd) / item_dict['market_price']) * 100
+        if pct_cheaper > 0:
+            listings.append({
+                "title": title.text.strip(),
+                "raw_price": price.text,
+                "price_usd": price_usd,
+                "pct_cheaper": pct_cheaper,
+                "link": link,
+                "image": image['src']
+            })
+
+            
+
+            print("Title:",title.text.strip())
+            print("Price:",int(num_price), f"{pct_cheaper}% cheaper than mkt")
+            print("Product Link:",link)
+            print("Image Link: ", image['src'])
+
+            body.append(f"Title: {title.text.strip()}")
+            body.append(f"Price: {price.text}")
+            body.append(f"Product Link: {link}")
+            body.append(f"Image Link: {image['src']}")
+
+    
+    body_text = "\n".join(body)
+
+    # send_email(f"Daily Refresh on {item_dict['item name']}", body_text)
 
     print(f"--- All links above for {item_dict['item name']} ---")
 
