@@ -1,0 +1,16 @@
+[
+    {
+        "item name": "rick owens ramones",
+        "brand": "Rick Owens",
+        "size": 42,
+        "search_query": "rick+owens+ramones",
+        "market_price": 600.0
+    },
+    {
+        "item name": "pod shorts",
+        "brand": "Rick Owens",
+        "size": 42,
+        "search_query": "pod+shorts",
+        "market_price": 200.0
+    }
+]
