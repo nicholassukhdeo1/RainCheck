@@ -5,26 +5,6 @@ import json
 import re
 
 
-# --- Item Catalog ---
-# each dictionary represents one item to monitor.
-# add new items here as you expand the catalog.
-ramones = {
-    "item name": "Ramones",
-    "brand": "Rick Owens",
-    "size": 42,
-    "search_query": "rick+owens+ramones",
-    "market_price": 800  # average resale price in USD
-}
-
-pod_shorts = {
-    "item name": "Pod Shorts",
-    "brand": "Rick Owens",
-    "size": 42,
-    "search_query": "pods",
-    "market_price": 200
-}
-
-
 def yahoo_jp_scrape(item_dict):
     """
     Scrapes Yahoo Auctions Japan for new listings of a given item.
@@ -124,9 +104,10 @@ def yahoo_jp_scrape(item_dict):
 
     print(f"--- Yahoo Auctions Update for: {item_dict['item name']} ---")
 
-with open("catalog.json", "r") as f:
-        item_list = json.load(f)
-for item in item_list:
-    yahoo_jp_scrape(item)
-
-# git push test
+# the "int main(){} equivalent..."" so that this code isnt ran whenever this file is ran
+# every file in Python has a built-in variable called __name__
+if __name__ == "__main__":
+    with open("catalog.json", "r") as f:
+            item_list = json.load(f)
+    for item in item_list:
+        yahoo_jp_scrape(item)
