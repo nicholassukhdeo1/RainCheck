@@ -34,13 +34,14 @@ while stop != "done":
         # any space you inputted in, and turning it into a +
         # because thats how these search links are built in first place
         "search_query": desired_item.replace(" ", "+"),
-        "market_price": item_price
+        "market_price": item_price,
+        "keywords": ["ramones", "ramon", "high top"]
     }
 
     item_list.append(user_item)
 
 
-    stop = input("Are you done adding items? If so, type 'done'\n")
+    stop = input("Are you done adding items? Type 'done' if so, or 'continue' if not.\n")
 
 
 with open("catalog.json", "w") as f:
