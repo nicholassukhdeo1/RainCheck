@@ -32,10 +32,6 @@ def yahoo_jp_scrape(item_dict):
     and emails the top 5 best deals.
     """
 
-    desired_item = {
-        "item name": f"{desired_item}"
-    }
-
     # each item gets its own JSON file to track previously seen listings.
     # this way we only alert on genuinely new listings each run.
     filename = f"{item_dict['search_query']}_seen_links.json"
@@ -126,12 +122,9 @@ def yahoo_jp_scrape(item_dict):
     body_text = "<br>".join(body)
     send_email(f"Daily Refresh on {item_dict['item name']}", body_text)
 
-    print(f"--- Done: {item_dict['item name']} ---")
+    print(f"--- Yahoo Auctions Update for: {item_dict['item name']} ---")
 
-
-# --- Run ---
-
-desired_item = input("Tell me something you'd like to get daily updates on!")
-item_price = input("What's the market price on it?")
-yahoo_jp_scrape(desired_item)
-# yahoo_jp_scrape(pod_shorts)
+with open("catalog.json", "r") as f:
+        item_list = json.load(f)
+for item in item_list:
+    yahoo_jp_scrape(item)
