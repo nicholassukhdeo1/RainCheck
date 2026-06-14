@@ -4,13 +4,23 @@
         "brand": "Rick Owens",
         "size": 42,
         "search_query": "rick+owens+ramones",
-        "market_price": 600.0
+        "market_price": 300.0,
+        "keywords": [
+            "ramones",
+            "ramon",
+            "high top"
+        ]
     },
     {
         "item name": "pod shorts",
         "brand": "Rick Owens",
         "size": 42,
         "search_query": "pod+shorts",
-        "market_price": 200.0
+        "market_price": 300.0,
+        "keywords": [
+            "ramones",
+            "ramon",
+            "high top"
+        ]
     }
 ]

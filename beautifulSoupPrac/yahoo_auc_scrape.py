@@ -5,66 +5,56 @@ import json
 import re
 
 
-def yahoo_jp_scrape(item_dict):
+def yahoo_jp_scrape(item_dict, brand_url):
     """
-    Scrapes Yahoo Auctions Japan for new listings of a given item.
-    Filters out overpriced listings, ranks by discount from market price,
-    and emails the top 5 best deals.
+    Scrapes a Yahoo Auctions Japan brand page for new listings.
+    Filters by item keywords, removes overpriced listings,
+    ranks by discount from market price, and emails the top 5 deals.
     """
 
-    # each item gets its own JSON file to track previously seen listings.
-    # this way we only alert on genuinely new listings each run.
     filename = f"{item_dict['search_query']}_seen_links.json"
 
     try:
         with open(filename, "r") as f:
             seen_links = json.load(f)
     except FileNotFoundError:
-        # first run — no file exists yet, so start fresh
         seen_links = []
 
-    # build the search URL dynamically using the item's search query
-    url = (
-        f"https://auctions.yahoo.co.jp/search/search?"
-        f"auccat=23172&tab_ex=commerce&ei=utf-8&aq=-1&oq=&sc_i=&p={item_dict['search_query']}"
-    )
-
-    response = requests.get(url)
+    response = requests.get(brand_url)
     soup = BeautifulSoup(response.text, "html.parser")
 
-    # pull all relevant elements from the page
     alltitles = soup.find_all('h3')
     allprices = soup.find_all('span', class_='Product__priceValue u-textRed')
     alllinks = soup.find_all('a', class_='Product__titleLink js-browseHistory-add js-rapid-override')
     allimages = soup.find_all('img', class_='Product__imageData')
 
-    # filter down to only links we haven't seen before
-    # link['href'] extracts the URL string from the html element
     new_links = []
     for link in alllinks:
         if link['href'] not in seen_links:
             new_links.append(link['href'])
 
-    # save updated seen links so next run knows what's already been processed
     seen_links += new_links
     with open(filename, "w") as f:
         json.dump(seen_links, f)
 
-    # build a list of new listings with pricing data
     listings = []
     for title, price, link, image in zip(alltitles, allprices, new_links, allimages):
+        title_text = title.text.strip().lower()
 
-        # strip everything non-numeric from the price string (e.g. "71,500円" -> "71500")
+        # only process listings whose title contains at least one item keyword
+
+        # any() is a method that returns True as long as ONE condition yields true
+
+        if not any(keyword in title_text for keyword in item_dict['keywords']):
+            continue
+        
+        # if the title you're currently looking at doesnt have any of the keywords, FADE it
+        # and just keep it pushing, continue to next title.
+
         num_price = re.sub(r'[^0-9]', '', price.text)
-
-        # convert yen to USD using current exchange rate
         price_usd = int(num_price) * 0.0062
-
-        # calculate how much cheaper this listing is vs market price (as a percentage)
-        # formula: ((market - listing) / market) * 100
         pct_cheaper = ((item_dict['market_price'] - price_usd) / item_dict['market_price']) * 100
 
-        # only include listings that are actually below market price
         if pct_cheaper > 0:
             listings.append({
                 "title": title.text.strip(),
@@ -75,39 +65,32 @@ def yahoo_jp_scrape(item_dict):
                 "image": image['src']
             })
 
-    # sort by biggest discount first, then take the top 5
     listings.sort(key=lambda x: x['pct_cheaper'], reverse=True)
     top_five = listings[:5]
 
-    # build the email body in HTML format
-    # <br> is used instead of \n because email clients render HTML
     body = []
     for listing in top_five:
         print("Title:", listing['title'])
         print("Price:", listing['price_usd'], f"{listing['pct_cheaper']}% cheaper than mkt")
         print("Product Link:", listing['link'])
-        print("Image Link:", listing['image'])
 
         body.append(f"Title: {listing['title']}")
-
-        # this outputs the price to TWO decimal points
         body.append(f"Price: ${listing['price_usd']:.2f}")
-
-        # same concept, but ONE decimal point.
         body.append(f"{listing['pct_cheaper']:.1f}% cheaper than market")
         body.append(f"Product Link: {listing['link']}")
         body.append(f"Image: {listing['image']}")
-        body.append("---")  # separator between listings
+        body.append("---")
 
     body_text = "<br>".join(body)
     send_email(f"Daily Refresh on {item_dict['item name']}", body_text)
-
     print(f"--- Yahoo Auctions Update for: {item_dict['item name']} ---")
 
-# the "int main(){} equivalent..."" so that this code isnt ran whenever this file is ran
-# every file in Python has a built-in variable called __name__
+
+# Rick Owens brand page — newest first, 100 items per page
+RICK_OWENS_URL = "https://auctions.yahoo.co.jp/category/list/23000/?auccat=23000&s1=new&o1=d&brand_id=103538&n=100"
+
 if __name__ == "__main__":
     with open("catalog.json", "r") as f:
-            item_list = json.load(f)
+        item_list = json.load(f)
     for item in item_list:
-        yahoo_jp_scrape(item)
+        yahoo_jp_scrape(item, RICK_OWENS_URL)
