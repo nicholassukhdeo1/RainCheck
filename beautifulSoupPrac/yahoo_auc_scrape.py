@@ -128,3 +128,5 @@ with open("catalog.json", "r") as f:
         item_list = json.load(f)
 for item in item_list:
     yahoo_jp_scrape(item)
+
+# git push test
