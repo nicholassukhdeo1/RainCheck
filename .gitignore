@@ -10,3 +10,6 @@ build/
 .env
 .venv
 venv/
+
+# Editor / tooling
+.claude/
