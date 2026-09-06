@@ -1,10 +1,12 @@
+from datetime import datetime, timezone
+
 import sqlite3
 import json
 import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "raincheck.db")
-SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "src", "schema.sql")
-CATALOG_PATH = os.path.join(os.path.dirname(__file__), "src","catalog.json")
+SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
+CATALOG_PATH = os.path.join(os.path.dirname(__file__), "catalog.json")
 
 
 def get_connection():
@@ -80,4 +82,20 @@ def seed_from_catalog():
     conn.commit()
     conn.close()
     print("Catalog seeded.")
+
+def insert_listing(brand_id,url,title,price_yen,image_url):
+    conn = get_connection()
+    now = datetime.now(timezone.utc).isoformat()
+    # the execute func returns if smth was inserted or not. 
+    ifInserted = conn.execute(
+        "INSERT OR IGNORE INTO listings (brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at) VALUES (?,?,?,?,?,?,?)",
+        (brand_id,url,title,price_yen,image_url,now,now)
+    )
+    conn.commit()
+    # how u will check if smth was inserted or not (if it was a new listing)
+    is_new = (ifInserted.rowcount == 1)
+    conn.close()
+    return is_new
+    
+
 

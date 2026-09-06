@@ -13,3 +13,5 @@ venv/
 
 # Editor / tooling
 .claude/
+
+sqlTips.txt

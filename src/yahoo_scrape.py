@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 from sendemail import send_email
+from db import get_connection, insert_listing
 import requests
 import json
 import re
@@ -12,13 +13,14 @@ def yahoo_jp_scrape(item_dict, brand_url):
     ranks by discount from market price, and emails the top 5 deals.
     """
 
-    filename = f"{item_dict['search_query']}_seen_links.json"
+    conn = get_connection()
+    brand_id = conn.execute(
+        "SELECT id FROM brands WHERE name = ?",
+        (item_dict["brand"],),
+    ).fetchone()["id"]
+    conn.close()
 
-    try:
-        with open(filename, "r") as f:
-            seen_links = json.load(f)
-    except FileNotFoundError:
-        seen_links = []
+    
 
     response = requests.get(brand_url)
     soup = BeautifulSoup(response.text, "html.parser")
@@ -28,17 +30,10 @@ def yahoo_jp_scrape(item_dict, brand_url):
     alllinks = soup.find_all('a', class_='Product__titleLink js-browseHistory-add js-rapid-override')
     allimages = soup.find_all('img', class_='Product__imageData')
 
-    new_links = []
-    for link in alllinks:
-        if link['href'] not in seen_links:
-            new_links.append(link['href'])
 
-    seen_links += new_links
-    with open(filename, "w") as f:
-        json.dump(seen_links, f)
 
     listings = []
-    for title, price, link, image in zip(alltitles, allprices, new_links, allimages):
+    for title, price, link, image in zip(alltitles, allprices, alllinks, allimages):
         title_text = title.text.strip().lower()
 
         # only process listings whose title contains at least one item keyword
@@ -56,14 +51,16 @@ def yahoo_jp_scrape(item_dict, brand_url):
         pct_cheaper = ((item_dict['market_price'] - price_usd) / item_dict['market_price']) * 100
 
         if pct_cheaper > 0:
-            listings.append({
-                "title": title.text.strip(),
-                "raw_price": price.text,
-                "price_usd": price_usd,
-                "pct_cheaper": pct_cheaper,
-                "link": link,
-                "image": image['src']
-            })
+            is_new = insert_listing(brand_id,link['href'],title.text.strip(),int(num_price),image['src'])
+            if is_new:
+                listings.append({
+                    "title": title.text.strip(),
+                    "raw_price": price.text,
+                    "price_usd": price_usd,
+                    "pct_cheaper": pct_cheaper,
+                    "link": link['href'],
+                    "image": image['src']
+                })
 
     listings.sort(key=lambda x: x['pct_cheaper'], reverse=True)
     top_five = listings[:5]
