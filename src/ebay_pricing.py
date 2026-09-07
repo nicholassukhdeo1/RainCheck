@@ -1,5 +1,6 @@
 import os, base64, requests, statistics
 import json
+from db import get_item_id,update_market_price
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -33,7 +34,7 @@ def get_ebay_token():
 # verifying if my ebay token func worked.
 # print(get_ebay_token()[:40])
 
-def ebay_market_price(query, keywords, token):
+def ebay_market_price(query, keywords, exclude_keywords, token):
 
     # bearer means that we have already gotten the token
     currListing = requests.get("https://api.ebay.com/buy/browse/v1/item_summary/search",headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"}
@@ -49,7 +50,7 @@ def ebay_market_price(query, keywords, token):
 
         title = item["title"].lower()
 
-        if any(bad in title for bad in ["drkshdw", "canvas"]):
+        if any(bad in title for bad in exclude_keywords):
             continue
 
         if any(keyword in title for keyword in keywords):
@@ -63,16 +64,35 @@ def ebay_market_price(query, keywords, token):
     # for item in sorted(items, key=lambda i: float(i["price"]["value"])):
     #     print(item["price"]["value"], "-", item["title"][:70])
 
-
+    if not price:
+        return None
     return statistics.median(price)
 
-    
+def refresh_market_prices():
+
+    my_token = get_ebay_token()
+
+    with open("catalog.json", "r") as f:
+        item_list = json.load(f)
+        for item in item_list:
+            price = ebay_market_price(item["item name"],item["keywords"],item["exclude_keywords"],my_token)
+            if price is None:
+                continue
+
+            item_id = get_item_id(item["brand"],item["item name"])
+
+            update_market_price(item_id,price)
+
+
+                
 
 
 if __name__ == "__main__":
-    my_token = get_ebay_token()
 
-    print(ebay_market_price("rick owens ramones",["ramones","ramon","high top"],my_token))
+    # print(ebay_market_price("rick owens ramones",["ramones","ramon","high top"],["drkshdw","canvas"],my_token))
+
+    refresh_market_prices()
+
     
 
 

@@ -5,6 +5,10 @@
         "size": 42,
         "search_query": "rick+owens+ramones",
         "market_price": 800.0,
+        "exclude_keywords": [
+            "drkshdw",
+            "canvas"
+        ],
         "keywords": [
             "ramones",
             "ramon",
@@ -17,6 +21,9 @@
         "size": 42,
         "search_query": "pod+shorts",
         "market_price": 300.0,
+        "exclude_keywords":[
+            "pants"
+        ],
         "keywords": [
             "ramones",
             "ramon",

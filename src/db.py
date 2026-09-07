@@ -96,6 +96,30 @@ def insert_listing(brand_id,url,title,price_yen,image_url):
     is_new = (ifInserted.rowcount == 1)
     conn.close()
     return is_new
-    
+
+
+def update_market_price(item_id, price):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE items SET market_price_usd = ? WHERE id = ?",
+        (price,item_id)
+    )
+    conn.commit()
+    conn.close()
+    print("Market price updated!")
+
+def get_item_id(brand_name,item_name):
+    conn = get_connection()
+    brand_id = conn.execute(
+        "SELECT id FROM brands WHERE name = ?",
+        (brand_name,)
+    ).fetchone()["id"]
+    item_id = conn.execute(
+        "SELECT id FROM items WHERE brand_id = ? and name = ?",
+        (brand_id,item_name)
+    ).fetchone()["id"]
+    conn.close()
+    # no conn commit bc we are accessing only, not changing.
+    return item_id
 
 
