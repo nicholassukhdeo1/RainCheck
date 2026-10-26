@@ -42,16 +42,29 @@ NEXT_DATA_RE = re.compile(
 )
 
 
-def _strip_seller(node):
-    """Recursively removes `seller` from every dict that looks like a listing (has auctionId)."""
+def _sanitize(node, removed):
+    """
+    Walks the parsed JSON at any depth and:
+    - removes `seller` and `prefectureCode` from every dict that looks like a listing (has auctionId)
+    - empties every `setCookies` value (Yahoo browser-ID cookies issued to our capture request)
+    - appends the userId/displayName of each removed seller to `removed`, for the leak check
+    """
     if isinstance(node, dict):
         if "auctionId" in node:
-            node.pop("seller", None)
+            seller = node.pop("seller", None)
+            if isinstance(seller, dict):
+                for key in ("userId", "displayName"):
+                    value = seller.get(key)
+                    if isinstance(value, str) and value:
+                        removed.append(value)
+            node.pop("prefectureCode", None)
+        if "setCookies" in node:
+            node["setCookies"] = []
         for value in node.values():
-            _strip_seller(value)
+            _sanitize(value, removed)
     elif isinstance(node, list):
         for value in node:
-            _strip_seller(value)
+            _sanitize(value, removed)
 
 
 def strip_yahoo_seller_data(html):
@@ -60,6 +73,9 @@ def strip_yahoo_seller_data(html):
     the __NEXT_DATA__ JSON, so no personal data is committed.
     Fails closed: if the block is missing or is not valid JSON we raise instead
     of returning the page, so an unsanitized page can never be written.
+    It also raises if a removed seller's userId or displayName still appears
+    anywhere in the output, in case Yahoo moves seller data somewhere the
+    key-based stripping does not reach.
     """
     match = NEXT_DATA_RE.search(html)
     if match is None:
@@ -69,13 +85,24 @@ def strip_yahoo_seller_data(html):
     except json.JSONDecodeError as e:
         raise RuntimeError(f"__NEXT_DATA__ is not valid JSON ({e}); refusing to write unsanitized page")
 
-    _strip_seller(data)
+    removed = []
+    _sanitize(data, removed)
     clean = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     # seller-written titles could contain "</script>", which would close the tag early and
     # corrupt the page. Next.js escapes "<" the same way; it is still valid JSON with the same data.
     clean = clean.replace("<", "\\u003c")
     # splice by position (not re.sub) so backslashes in the JSON are never read as regex escapes
-    return html[: match.start(2)] + clean + html[match.end(2):]
+    output = html[: match.start(2)] + clean + html[match.end(2):]
+
+    # Safety net: look for the removed values as plain text. Also check the "<"-escaped form,
+    # because that is how a value would look inside the JSON block.
+    # The message only gives a count so the leaked value is never printed.
+    leaked = [v for v in set(removed) if v in output or v.replace("<", "\\u003c") in output]
+    if leaked:
+        raise RuntimeError(
+            f"{len(leaked)} removed seller value(s) still appear in the page; refusing to write it"
+        )
+    return output
 
 
 def capture_yahoo():
