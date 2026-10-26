@@ -176,9 +176,10 @@ Run from a terminal, one step at a time, stopping at the first unexpected result
 Replace nothing; the paths are the real ones.
 
 - **C0.** Make sure no RainCheck script is running: `pgrep -fl "yahoo_scrape|ebay_pricing|db.py"` prints nothing.
-- **C1.** `cd /Users/nicholassukhdeo/Desktop/RainCheck-main`
+- **C1.** `cd /Users/nicholassukhdeo/Desktop/RainCheck-main`, then confirm no `.env` moves the live database: `grep -c '^RAINCHECK_DB_PATH' src/.env .env 2>/dev/null` prints only zero counts (it prints counts, never values).
+  If any count is not zero, the live database is not `src/raincheck.db`; stop and rethink Phase C.
 - **C2.** `git status --short` shows nothing, or only ` M src/raincheck.db`.
-  Anything else must be committed or stashed first; never stash or restore `src/raincheck.db` itself.
+  Anything else must first be saved as a temporary work-in-progress commit, not a stash, because the git stash is shared with every worktree; never stash or restore `src/raincheck.db` itself.
 - **C3.** `ls src/raincheck.db-*` finds no files.
   A leftover `src/raincheck.db-journal` means a write was interrupted; run `sqlite3 src/raincheck.db "PRAGMA integrity_check;"` once (opening the database rolls the journal back), then confirm the side file is gone before continuing.
 - **C4.** Back up and check the backup:
@@ -188,17 +189,19 @@ Replace nothing; the paths are the real ones.
   cp -p src/raincheck.db ~/RainCheck-backups/raincheck-pre-rc02.db
   shasum -a 256 src/raincheck.db ~/RainCheck-backups/raincheck-pre-rc02.db
   sqlite3 ~/RainCheck-backups/raincheck-pre-rc02.db "PRAGMA integrity_check;"
+  sqlite3 src/raincheck.db "SELECT COUNT(*) FROM listings;"
   ```
 
-  The two hashes match and the integrity check prints `ok`.
+  The two hashes match, the integrity check prints `ok`, and the listing count is recorded and shown to the user for C9.
   `~/RainCheck-backups` is outside the repository, so no git command can touch it.
-- **C5.** Move the live database out of the working tree: `mv src/raincheck.db ~/RainCheck-backups/raincheck-live.db`.
+- **C5.** Move the live database out of the working tree without overwriting anything: `mv -n src/raincheck.db ~/RainCheck-backups/raincheck-live.db`, then `ls src/raincheck.db ~/RainCheck-backups/raincheck-live.db` must show only the second path.
+  If the move did not happen (for example because `raincheck-live.db` already existed from an earlier attempt), stop.
   `git status --short` now shows ` D src/raincheck.db`; that is expected and harmless.
 - **C6.** Update `main`: `git switch main && git pull --ff-only origin main`.
-  If either command fails, do not improvise: run `mv ~/RainCheck-backups/raincheck-live.db src/raincheck.db` to put everything back as it was, then ask for help.
+  If either command fails, do not improvise: run `mv -n ~/RainCheck-backups/raincheck-live.db src/raincheck.db` to put everything back as it was, then ask for help.
 - **C7.** Confirm the untracking arrived: `git ls-files src/raincheck.db` prints nothing.
   If it still prints the path, the merge did not include RC-02; move the file back (C8) and stop.
-- **C8.** Move the database back: `mv ~/RainCheck-backups/raincheck-live.db src/raincheck.db`.
+- **C8.** Move the database back without overwriting anything: `mv -n ~/RainCheck-backups/raincheck-live.db src/raincheck.db`, then `ls` confirms `src/raincheck.db` exists and `raincheck-live.db` is gone.
 - **C9.** Verify:
 
   ```bash
@@ -206,11 +209,12 @@ Replace nothing; the paths are the real ones.
   git status --short                                                         # no line mentions raincheck.db
   git check-ignore -v src/raincheck.db                                       # .gitignore:<line>:*.db  src/raincheck.db
   sqlite3 src/raincheck.db "PRAGMA integrity_check; SELECT COUNT(*) FROM listings;"
-  python3 src/db.py                                                          # Database initialized at .../src/raincheck.db.
+  .venv/bin/python src/db.py                                                 # Database initialized at .../src/raincheck.db.
   ```
 
-  The listing count matches what it was before C4.
-  `python3 src/db.py` without `--seed` only runs `CREATE TABLE IF NOT EXISTS`, so it changes no data.
+  The listing count matches the count recorded in C4.
+  The project's `.venv` interpreter is used so `python-dotenv` is available.
+  `db.py` without `--seed` only runs `CREATE TABLE IF NOT EXISTS`, so it changes no data.
 - **C10.** Keep `~/RainCheck-backups/raincheck-pre-rc02.db` at least until the next real scrape run has succeeded.
 
 **Extra safety net:** as long as the live database has not changed since its last commit (`git hash-object src/raincheck.db` prints `d632e3cdadb74b6cd385ad3d4cbf5c6fd0c85194`), it can also be recovered from history with `git cat-file blob d632e3cdadb74b6cd385ad3d4cbf5c6fd0c85194 > src/raincheck.db`.
