@@ -69,12 +69,6 @@ def init_db():
     print(f"Database initialized at {get_db_path()}.")
 
 
-if __name__ == "__main__":
-    # load .env here so RAINCHECK_DB_PATH set there is honored, like the other scripts
-    load_dotenv()
-    init_db()
-
-
 #helps us read the brands and items in catalog and store it into our db
 def seed_from_catalog(catalog_path=None):
     catalog = load_catalog(catalog_path)
@@ -159,3 +153,9 @@ def get_market_price(brand_name,item_name):
     ).fetchone()["market_price_usd"]
     conn.close()
     return m_price
+
+
+if __name__ == "__main__":
+    # load .env here so RAINCHECK_DB_PATH set there is honored, like the other scripts
+    load_dotenv()
+    init_db()

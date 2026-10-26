@@ -1,5 +1,4 @@
 import os, base64, requests, statistics
-import json
 from db import get_item_id, update_market_price, load_catalog
 
 from dotenv import load_dotenv

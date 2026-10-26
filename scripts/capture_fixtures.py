@@ -44,6 +44,7 @@ def capture_yahoo():
 
 def capture_ebay():
     # the token stays in memory only: never printed, never written to disk
+    # note: the token POST inside get_ebay_token has no timeout yet (RC-10 adds it)
     token = get_ebay_token()
     # same headers and params as ebay_market_price
     response = requests.get(
@@ -55,9 +56,11 @@ def capture_ebay():
     response.raise_for_status()
     data = response.json()
 
-    # drop seller usernames and feedback data so none are committed
+    # drop seller usernames/feedback and itemLocation (partial seller postal
+    # codes) so no personal data is committed
     for entry in data.get("itemSummaries", []):
         entry.pop("seller", None)
+        entry.pop("itemLocation", None)
 
     EBAY_OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(EBAY_OUT, "w", encoding="utf-8") as f:
