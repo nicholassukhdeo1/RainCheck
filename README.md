@@ -88,7 +88,10 @@ python3 setup.py         # build your watchlist
 ```
 
 After adding items with it, run `python3 src/db.py --seed` so the new items reach the database.
-`setup.py` does not write `exclude_keywords` yet, so add `"exclude_keywords": []` (or a real list) to each new entry in `catalog.json` by hand before running `ebay_pricing.py`, or it stops with a `KeyError` (RC-14 replaces `setup.py`).
+But first fix the entries `setup.py` wrote in `catalog.json`.
+Its `keywords` are placeholders that need fixing, and its `search_query` uses `+` between words, which seeding rejects, so rewrite it with spaces (or remove it).
+`setup.py` also does not write `exclude_keywords`, so `ebay_pricing.py` still needs `"exclude_keywords": []` (or a real list) added by hand to each new entry, or it stops with a `KeyError`, until RC-03b.
+(RC-14 replaces `setup.py`.)
 
 ## Database
 
@@ -99,8 +102,17 @@ After adding items with it, run `python3 src/db.py --seed` so the new items reac
 - Rebuilding from scratch loses two things.
   The record of listings already seen is gone, so current deals are emailed again on the next run.
   The eBay-derived market prices are gone too, so items fall back to `market_price` from `catalog.json` until `ebay_pricing.py` runs again.
-- Seeding only adds brands, items, and keywords that are missing.
-  Edits to an existing item in `catalog.json` do not reach the database yet (planned in RC-03).
+- Seeding (`python3 src/db.py --seed`) syncs `catalog.json` into the database.
+  Edits to an item (price, search query, keywords, exclude keywords) propagate, and an item you remove from the catalog is deactivated, not deleted, so its history is kept.
+  Adding it back reactivates the same row.
+- `market_price` in `catalog.json` is only a fallback.
+  It is stored as `manual_price_usd`, and it never overwrites the eBay-derived `market_price_usd`.
+  Deal math uses the eBay price when there is one and the catalog price otherwise.
+- Seeding checks the whole catalog first and reports every problem per entry (for example `entry 2 ("pod shorts"): market_price must be a number greater than 0`).
+  If anything is invalid, nothing is written.
+- The database has a schema version.
+  After you update RainCheck, back up the database and run `python3 src/db.py` to upgrade it in place without losing listings or eBay prices.
+  The jobs refuse to run on an outdated database and tell you to do this, so nothing is changed behind your back.
 - To back it up safely, run `sqlite3 src/raincheck.db ".backup '<destination>'"`.
   This makes a consistent copy even if another process is writing, so store it outside the repository.
 - Warning: checking out a commit from before this change (before the RC-02 merge) replaces your local database with the old committed copy without asking.
