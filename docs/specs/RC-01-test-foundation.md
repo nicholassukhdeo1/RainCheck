@@ -183,9 +183,9 @@ def send_email(subject, body) -> None
 - Run by the user only, from the repository root: `python3 scripts/capture_fixtures.py`.
   Agents never run it.
 - Loads `src/.env` and then a root `.env` if they exist, without overriding variables already set.
-- Fetches `RICK_OWENS_URL` (imported from `yahoo_scrape`) with `timeout=30`, calls `raise_for_status()`, and writes the raw response bytes to `tests/fixtures/yahoo/brand_page_live.html`.
+- Fetches `RICK_OWENS_URL` (imported from `yahoo_scrape`) with `timeout=30`, calls `raise_for_status()`, removes seller data (see Amendment 1), and writes the page to `tests/fixtures/yahoo/brand_page_live.html`.
 - Gets an eBay token, searches for `rick owens ramones` with the same headers and parameters as `ebay_market_price`, `timeout=30`, and writes the JSON to `tests/fixtures/ebay/search_live.json` (indent 2, UTF-8, `ensure_ascii=False`).
-  Before writing, it deletes the `seller` object from every entry in `itemSummaries`, so no seller usernames or feedback data are committed.
+  Before writing, it deletes the `seller` and `itemLocation` objects from every entry in `itemSummaries`, so no seller usernames, feedback data, or partial postal codes are committed.
   The access token is never written to disk or printed.
 - Does not touch any database and does not send email.
 - Prints the two output paths and the number of item summaries captured.
@@ -375,7 +375,9 @@ Image URLs follow the same pattern (`https://auc-pctr.c.yimg.jp/i/test/1.jpg` an
 ### Live fixtures
 
 48. `tests/fixtures/yahoo/brand_page_live.html` parsed with BeautifulSoup yields at least one element for each of the four selectors used in `src/yahoo_scrape.py:32-35`.
+    This test is marked as a strict expected failure (`xfail(strict=True)`) whose reason names RC-07, because Yahoo's page no longer matches these selectors (see Amendment 1).
 49. `tests/fixtures/ebay/search_live.json` has an `itemSummaries` list where every entry has a string `title`, every entry that has `price` has a `price.value` that `float()` accepts and `price.currency == "USD"`, and no entry has a `seller` key.
+53. In `tests/fixtures/yahoo/brand_page_live.html`, the embedded `<script id="__NEXT_DATA__">` JSON is present and parses, and no object in it that has an `auctionId` key also has a `seller` key.
 50. If either live file is missing, its test fails (not skips) with a message telling the user to run `python3 scripts/capture_fixtures.py`.
 
 ### Documentation
@@ -487,3 +489,19 @@ Live fixtures use Option A (capture script), the dry-run switch is `RAINCHECK_DR
 All source changes are backward compatible: with `RAINCHECK_DB_PATH` and `RAINCHECK_DRY_RUN` unset, the scripts open the same database and send the same email as before.
 To roll back, revert the merge commit.
 No data migration is involved, and existing `raincheck.db` files are untouched.
+
+## Amendments
+
+### Amendment 1 (2026-10-26, approved by the user): Yahoo page redesign
+
+Verification found that Yahoo Auctions now serves a Next.js page.
+Listing data lives in an embedded `<script id="__NEXT_DATA__">` JSON block, and the `Product__*` classes used by `src/yahoo_scrape.py:32-35` no longer exist, so the live scraper finds zero listings.
+That is a bug in today's scraper, owned by RC-07, not by this item.
+
+- Criterion 48 stays, but is marked `xfail(strict=True)` with a reason naming RC-07.
+  Strict means it fails the suite if it unexpectedly passes, so RC-07 must update it.
+- Each listing object in `__NEXT_DATA__` carries a `seller` object with the seller's user ID, display name, and city.
+  The capture script removes `seller` from every object that has an `auctionId` key before writing the page, matching how the eBay capture strips seller data.
+  The page is otherwise written unchanged, with the JSON block re-serialized in place.
+- New criterion 53 checks that no seller data reaches the committed Yahoo fixture.
+
