@@ -21,7 +21,8 @@ def is_dry_run():
     return value not in ("", "0", "false", "no", "off")
 
 
-def send_email(subject, body):
+def send_email(subject, html_body, text_body):
+    """Sends a text + HTML email. Returns True if sent (or dry run), False if sending failed."""
     # dry run returns before we touch SMTP or SENDER_PASSWORD, so it works with no credentials
     if is_dry_run():
         recipient = (
@@ -32,8 +33,11 @@ def send_email(subject, body):
         print("[DRY RUN] Email not sent (RAINCHECK_DRY_RUN is set).")
         print(f"To: {recipient}")
         print(f"Subject: {subject}")
-        print(body)
-        return
+        print("--- text/plain ---")
+        print(text_body)
+        print("--- text/html ---")
+        print(html_body)
+        return True
 
     sender_email = os.environ["SENDER_EMAIL"]
     sender_password = os.environ["SENDER_PASSWORD"]
@@ -41,13 +45,15 @@ def send_email(subject, body):
     # default to emailing myself if no separate receiver is set
     receiver_email = os.environ.get("RECEIVER_EMAIL", sender_email)
 
-    msg = MIMEMultipart()
+    msg = MIMEMultipart("alternative")
     msg['From'] = sender_email
     msg['To'] = receiver_email
     msg['Subject'] = subject
 
-    # send the body as HTML so images and links render in the email client
-    msg.attach(MIMEText(body, 'html'))
+    # plain text first, HTML last: the last alternative is the preferred one (RFC 2046).
+    # utf-8 is explicit because listing titles are Japanese
+    msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
+    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
 
     try:
         # timeout so a hung mail server can't stall the run forever
@@ -57,5 +63,8 @@ def send_email(subject, body):
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, receiver_email, msg.as_string())
             print("Email sent!")
+        return True
     except Exception as e:
         print(f"Error: unable to send email ({e})")
+        # the caller must know, so it doesn't record deals that were never emailed
+        return False

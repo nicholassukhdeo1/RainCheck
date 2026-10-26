@@ -11,7 +11,7 @@ I built this to get hands-on with web scraping, HTTP requests, and automating a 
 - Scrapes the Rick Owens brand page on Yahoo Auctions Japan (sorted newest-first)
 - Filters listings by keyword, converts prices from JPY to USD, and keeps only those below market
 - Ranks the remaining listings by discount and remembers which ones it has already seen
-- Emails the top 5 best deals as an HTML summary
+- Sends one digest email per run with the top 5 new deals per item (an HTML table plus a plain-text version), and no email when there are no new deals
 
 ## Tech
 
@@ -31,7 +31,8 @@ src/
 ├── yahoo_scrape.py  # scrape Yahoo Auctions Japan and email the best deals
 ├── ebay_pricing.py  # compute each item's market price from eBay and store it
 ├── matching.py      # the keyword matcher both jobs share (include and exclude keywords)
-├── sendemail.py     # sends the HTML email summary
+├── digest.py        # builds the digest email (subject, HTML, plain text) from the deals
+├── sendemail.py     # sends the digest email (text + HTML)
 ├── setup.py         # interactive: build your watchlist, saved to catalog.json
 ├── catalog.json     # the watchlist of items being tracked
 └── raincheck.db     # the SQLite database (local to each machine, not committed)
@@ -135,7 +136,7 @@ Set them in your shell or in `.env`.
   When unset or empty, RainCheck uses `src/raincheck.db`.
   A relative path is resolved against the directory you run the command from.
   The parent directory must already exist.
-- `RAINCHECK_DRY_RUN` - when set to anything except `0`, `false`, `no`, `off`, or empty, emails are printed instead of sent.
+- `RAINCHECK_DRY_RUN` - when set to anything except `0`, `false`, `no`, `off`, or empty, the whole digest (subject, text part, and HTML part) is printed instead of sent.
   Unrecognized values (such as a typo like `ture`) also count as on, so a typo never sends real email.
   Dry run only affects email.
   Database writes still happen, so a dry run against your real database marks listings as seen and they will not be emailed later.

@@ -2,6 +2,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterable
 
 import argparse
 import math
@@ -613,6 +614,21 @@ def insert_listing(brand_id,url,title,price_yen,image_url):
         # how u will check if smth was inserted or not (if it was a new listing)
         is_new = (ifInserted.rowcount == 1)
     return is_new
+
+
+def get_known_listing_urls(urls: Iterable[str]) -> set[str]:
+    """Returns the subset of urls already stored in listings. Read-only: never writes or commits."""
+    # consume the iterable once and de-duplicate it
+    wanted = set(urls)
+    if not wanted:
+        # nothing to look up, so don't even open the database
+        return set()
+    with closing(get_connection()) as conn:
+        # one indexed lookup per url (listings.url is UNIQUE); at most ~100 urls per run
+        return {
+            url for url in wanted
+            if conn.execute("SELECT 1 FROM listings WHERE url = ?", (url,)).fetchone() is not None
+        }
 
 
 def update_market_price(item_id, price):

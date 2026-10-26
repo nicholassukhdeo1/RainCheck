@@ -1,8 +1,11 @@
 from bs4 import BeautifulSoup
 from sendemail import send_email
-from db import get_tracked_items, insert_listing, SchemaVersionError, TrackedItem
+from db import get_tracked_items, get_known_listing_urls, insert_listing, SchemaVersionError, TrackedItem
+from digest import Deal, ItemDeals, build_digest
 from matching import title_matches
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Collection, Sequence
 import json
 import logging
 import requests
@@ -16,6 +19,11 @@ YAHOO_TIMEOUT_SECONDS = 30
 LISTING_PATH = ("props", "pageProps", "initialState", "search", "items", "listing", "items")
 AUCTION_URL_PREFIX = "https://auctions.yahoo.co.jp/jp/auction/"
 FLEAMARKET_URL_PREFIX = "https://paypayfleamarket.yahoo.co.jp/item/"
+
+YEN_TO_USD = 0.0062  # RC-08 replaces this with a live rate
+TOP_DEALS_PER_ITEM = 5
+NO_ITEMS_LINE = "No active items in the database. Add items to catalog.json, then run python3 src/db.py --seed."
+NO_DEALS_LINE = "No new deals; no email sent."
 
 logger = logging.getLogger(__name__)
 
@@ -139,61 +147,68 @@ def parse_listings(html):
     return listings
 
 
-def report_item_deals(item: TrackedItem, listings: list[YahooListing]) -> None:
+def find_item_deals(item: TrackedItem, listings: Sequence[YahooListing], skip_urls: Collection[str]) -> list[Deal]:
     """
-    Filters already-parsed Yahoo listings by the item's keywords and exclude keywords,
-    removes overpriced listings, ranks by discount from market price, and emails the top 5 deals.
+    Pure: returns the item's new deals (keyword match, below market, not in skip_urls),
+    best discount first. Nothing is written, so the caller decides when a deal counts as seen.
     """
-
     # the item already carries its price (eBay first, catalog fallback), so no database read is needed
     market_price = item.effective_price_usd
     if market_price is None:
-        print(f"Skipping {item.name}: no usable market price.")
-        return
+        return []
 
     deals = []
     for listing in listings:
         # only process listings that match the item's keywords and none of its exclude keywords
         # (the same rule the eBay job uses, so both halves of the comparison mean the same item)
-        # if the title doesn't match, FADE it and just keep it pushing, continue to next title.
         if not title_matches(listing.title, item.keywords, item.exclude_keywords):
             continue
+        if listing.url in skip_urls:
+            continue
 
-        price_usd = listing.price_yen * 0.0062
+        price_usd = listing.price_yen * YEN_TO_USD
         pct_cheaper = ((market_price - price_usd) / market_price) * 100
-
         if pct_cheaper > 0:
-            is_new = insert_listing(item.brand_id, listing.url, listing.title, listing.price_yen, listing.image_url)
-            if is_new:
-                deals.append({
-                    "title": listing.title,
-                    "price_usd": price_usd,
-                    "pct_cheaper": pct_cheaper,
-                    "link": listing.url,
-                    "image": listing.image_url
-                })
+            deals.append(Deal(
+                item_id=item.id,
+                brand_id=item.brand_id,
+                url=listing.url,
+                title=listing.title,
+                price_yen=listing.price_yen,
+                price_usd=price_usd,
+                market_price_usd=market_price,
+                discount_pct=pct_cheaper,
+                image_url=listing.image_url,
+            ))
 
-    deals.sort(key=lambda x: x['pct_cheaper'], reverse=True)
-    top_five = deals[:5]
+    # sort is stable, so equal discounts keep page order (newest first)
+    deals.sort(key=lambda d: d.discount_pct, reverse=True)
+    return deals
 
-    body = []
-    for deal in top_five:
-        print("Title:", deal['title'])
-        print("Price:", deal['price_usd'], f"{deal['pct_cheaper']}% cheaper than mkt")
-        print("Product Link:", deal['link'])
 
-        body.append(f"Title: {deal['title']}")
-        body.append(f"Price: ${deal['price_usd']:.2f}")
-        body.append(f"{deal['pct_cheaper']:.1f}% cheaper than market")
-        body.append(f"Product Link: {deal['link']}")
-        # a listing without a thumbnail has no image to show, so skip the line instead of printing "Image: None"
-        if deal['image'] is not None:
-            body.append(f"Image: {deal['image']}")
-        body.append("---")
-
-    body_text = "<br>".join(body)
-    send_email(f"Daily Refresh on {item.name}", body_text)
-    print(f"--- Yahoo Auctions Update for: {item.name} ---")
+def build_sections(
+    items: Sequence[TrackedItem],
+    listings: Sequence[YahooListing],
+    known_urls: Collection[str],
+    per_item_limit: int = TOP_DEALS_PER_ITEM,
+) -> list[ItemDeals]:
+    """Pure: one section per item that has new deals, top per_item_limit each, in item order."""
+    known = set(known_urls)
+    # a listing that is a deal for two items is shown under the first only,
+    # even if the first item's top-N cut hid it
+    claimed = set()
+    sections = []
+    for item in items:
+        deals = find_item_deals(item, listings, known | claimed)
+        claimed.update(deal.url for deal in deals)
+        if deals:
+            sections.append(ItemDeals(
+                item.name,
+                item.effective_price_usd,
+                tuple(deals[:per_item_limit]),
+                max(0, len(deals) - per_item_limit),
+            ))
+    return sections
 
 
 def main():
@@ -202,13 +217,31 @@ def main():
         # so an outdated database fails before any network call
         items = get_tracked_items()
         if not items:
-            print("No active items in the database. Add items to catalog.json, then run python3 src/db.py --seed.")
+            print(NO_ITEMS_LINE)
             return
         # fetch and parse once per run; errors propagate on purpose so a broken page
         # means no emails and a non-zero exit instead of looking like "no deals today"
         listings = parse_listings(fetch_yahoo_page(RICK_OWENS_URL))
         for item in items:
-            report_item_deals(item, listings)
+            if item.effective_price_usd is None:
+                print(f"Skipping {item.name}: no usable market price.")
+        known = get_known_listing_urls(listing.url for listing in listings)
+        digest = build_digest(build_sections(items, listings, known), datetime.now().astimezone().date())
+        if digest is None:
+            print(NO_DEALS_LINE)
+            return
+        if not send_email(digest.subject, digest.html, digest.text):
+            # nothing was recorded, so the same deals are offered again next run
+            n = len(digest.deals)
+            print(
+                "Error: digest email not sent, so its deals were not recorded and will be "
+                f"offered again next run ({n} deal{'' if n == 1 else 's'}).",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        # record only after a successful send, and only the deals that were shown
+        for deal in digest.deals:
+            insert_listing(deal.brand_id, deal.url, deal.title, deal.price_yen, deal.image_url)
     except SchemaVersionError as e:
         # the one error with a message written for you (it names the fix), so no traceback
         print(f"Error: {e}", file=sys.stderr)
