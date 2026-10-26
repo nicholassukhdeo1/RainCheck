@@ -545,3 +545,18 @@ If Option B of Open question 1 is chosen, `src/db.py` is not touched.
 - New criterion 57: `parse_listings` on a page with one valid record and one record whose title contains a lone surrogate returns only the valid listing and logs `Skipped 1 of 2 Yahoo listing records: 1 invalid, 0 duplicate`; `main()` on such a page sends one digest with the valid deal.
 - Test hardening: the criterion 30 purity test parses `src/digest.py` with `ast` and asserts no import of `db`, `requests`, `smtplib`, `sqlite3`, `sendemail`, or `yahoo_scrape`; the criterion 54 test also asserts `yahoo_scrape`'s source contains neither `Daily Refresh` nor `"<br>".join`; a new test makes `insert_listing` raise on the second call after a successful send and asserts the exception propagates, the first row stays, and the next run sends only the second deal.
 
+### Amendment 2 (2026-10-26, approved by the user): phone-friendly layout
+
+Rendering the verified digest in a browser showed two layout problems: the document had no viewport tag, so phones laid it out 980px wide and shrank it, and five columns left the title about 140px on a phone, wrapping a typical title over nine lines with the headers centered over left-aligned data.
+The user approved a three-column layout, prototyped and checked at 375px and 1024px wide (no horizontal overflow at 375px).
+The plain-text part, the subject, the escaping rules, and `is_safe_http_url` are unchanged.
+
+- The `<head>` gains `<meta name="viewport" content="width=device-width, initial-scale=1">` after the charset tag.
+- Each item heading is `<h2>` with the escaped item name followed by `<span>` containing `(market $X.XX)` in a muted color, so the market price is shown once per item instead of in every row.
+- Each item table has `cellspacing="0"`, `cellpadding="8"`, and three columns: `Image` (100px wide, left-aligned header), `Listing` (left-aligned header), and `Price` (right-aligned header).
+  The header row and each deal row have a light bottom border.
+- Each deal row: the image cell (unchanged content, `vertical-align:top`, 100px wide); the listing cell (unchanged link-or-text rule, `vertical-align:top`, `line-height:1.4`); and the price cell, right-aligned, `vertical-align:top`, `white-space:nowrap`, containing the yen price, `<br>`, the USD price, `<br>`, and `<strong>` with the discount formatted as `N.N% off` in green.
+- Criteria 17-20 change accordingly: the header row is `Image | Listing | Price`; each deal row has exactly three cells; criterion 18's cell texts become the listing title and `¥50,000 $310.00 61.3% off` (the price cell's `get_text(" ", strip=True)`); the market price appears in the `<h2>`'s `<span>` as `(market $800.00)`.
+  Criterion 25 additionally allows `meta`, `span`, and `strong` elements and `name`/`content` attributes on the viewport `meta`.
+- The orchestrator's mockup that was checked in the browser is the reference for the rendered result.
+
