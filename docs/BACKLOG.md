@@ -104,11 +104,16 @@ RC-07 and RC-08 both touch `src/yahoo_scrape.py` and must run one after the othe
 
 - **Size:** M
 - **Depends on:** RC-01
-- **Touches:** `src/yahoo_scrape.py`
-- **Why:** The scraper collects titles, prices, links, and images as four separate lists and zips them together.
-  A live page returned 101 titles but only 100 links, so any mismatch silently pairs a price with the wrong listing.
-- **Scope:** Parse each product card as one unit, skip cards missing required fields, and test against saved HTML fixtures, including a malformed one.
-- **Resume angle:** Hardened an HTML scraper against layout drift.
+- **Touches:** `src/yahoo_scrape.py`, `tests/test_yahoo_scrape.py`, `tests/test_live_fixtures.py`, Yahoo test fixtures
+- **Why:** Yahoo Auctions now serves a Next.js page, so the `Product__*` classes the scraper looks for no longer exist.
+  The live job finds zero listings and still sends one empty email per item every run, so the breakage looks like "no deals".
+  The old design also zipped four independent lists, so any mismatch paired a price with the wrong listing.
+  The Yahoo request has no timeout or status check, and the same page is downloaded once per item.
+- **Scope:** Parse the embedded `__NEXT_DATA__` JSON into one validated record per listing, skip and count malformed records, and build listing URLs from `auctionId` (including PayPay Flea Market items).
+  Raise a clear error when the page layout drifts instead of silently finding nothing.
+  Add a timeout and status check to the Yahoo request, fetch the page once per run, and use the canonical URL without the trailing slash.
+  Test against a hand-written page, a malformed page, and the sanitized live page, and replace the RC-01 strict-xfail selector test.
+- **Resume angle:** Rebuilt a scraper around a site's embedded JSON data after a front-end redesign, with schema validation and loud failure on layout drift.
 
 ### RC-08: Live exchange rate
 
@@ -202,3 +207,14 @@ The project is locked to Region `us-east-2`.
 - **Why:** Today every item sends its own email, even when there are no deals, which produces the empty emails seen during testing.
 - **Scope:** Send one digest per run, skip sending when there are no new deals, and lay deals out as an HTML table with image, price, market price, and discount.
 - **Resume angle:** Designed a daily digest notification.
+
+### RC-16: Auction-aware deals
+
+- **Size:** M
+- **Depends on:** RC-07, and best paired with RC-05
+- **Touches:** `src/schema.sql`, `src/db.py`, `src/yahoo_scrape.py`
+- **Why:** RC-07 compares Yahoo's current price against the market price.
+  For an auction that is the current bid, so a listing that starts at 1 yen looks like a huge deal even though it will end far higher.
+- **Scope:** Store whether a listing is fixed price, its buy-now price, and its end time.
+  Treat fixed-price and buy-now listings as real deals, and decide how to judge running auctions (for example, only near their end time).
+- **Resume angle:** Modeled auction versus fixed-price listings to cut false-positive deal alerts.
