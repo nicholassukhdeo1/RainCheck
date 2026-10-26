@@ -61,8 +61,8 @@ def ebay_market_price(query, keywords, exclude_keywords, token):
 
     # print(json.dumps(currListing.json().get("itemSummaries", [])[0], indent=2))
 
-    # for item in sorted(items, key=lambda i: float(i["price"]["value"])):
-    #     print(item["price"]["value"], "-", item["title"][:70])
+    for item in sorted(items, key=lambda i: float(i["price"]["value"])):
+        print(item["price"]["value"], "-", item["title"][:70])
 
     if not price:
         return None
@@ -89,7 +89,7 @@ def refresh_market_prices():
 
 if __name__ == "__main__":
 
-    # print(ebay_market_price("rick owens ramones",["ramones","ramon","high top"],["drkshdw","canvas"],my_token))
+    my_token = get_ebay_token()
 
     refresh_market_prices()
 

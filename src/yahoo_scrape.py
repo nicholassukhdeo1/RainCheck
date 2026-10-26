@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 from sendemail import send_email
-from db import get_connection, insert_listing
+from db import get_connection, insert_listing, get_market_price
 import requests
 import json
 import re
@@ -19,6 +19,10 @@ def yahoo_jp_scrape(item_dict, brand_url):
         (item_dict["brand"],),
     ).fetchone()["id"]
     conn.close()
+
+    market_price = get_market_price(item_dict["brand"],item_dict["item name"])
+    if market_price is None:
+        return
 
     
 
@@ -48,7 +52,7 @@ def yahoo_jp_scrape(item_dict, brand_url):
 
         num_price = re.sub(r'[^0-9]', '', price.text)
         price_usd = int(num_price) * 0.0062
-        pct_cheaper = ((item_dict['market_price'] - price_usd) / item_dict['market_price']) * 100
+        pct_cheaper = ((market_price - price_usd) / market_price) * 100
 
         if pct_cheaper > 0:
             is_new = insert_listing(brand_id,link['href'],title.text.strip(),int(num_price),image['src'])

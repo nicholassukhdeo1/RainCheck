@@ -122,4 +122,12 @@ def get_item_id(brand_name,item_name):
     # no conn commit bc we are accessing only, not changing.
     return item_id
 
-
+def get_market_price(brand_name,item_name):
+    item_id = get_item_id(brand_name,item_name)
+    conn = get_connection()
+    m_price = conn.execute(
+        "SELECT market_price_usd FROM items WHERE id = ?",
+        (item_id,)
+    ).fetchone()["market_price_usd"]
+    conn.close()
+    return m_price

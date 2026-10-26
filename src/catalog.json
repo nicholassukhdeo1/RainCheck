@@ -7,12 +7,12 @@
         "market_price": 800.0,
         "exclude_keywords": [
             "drkshdw",
-            "canvas"
+            "canvas",
+            "low"
         ],
         "keywords": [
             "ramones",
-            "ramon",
-            "high top"
+            "ramon"
         ]
     },
     {
