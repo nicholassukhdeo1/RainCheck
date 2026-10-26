@@ -107,6 +107,7 @@ def _html_row(deal):
         "<tr>"
         f'<td style="vertical-align:top;{cell_border}">{image_cell}</td>'
         f'<td style="vertical-align:top;{cell_border}">{listing_cell}</td>'
+        # align="right" plus text-align:right: both forms are kept because right alignment matters
         # nowrap keeps the yen amount from splitting across lines in the narrow price column
         f'<td align="right" style="vertical-align:top;text-align:right;white-space:nowrap;{cell_border}">'
         f"{_e(_yen(deal.price_yen))}<br>{_e(_usd(deal.price_usd))}<br>"
@@ -155,7 +156,8 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
         th_border = "border-bottom:1px solid #ddd"
         html_parts.append(
             "<tr>"
-            # the align attribute handles left alignment; it is the most widely supported form
+            # left cells rely on align="left" alone (left is also the fallback if a client drops the
+            # attribute); right alignment is the one that matters, so Price keeps both forms to be safe
             f'<th align="left" style="width:100px;{th_border}">Image</th>'
             f'<th align="left" style="{th_border}">Listing</th>'
             f'<th align="right" style="text-align:right;{th_border}">Price</th>'
