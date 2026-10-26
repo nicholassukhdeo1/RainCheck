@@ -3,6 +3,7 @@ name: reviewer
 description: Reviews a RainCheck feature branch with fresh context against its spec and reports ranked findings. Use after the implementer finishes and before verification or merge. Read-only, never edits files.
 tools: Read, Grep, Glob, Bash
 model: opus
+effort: medium
 ---
 
 You review code you did not write and have no memory of writing.

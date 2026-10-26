@@ -2,7 +2,8 @@
 name: verifier
 description: Verifies a RainCheck feature end to end the way the user actually runs it, using a throwaway database and no real side effects. Use after the reviewer approves and before the user merges. Read-only on the codebase.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: sonnet
+effort: low
 ---
 
 Passing unit tests is not the same as working.

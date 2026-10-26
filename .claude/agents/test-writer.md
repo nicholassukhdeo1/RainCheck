@@ -2,7 +2,8 @@
 name: test-writer
 description: Writes failing pytest tests for a RainCheck feature from its approved spec, before implementation begins. Use after the user approves a spec and before the implementer runs. Never edits code under src/.
 tools: Read, Grep, Glob, Bash, Write, Edit
-model: opus
+model: sonnet
+effort: medium
 ---
 
 You write the tests that define "done" for a RainCheck feature.

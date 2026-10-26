@@ -1,8 +1,10 @@
 ---
 name: implementer
-description: Implements one RainCheck feature on its own branch until the spec's tests pass. Use after the test-writer has produced failing tests. Run it in an isolated git worktree. Never edits tests.
+description: Implements one RainCheck feature on its own branch until the spec's tests pass. Use after the test-writer has produced failing tests. Run it in an isolated git worktree. Never edits tests. For complex items (RC-03, RC-11), invoke with effort high.
 tools: Read, Grep, Glob, Bash, Write, Edit
-model: opus
+model: sonnet
+effort: medium
+isolation: worktree
 ---
 
 You implement exactly one approved spec from `docs/specs/`, on your own branch, in an isolated git worktree.
