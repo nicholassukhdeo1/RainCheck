@@ -3,12 +3,14 @@
 RC-07 rewrote the RC-01 criteria 14, 45, 46, 47 against parse_listings /
 report_item_deals (they keep their RC-01 names) and added criteria 20-29.
 """
-import json
+import dataclasses
 
 import pytest
 import requests
 
+import db
 import yahoo_scrape
+from dbhelpers import run as sql_run, set_user_version, sha256
 from yahoo_scrape import RICK_OWENS_URL
 
 URL_1 = "https://auctions.yahoo.co.jp/jp/auction/t1000000001"
@@ -38,9 +40,13 @@ def yahoo_http(fake_http, fixtures_dir):
     return fake_http
 
 
+def _item(name):
+    return [i for i in db.get_tracked_items() if i.name == name][0]
+
+
 @pytest.fixture
-def ramones_entry(fixtures_dir):
-    return json.loads((fixtures_dir / "catalog.json").read_text())[0]
+def ramones_item(seeded_db):
+    return _item("rick owens ramones")
 
 
 def _rows(conn):
@@ -51,16 +57,16 @@ def _rows(conn):
 
 
 def test_c45_inserts_only_the_two_matching_cheap_listings(
-    seeded_db, sent_emails, db_conn, ramones_entry, minimal_listings
+    seeded_db, sent_emails, db_conn, ramones_item, minimal_listings
 ):
-    yahoo_scrape.report_item_deals(ramones_entry, minimal_listings)
+    yahoo_scrape.report_item_deals(ramones_item, minimal_listings)
     assert [(r["url"], r["price_yen"]) for r in _rows(db_conn)] == [(URL_1, 50000), (URL_4, 100000)]
 
 
 def test_c46_one_email_sorted_by_discount_with_percentages(
-    seeded_db, sent_emails, ramones_entry, minimal_listings
+    seeded_db, sent_emails, ramones_item, minimal_listings
 ):
-    yahoo_scrape.report_item_deals(ramones_entry, minimal_listings)
+    yahoo_scrape.report_item_deals(ramones_item, minimal_listings)
     assert len(sent_emails) == 1
     subject, body = sent_emails[0]
     assert subject == "Daily Refresh on rick owens ramones"
@@ -71,19 +77,19 @@ def test_c46_one_email_sorted_by_discount_with_percentages(
 
 
 def test_c47_second_run_inserts_no_new_rows(
-    seeded_db, sent_emails, db_conn, ramones_entry, minimal_listings
+    seeded_db, sent_emails, db_conn, ramones_item, minimal_listings
 ):
-    yahoo_scrape.report_item_deals(ramones_entry, minimal_listings)
+    yahoo_scrape.report_item_deals(ramones_item, minimal_listings)
     first = _rows(db_conn)
-    yahoo_scrape.report_item_deals(ramones_entry, minimal_listings)
+    yahoo_scrape.report_item_deals(ramones_item, minimal_listings)
     assert _rows(db_conn) == first
     assert len(first) == 2
 
 
 def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
-    seeded_db, sent_emails, db_conn, ramones_entry, malformed_listings
+    seeded_db, sent_emails, db_conn, ramones_item, malformed_listings
 ):
-    yahoo_scrape.report_item_deals(ramones_entry, malformed_listings)
+    yahoo_scrape.report_item_deals(ramones_item, malformed_listings)
     rows = {r["url"]: r for r in _rows(db_conn)}
     assert set(rows) == {X1, Z2, X3}
     assert rows[Z2]["price_yen"] == 40000
@@ -100,16 +106,68 @@ def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
 
 
 def test_rc07_c25_null_market_price_skips_item(
-    seeded_db, sent_emails, db_conn, ramones_entry, minimal_listings
+    seeded_db, sent_emails, db_conn, minimal_listings, capsys
 ):
     db_conn.execute(
         "UPDATE items SET market_price_usd = NULL, manual_price_usd = NULL WHERE name = ?",
         ("rick owens ramones",),
     )
     db_conn.commit()
-    yahoo_scrape.report_item_deals(ramones_entry, minimal_listings)
+    item = _item("rick owens ramones")
+    yahoo_scrape.report_item_deals(item, minimal_listings)
     assert _rows(db_conn) == []
     assert sent_emails == []
+    assert "Skipping rick owens ramones: no usable market price." in capsys.readouterr().out
+
+
+# ---- RC-03b item-based report_item_deals (criteria 9-12) ---------------------------
+
+
+def test_rc03b_c9_exclude_keywords_from_the_item_apply(
+    seeded_db, sent_emails, db_conn, ramones_item, minimal_listings
+):
+    item = dataclasses.replace(ramones_item, exclude_keywords=("high",))
+    yahoo_scrape.report_item_deals(item, minimal_listings)
+    assert [r["url"] for r in _rows(db_conn)] == [URL_4]
+    assert len(sent_emails) == 1
+    body = sent_emails[0][1]
+    assert URL_4 in body and URL_1 not in body
+
+
+def test_rc03b_c10_brand_comes_from_the_item_not_a_name_lookup(
+    seeded_db, sent_emails, db_conn, ramones_item, minimal_listings
+):
+    item = dataclasses.replace(ramones_item, brand="Not In Database")
+    yahoo_scrape.report_item_deals(item, minimal_listings)
+    stored = db_conn.execute("SELECT url, brand_id FROM listings ORDER BY url").fetchall()
+    assert [r["url"] for r in stored] == [URL_1, URL_4]
+    assert {r["brand_id"] for r in stored} == {ramones_item.brand_id}
+
+
+def test_rc03b_c11_effective_price_of_the_item_drives_the_deal_math(
+    seeded_db, sent_emails, db_conn, ramones_item, minimal_listings
+):
+    db.update_market_price(ramones_item.id, 400.0)
+    item = _item("rick owens ramones")
+    assert item.effective_price_usd == 400.0
+    yahoo_scrape.report_item_deals(item, minimal_listings)
+    assert [r["url"] for r in _rows(db_conn)] == [URL_1]
+    assert len(sent_emails) == 1
+    assert "22.5% cheaper than market" in sent_emails[0][1]
+
+
+def test_rc03b_c12_item_without_usable_price_is_skipped_with_a_line(
+    seeded_db, sent_emails, db_conn, minimal_listings, capsys
+):
+    db_conn.execute(
+        "UPDATE items SET market_price_usd = NULL, manual_price_usd = NULL WHERE name = ?",
+        ("rick owens ramones",),
+    )
+    db_conn.commit()
+    yahoo_scrape.report_item_deals(_item("rick owens ramones"), minimal_listings)
+    assert _rows(db_conn) == []
+    assert sent_emails == []
+    assert "Skipping rick owens ramones: no usable market price." in capsys.readouterr().out
 
 
 # ---- main() ------------------------------------------------------------------------
@@ -187,3 +245,96 @@ def test_rc07_c29_old_layout_page_raises_with_no_email_and_no_rows(
         yahoo_scrape.main()
     assert sent_emails == []
     assert _rows(db_conn) == []
+
+
+# ---- RC-03b main() reads the database (criteria 13-21) ------------------------------
+
+NO_ITEMS_LINE = "No active items in the database. Add items to catalog.json, then run python3 src/db.py --seed."
+
+
+def test_rc03b_c13_main_reads_exclude_keywords_from_the_database(
+    yahoo_http, seeded_db, sent_emails, db_conn
+):
+    item_id = _item("rick owens ramones").id
+    sql_run(
+        seeded_db,
+        "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, 'sneakers', 'exclude')",
+        (item_id,),
+    )
+    yahoo_scrape.main()
+    assert [r["url"] for r in _rows(db_conn)] == [URL_1]
+
+
+def test_rc03b_c14_main_skips_inactive_items(yahoo_http, seeded_db, sent_emails):
+    sql_run(seeded_db, "UPDATE items SET active = 0 WHERE name = ?", ("pod shorts",))
+    yahoo_scrape.main()
+    assert [s for s, _ in sent_emails] == ["Daily Refresh on rick owens ramones"]
+    assert len(yahoo_http.calls) == 1
+
+
+def test_rc03b_c15_main_does_not_read_catalog_json(
+    yahoo_http, seeded_db, sent_emails, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(db, "CATALOG_PATH", tmp_path / "does_not_exist.json")
+    yahoo_scrape.main()
+    assert [s for s, _ in sent_emails] == [
+        "Daily Refresh on rick owens ramones",
+        "Daily Refresh on pod shorts",
+    ]
+    assert not hasattr(yahoo_scrape, "load_catalog")
+
+
+def _assert_clean_schema_error(capsys, fake_http, sent_emails, exc, needle="python3 src/db.py"):
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert len(err.strip().splitlines()) == 1
+    assert err.startswith("Error: ")
+    assert needle in err
+    assert "Traceback" not in err
+    assert fake_http.calls == []
+    assert sent_emails == []
+
+
+def test_rc03b_c16_main_on_legacy_db_is_a_clean_error_before_any_network(
+    legacy_db, fake_http, sent_emails, capsys
+):
+    before = sha256(legacy_db)
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    _assert_clean_schema_error(capsys, fake_http, sent_emails, exc)
+    assert sha256(legacy_db) == before
+
+
+def test_rc03b_c17_main_with_no_database_file_is_a_clean_error_and_creates_nothing(
+    fake_http, sent_emails, capsys, tmp_path
+):
+    path = tmp_path / "test.db"
+    assert not path.exists()
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    _assert_clean_schema_error(capsys, fake_http, sent_emails, exc, "python3 src/db.py --seed")
+    assert not path.exists()
+
+
+def test_rc03b_c18_main_with_no_items_prints_one_line_and_returns(
+    temp_db, fake_http, sent_emails, capsys
+):
+    yahoo_scrape.main()
+    assert NO_ITEMS_LINE in capsys.readouterr().out
+    assert fake_http.calls == []
+    assert sent_emails == []
+
+
+def test_rc03b_c19_main_on_newer_schema_version_is_a_clean_error(
+    temp_db, fake_http, sent_emails, capsys
+):
+    set_user_version(temp_db, 2)
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    _assert_clean_schema_error(capsys, fake_http, sent_emails, exc)
+
+
+def test_rc03b_c21_yahoo_job_uses_the_shared_matcher():
+    import matching
+
+    assert yahoo_scrape.title_matches is matching.title_matches
