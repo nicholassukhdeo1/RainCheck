@@ -1,0 +1,4273 @@
+{
+  "href": "https://api.ebay.com/buy/browse/v1/item_summary/search?q=rick+owens+ramones&limit=50&offset=0",
+  "total": 1472,
+  "next": "https://api.ebay.com/buy/browse/v1/item_summary/search?q=rick+owens+ramones&limit=50&offset=50",
+  "limit": 50,
+  "offset": 0,
+  "itemSummaries": [
+    {
+      "itemId": "v1|307246067198|0",
+      "title": "Rick Owens DRKSHDW Ramones 100% Authentic ",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/Wn4AAeSwMnRq25zA/s-l225.jpg"
+      },
+      "price": {
+        "value": "350.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C307246067198%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Wn4AAeSwMnRq25zA/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/307246067198?_skw=rick+owens+ramones&hash=item47894aedfe:g:Wn4AAeSwMnRq25zA",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/CH8AAeSwSMRq25zC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/DiwAAeSwxrdq25zC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/WrMAAeSwbNtq25zC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/EugAAeSwOXZq25zC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/CBgAAeSw7Utq25zC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Wp0AAeSwwqpq25zD/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/DhEAAeSwIr1q26gV/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "307246067198",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-23T17:45:29.000Z",
+      "itemCreationDate": "2026-10-23T17:45:29.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|900038601090|0",
+      "title": "Rick Owens Men's Gray/White Suede High-Top Lace-Up Side Zip Sneakers 11",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/zm0AAeSw5J9q3Vr1/s-l225.jpg"
+      },
+      "price": {
+        "value": "250.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C900038601090%7C0",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/zm0AAeSw5J9q3Vr1/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/900038601090?_skw=rick+owens+ramones&hash=itemd18e7b2982:g:zm0AAeSw5J9q3Vr1&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7ktoh6mrbc401BAX1g%2FqBWH6FqWOnUes1C4ez0R5kjrEufffCUYX1FU2UyYm0rSI4QpPjxYuspXqKZBS6vPKym6zG5LjL56NjcmLWnh1IguNUuwrJ4x%2Fh4svgPm%2FaeWKaiwQ%2BQigV%2Fx4%2BU%2Bh%2BsKWFAWiojXnuifTcmBNABHU%2BveSncDGs7YDZkNYvbct4pwh74AdNKFpOYvCG%2FJH7DOLNQ8MrRos1r835YqBIk48fzAfzpAOobxnll0BOE6J%2FkdSccgsvbh%2BCjNx3rfeQot%2BPV5GhsRtWjr9J0PTDvA68c3YQ%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/N~gAAeSw-0Vq3VrV/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/tqEAAeSwPahq3Vrd/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/6OwAAeSwoitq3Vrl/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/wEgAAeSwUnNq3Vrq/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "900038601090",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-25T01:28:09.000Z",
+      "itemCreationDate": "2026-10-26T13:28:10.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|257706876458|0",
+      "title": "Rick Owens Luxor Jumbo Padded Jumbo Lace Ramones - Acid Green Size: 9",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/v1kAAeSwNoNqkngK/s-l225.jpg"
+      },
+      "price": {
+        "value": "249.96",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C257706876458%7C0",
+      "condition": "New without box",
+      "conditionId": "1500",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/v1kAAeSwNoNqkngK/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-29T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-02T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/257706876458?_skw=rick+owens+ramones&hash=item3c0086de2a:g:v1kAAeSwNoNqkngK&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7mdg73Aa7P8ksrMQ2tYuQ5Uc2EDrzv5Q5UfqzyMKLZc4poWmJ%2FdlzsRVSwgn8VIvB%2FY7Po3dMFWG6kzZiIs%2FB7Jitc9fqTVhpkg2a860hcv%2F7NqyxcIfGXfF%2FFropRWWMROz1%2F1QmiEdqsMvt%2FyomdSEaqfGpEXuv91JIRfKbF7lCu9Trrp97dnJM7Oq4kQNGmHHhEWNF4zA%2FUDEk0%2FqbmuwviCgJQTYm90qMXDUF1XOxX9FmaIgSoU7f9hEgnWut5weulvYHjMvIxixgQATsnHP47qug1x3rBjbOoqgGb0Hw%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/C4cAAeSwvFJqkLVL/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/u-AAAeSwuQVqkLVL/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/BHEAAeSw04tqkLVM/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/amkAAeSwXm5qkLVM/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/MDkAAeSw-MtqkLVN/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "257706876458",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-08-27T22:10:33.000Z",
+      "itemCreationDate": "2026-08-27T22:10:33.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|800830583400|0",
+      "title": "Rick Owens Mens Vintage Leather Low Top Sneakers Size 12 Grey, Milk",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/TKoAAeSwfJRq28aX/s-l225.jpg"
+      },
+      "price": {
+        "value": "369.99",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C800830583400%7C0",
+      "condition": "New without box",
+      "conditionId": "1500",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/TKoAAeSwfJRq28aX/s-l1600.jpg"
+        }
+      ],
+      "pickupOptions": [
+        {
+          "pickupLocationType": "ARRANGED_LOCATION"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/800830583400?_skw=rick+owens+ramones&hash=itemba7538f268:g:TKoAAeSwfJRq28aX",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/B8UAAeSw4-Zq28aV/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/AcUAAeSwAe9q28aY/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/B8QAAeSwiRtq28aT/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/DbEAAeSw~ahq28aU/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/BhEAAeSwkf9q28aW/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/CbMAAeSwcOFq28aU/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/AyUAAeSwf5Bq28aW/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/BowAAeSwLfZq28aW/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/A94AAeSwIR1q28aU/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/BckAAeSw6j1q28aW/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/BdMAAeSw495q28aW/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/AHQAAeSwY-Fq28aW/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "800830583400",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-23T20:33:48.000Z",
+      "itemCreationDate": "2026-10-23T20:33:48.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|287676150053|0",
+      "title": "Rick Owens DRKSHDW canvas vegan Ramones size 43 EU - US 10",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/KzIAAeSwHTBq3Rkj/s-l225.jpg"
+      },
+      "price": {
+        "value": "315.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C287676150053%7C0",
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/KzIAAeSwHTBq3Rkj/s-l1200.jpg"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/287676150053?_skw=rick+owens+ramones&hash=item42fad5b125:g:KzIAAeSwHTBq3Rkj",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/nOgAAeSwAeRq3RkT/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/OPoAAeSwOkpq3RkT/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/d2IAAeSwSiVq3RkT/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/b0oAAeSwoP9q3RkT/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/T6IAAeSwB9Zq3RkT/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/fKIAAeSwZe9q3pWm/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "287676150053",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-24T20:48:27.000Z",
+      "itemCreationDate": "2026-10-24T20:53:06.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|860067610077|0",
+      "title": "Rick Owen black / white jumbo lace lows size 10",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/qCwAAeSwLEBq2DbF/s-l225.jpg"
+      },
+      "price": {
+        "value": "500.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C860067610077%7C0",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/qCwAAeSwLEBq2DbF/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-29T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-03T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/860067610077?_skw=rick+owens+ramones&hash=itemc840063ddd:g:qCwAAeSwLEBq2DbF",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/HPUAAeSwy4hq2DbF/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/bTwAAeSwla9q2DbF/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/vwMAAeSw-pVq2DbF/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ROMAAeSwLhlq2DbF/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/TLcAAeSwUKZq2DbF/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/PcEAAeSwaKBq2DbF/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/tSIAAeSwD2hq2DbF/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/wGYAAeSw9z5q2DbF/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "860067610077",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-21T03:53:01.000Z",
+      "itemCreationDate": "2026-10-21T03:53:01.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|137870841433|0",
+      "title": "Size 8 Rick Owens DRKSHDW Ramones BLACK Canvas (PreOwned) (No Box)",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/zjEAAeSw6N9q3Ha5/s-l225.jpg"
+      },
+      "price": {
+        "value": "395.50",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C137870841433%7C0",
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/zjEAAeSw6N9q3Ha5/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-29T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-02T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "epid": "3051952675",
+      "itemWebUrl": "https://www.ebay.com/itm/137870841433?_skw=rick+owens+ramones&hash=item2019be1659:g:zjEAAeSw6N9q3Ha5",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/0CoAAeSw-X1q3Ha5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/0T0AAeSwuVdq3Ha5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/z1cAAeSwtkVq3Ha5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/weEAAeSwFppq3Ha5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/zn0AAeSwpphq3Ha5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/zg0AAeSwFRdq3Ha5/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "137870841433",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-24T09:12:26.000Z",
+      "itemCreationDate": "2026-10-24T09:12:26.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|860045108539|0",
+      "title": "Rick Owen black / white jumbo lace lows size 9",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/ckkAAeSwJ9tqjI6p/s-l225.jpg"
+      },
+      "price": {
+        "value": "240.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C860045108539%7C0",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ckkAAeSwJ9tqjI6p/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/860045108539?_skw=rick+owens+ramones&hash=itemc83eaee53b:g:ckkAAeSwJ9tqjI6p",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/XgwAAeSwwS5qjI6T/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/bLIAAeSwiOxqjI6S/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/5hsAAeSwNXNqjI6T/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Ao4AAeSw3vtqjI6U/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/U5EAAeSwja9qjI6U/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/LSYAAeSwcZxqjI6V/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/-rYAAeSw2G9qjI6V/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "860045108539",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-14T20:45:05.000Z",
+      "itemCreationDate": "2026-10-14T20:45:05.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|960110508049|0",
+      "title": "Rick Owens Ramones Mega Bumper Black Sneakers Men's Size 11",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/V90AAeSw2hFq3QDf/s-l225.jpg"
+      },
+      "price": {
+        "value": "275.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C960110508049%7C0",
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/V90AAeSw2hFq3QDf/s-l1200.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/960110508049?_skw=rick+owens+ramones&hash=itemdf8b0bb811:g:V90AAeSw2hFq3QDf",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/cr0AAeSwuU9q3QDg/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/WZUAAeSw~0pq3QDg/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/XpUAAeSwwYlq3QDg/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "960110508049",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-24T19:06:54.000Z",
+      "itemCreationDate": "2026-10-24T19:06:54.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|287643980097|0",
+      "title": "Rick Owens Lunar Tractor Padded Leather Boot size EU 44 or 11 US",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/avEAAeSwVepqzSZ8/s-l225.jpg"
+      },
+      "price": {
+        "value": "400.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C287643980097%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/avEAAeSwVepqzSZ8/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/287643980097?_skw=rick+owens+ramones&hash=item42f8ead141:g:avEAAeSwVepqzSZ8",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/F7wAAeSwNLtqzSZw/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/alcAAeSwVepqzSZv/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/H3kAAeSwC5lqzSZv/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/MpYAAeSwu1dqzSZw/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "287643980097",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-12T18:30:16.000Z",
+      "itemCreationDate": "2026-10-12T18:30:16.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|377441437607|0",
+      "title": "Rick Owens Ramones Lether Hight Top Sneakers Black Milk Womens Size 38.5 EU",
+      "leafCategoryIds": [
+        "95672"
+      ],
+      "categories": [
+        {
+          "categoryId": "95672",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "3034",
+          "categoryName": "Women's Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "260010",
+          "categoryName": "Women"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/OdwAAeSwsDVqidfP/s-l225.jpg"
+      },
+      "price": {
+        "value": "559.83",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C377441437607%7C0",
+      "marketingPrice": {
+        "originalPrice": {
+          "value": "699.79",
+          "currency": "USD"
+        },
+        "discountPercentage": "20",
+        "discountAmount": {
+          "value": "139.96",
+          "currency": "USD"
+        },
+        "priceTreatment": "MARKDOWN"
+      },
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/OdwAAeSwsDVqidfP/s-l1600.jpg"
+        }
+      ],
+      "pickupOptions": [
+        {
+          "pickupLocationType": "ARRANGED_LOCATION"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "epid": "20063056722",
+      "itemWebUrl": "https://www.ebay.com/itm/377441437607?_skw=rick+owens+ramones&hash=item57e14347a7:g:OdwAAeSwsDVqidfP",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/UjcAAeSwvW9qidfR/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/NfoAAeSwXSZqidfR/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/RZAAAeSwJK9qidfR/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/PIQAAeSwtwVqidfP/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/CqMAAeSwiCJqidfP/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ONEAAeSwM2lqidfT/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/LmUAAeSw0fJqidfP/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/NGkAAeSwFfJqidfP/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/G-EAAeSwRqBqidfR/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/H84AAeSwaGNqidfV/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/dk8AAeSwW8NqidfR/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "377441437607",
+      "availableCoupons": true,
+      "itemOriginDate": "2026-08-23T03:08:45.000Z",
+      "itemCreationDate": "2026-08-23T03:08:45.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|800830535695|0",
+      "title": "Rick Owens Mens JumboLace Leather Low Sneakers Size 13/EU 47 Black, Milk",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/jR8AAeSwFthq28IW/s-l225.jpg"
+      },
+      "price": {
+        "value": "634.99",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C800830535695%7C0",
+      "condition": "New without box",
+      "conditionId": "1500",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/jR8AAeSwFthq28IW/s-l1600.jpg"
+        }
+      ],
+      "pickupOptions": [
+        {
+          "pickupLocationType": "ARRANGED_LOCATION"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/800830535695?_skw=rick+owens+ramones&hash=itemba7538380f:g:jR8AAeSwFthq28IW",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/cwoAAeSw2l9q28IZ/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ev4AAeSwoP9q28IZ/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/eq4AAeSwFiVq28IZ/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/heQAAeSwLHlq28IT/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/hEUAAeSw9~pq28IV/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/d4wAAeSwVZVq28IU/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ijwAAeSw2l1q28IS/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/lPgAAeSwOXZq28IX/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/d64AAeSwcuJq28IW/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ds0AAeSwRR5q28IX/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/i-UAAeSwHghq28IX/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/hfAAAeSwLHlq28IV/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "800830535695",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-23T20:13:47.000Z",
+      "itemCreationDate": "2026-10-23T20:13:47.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|820187720184|0",
+      "title": "Rick Owens Ramones DRKSHDW Canvas Sneaker Boots Black Lace-Up Side Zipper EU 40",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/LlEAAeSweVZqvEgM/s-l225.jpg"
+      },
+      "price": {
+        "value": "280.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C820187720184%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/LlEAAeSweVZqvEgM/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/820187720184?_skw=rick+owens+ramones&hash=itembef6ff69f8:g:LlEAAeSweVZqvEgM",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/1JcAAeSwXUBqvEfN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/G6MAAeSwFRlqvEfN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/wtsAAeSwkixqvEfN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/D68AAeSw-ftqvEfN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/FqkAAeSw7tFqvEfO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/3gUAAeSw60pqvEfO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/4tgAAeSwtChqvEfO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/y~wAAeSwtupqvEfO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/KpEAAeSwxd1qvEfO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/2UoAAeSwXvtqvEfO/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "820187720184",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-09-29T23:23:46.000Z",
+      "itemCreationDate": "2026-09-29T23:23:46.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|840058719760|0",
+      "title": "Rick owen chrome hearts geobaskets size 43eu/10us",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/xn8AAeSwRHhq3h5E/s-l225.jpg"
+      },
+      "price": {
+        "value": "320.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C840058719760%7C0",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/xn8AAeSwRHhq3h5E/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "10.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-29T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-04T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/840058719760?_skw=rick+owens+ramones&hash=itemc39766ce10:g:xn8AAeSwRHhq3h5E&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7kaiifEqyJ%2B7YyPNcujX4TipWhxnRttgjwtelcTEiR3Mcf151GCPzvJyUOj4y2p82ZoDwJ%2BLAZ36WFch%2BWRG1kpbHLyaJLzOf8%2FbzgG%2FQ8aJjYO5UdPPUU9wDw9dN%2BWOM0j6Hyh6Brkm2kkO7Nze7PBbsBFhrk0N4eMa8M4JctYh1op5hTqE2ypgxOe4qwOlqXzrEOvLxtZelTe5DBjkjfAnVdyzIACmoZCXeE6eYkFJwj4eKC3GU0onNt46DzuScd0SVgsu6k5fU0Hd0wBfcp%2BNPIktdoDxqXYqnHiZ2FxQQ%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/vL0AAeSw1Nlq3h5E/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/s9QAAeSwrr1q3h5E/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "840058719760",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-25T15:25:41.000Z",
+      "itemCreationDate": "2026-10-25T15:25:41.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|820247275190|0",
+      "title": "Rick Owens DRKSHDW Ramones High Top Sneakers Translucent Sole 9 US 39 EU Y176",
+      "leafCategoryIds": [
+        "95672"
+      ],
+      "categories": [
+        {
+          "categoryId": "95672",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "3034",
+          "categoryName": "Women's Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "260010",
+          "categoryName": "Women"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/XTIAAeSwhtJqQvYj/s-l225.jpg"
+      },
+      "price": {
+        "value": "599.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C820247275190%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/XTIAAeSwhtJqQvYj/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-11-19T08:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-12-14T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/820247275190?_skw=rick+owens+ramones&hash=itembefa8c26b6:g:XTIAAeSwhtJqQvYj&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7nLQwqWR0HP8xp1GxI1MSc5Bc60MKib1Ik6RpvVKNaihnei6zKQLgJGVUWZ7mgP8A8bsClumtHGzKOkyIXJBvfRARpJccTMYk9k1JQzB%2BwnQTpI6JDYzNkCbN5CB4%2Bfq9LtDINHqgTCHqnZ4tssLX0qR6AmSLSyqUZx8PB68sW9s2qnbzIuRBiHLEqC7pp6yYZQ%2BcAZI6bSMLlHhHbMErQ2tLYTD3UtjN3mKPsB7NB%2FOZ8sYipAmqYJuYX1FFBNp1D%2BH7qPz7zQkf6U13u4BIJ0ofZnA7JRTPOEJASrVFa5ZA%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Q48AAeSwGspqQvYk/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Me0AAeSwzg1qQvYl/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/TdwAAeSwyN1qQvYm/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/L7kAAeSwLi5qQvYn/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/LrUAAeSwT0xqQvYp/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/IJEAAeSwHbVqQvYq/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/JMkAAeSw9zVqQvYr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/LMgAAeSwCdRqQvYs/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "820247275190",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-07-04T04:42:17.000Z",
+      "itemCreationDate": "2026-10-17T02:41:20.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|820180786163|0",
+      "title": "Rick Owens Drkshdw Ramones Low Cotton Black Women's Size EU 39 US 9 Y148B",
+      "leafCategoryIds": [
+        "95672"
+      ],
+      "categories": [
+        {
+          "categoryId": "95672",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "3034",
+          "categoryName": "Women's Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "260010",
+          "categoryName": "Women"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/H2sAAeSwQIBqQvfa/s-l225.jpg"
+      },
+      "price": {
+        "value": "231.67",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C820180786163%7C0",
+      "condition": "New without box",
+      "conditionId": "1500",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/H2sAAeSwQIBqQvfa/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-11-19T08:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-12-14T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/820180786163?_skw=rick+owens+ramones&hash=itembef6959bf3:g:H2sAAeSwQIBqQvfa&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7mUv7%2B9leyTJjzAG1MMqGiGc8HtjejCgfwNBNldi0WLEFcp4wND3H7qizI7MxNC2e1vpYASCqoBmxZAgJ2fEoJCm6%2F5Wi90cVUNJkBKicd6AbOHzQfTxG9QVGJEaVUK6tu3jyn1guLzTmOIK7iYb1ZKJNs5WfIT8%2FT2cx1%2FBS19hECek4agoMFe%2Bp05I2RmTsX62t7IRe%2F0K3dVDGk%2FQGmprAQiWRhaqGmRLpTAydPbprn5As55ps%2BdWWYVrvO3LvjUjNpgQeqFbK9ftzBPGMcR27SuxZA6LsVFqcbhbOZRXg%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/VhMAAeSwGspqQvfa/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/U7wAAeSwTt1qQvfa/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/NxMAAeSwCOdqQvfb/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/P14AAeSwjKBqQvfc/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/P9wAAeSwnlxqQvfd/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/POwAAeSwa4hqQvfc/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/lY0AAeSwC9tqQvfd/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "820180786163",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-07-04T04:42:18.000Z",
+      "itemCreationDate": "2026-09-28T04:08:40.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|318930168509|0",
+      "title": "Rick Owens Ramones Leather Sneakers Black/Milk SS23 Size 41",
+      "leafCategoryIds": [
+        "53120"
+      ],
+      "categories": [
+        {
+          "categoryId": "53120",
+          "categoryName": "Dress Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/u7AAAeSwE~FqichC/s-l225.jpg"
+      },
+      "price": {
+        "value": "600.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C318930168509%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/u7AAAeSwE~FqichC/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "17.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-29T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-04T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/318930168509?_skw=rick+owens+ramones&hash=item4a41b82abd:g:u7AAAeSwE~FqichC",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/fV8AAeSwjspqichC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/0~0AAeSwS8tqichC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/3cEAAeSwo8JqichC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/qVgAAeSwuTdqichC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/lmsAAeSwKVhqichD/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/qvQAAeSwRAVqichD/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/lQgAAeSw5rdqichD/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/eQ8AAeSwbr9qichD/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "318930168509",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-08-22T16:06:04.000Z",
+      "itemCreationDate": "2026-09-28T17:23:24.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|800841279659|0",
+      "title": "Rick Owens Geobasket Black And Cream Jumbo Hightop Laces Size 44EU/11US",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/Uk8AAeSwkYpq34OV/s-l225.jpg"
+      },
+      "price": {
+        "value": "300.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C800841279659%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Uk8AAeSwkYpq34OV/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/800841279659?_skw=rick+owens+ramones&hash=itemba75dc28ab:g:Uk8AAeSwkYpq34OV",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/PmAAAeSwi2Vq34OX/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/OcUAAeSwcnBq34OW/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/-GIAAeSwdK5q33Ma/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/OKIAAeSwcuZq33Ma/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/voAAAeSwoMFq33Ma/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/0DgAAeSwoP9q33Ma/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/~jsAAeSwmaFq33Mb/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/~mAAAeSwElZq33Mc/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/f0gAAeSw9WZq34OX/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "800841279659",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-26T16:43:43.000Z",
+      "itemCreationDate": "2026-10-26T16:43:43.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|137825909844|0",
+      "title": "Rick Owens DRKSHDW Ramon’s Nylon High Top Size 44 (11-11.5) Lightly Worn No Box",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/B3YAAeSwa1pqx9jt/s-l225.jpg"
+      },
+      "price": {
+        "value": "349.99",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C137825909844%7C0",
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/B3YAAeSwa1pqx9jt/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "9.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-29T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-02T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/137825909844?_skw=rick+owens+ramones&hash=item2017107c54:g:B3YAAeSwa1pqx9jt",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/GXkAAeSwbERqx9js/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/EPoAAeSw4Nhqx9ju/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Cm4AAeSw4XZqx9ju/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ww0AAeSwTF1qx9ju/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "137825909844",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-08T17:55:43.000Z",
+      "itemCreationDate": "2026-10-08T17:55:43.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|407243286747|0",
+      "title": "Rick Owens Ramones DRKSHDW High-Top Sneakers Black Size 44",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/xV4AAeSwsfJqtZ01/s-l225.jpg"
+      },
+      "price": {
+        "value": "299.99",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C407243286747%7C0",
+      "condition": "Pre-owned - Fair",
+      "conditionId": "3010",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/xV4AAeSwsfJqtZ01/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/407243286747?_skw=rick+owens+ramones&hash=item5ed19768db:g:xV4AAeSwsfJqtZ01",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/XtEAAeSwtyZqtZ01/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/g6cAAeSwJsNqtZ02/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/3qQAAeSwHJdqtZ02/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/TWUAAeSwEcVqtZ03/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/lIEAAeSwqDxqtZ03/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ZtsAAeSwGTZqtZ04/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/XMAAAeSw8D1qtZ04/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "407243286747",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-09-24T22:04:17.000Z",
+      "itemCreationDate": "2026-09-24T22:04:17.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|377586869439|645871217930",
+      "title": "DU02C5803DO-911 Rick Owens DRKSHDW Lido Overdyed Denim Vintage Black Milk SS24",
+      "itemGroupHref": "https://api.ebay.com/buy/browse/v1/item/get_items_by_item_group?item_group_id=377586869439",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/I4MAAeSwBK9q3q9T/s-l225.jpg"
+      },
+      "price": {
+        "value": "656.00",
+        "currency": "USD"
+      },
+      "itemGroupType": "SELLER_DEFINED_VARIATIONS",
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C377586869439%7C645871217930",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/I4MAAeSwBK9q3q9T/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-11-18T08:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-12-08T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "epid": "16062173598",
+      "itemWebUrl": "https://www.ebay.com/itm/377586869439?_skw=rick+owens+ramones&hash=item57e9ee64bf:g:I4MAAeSwBK9q3q9T",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Jp4AAeSwZLVq3q9T/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/QSIAAeSwlYBq3q9U/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/P8EAAeSwvjpq3q9T/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/3-IAAeSwwvJq3q9U/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/JX8AAeSwaXJq3q9T/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "377586869439",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-21T08:12:37.000Z",
+      "itemCreationDate": "2026-10-21T08:12:37.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|278411282884|0",
+      "title": "Rick Owens Mainline Ramones High Top Black Leather Size 12 EU 45 Made in Italy",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/cagAAeSwS1lqt8ZO/s-l225.jpg"
+      },
+      "price": {
+        "value": "600.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C278411282884%7C0",
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/cagAAeSwS1lqt8ZO/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "9.10",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-28T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-10-31T07:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/278411282884?_skw=rick+owens+ramones&hash=item40d29b09c4:g:cagAAeSwS1lqt8ZO",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/oWkAAeSwMnxqt8ZN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/r6YAAeSwqchqt8ZN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/fhEAAeSwX6dqt8ZO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Ya8AAeSwSL1qt8ZO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/rLkAAeSwU2Fqt8ZN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/bRMAAeSwtnRqt8ZN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/0MQAAeSwRddqt8ZN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/9MoAAeSwXm5qt8ZN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ujwAAeSwioJqt8ZN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/MrcAAeSwbz5qt8ZO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/r~MAAeSwq3Nqt8ZO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/olMAAeSwWphqt8ZO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/x38AAeSwQn1qt8ZO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/fKgAAeSwy5Zqt8ZO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/pEcAAeSwmIRqt8ZO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/HUMAAeSwUb1qt8ZO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/s3cAAeSw4j1qt8ZN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/78wAAeSwLGtqt8ZN/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/m4EAAeSwffpqt8ZO/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "278411282884",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-09-26T13:21:35.000Z",
+      "itemCreationDate": "2026-09-26T13:21:35.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|307249132088|0",
+      "title": "Rick Owens MOUNTAIN FW22 Leather Lace Up Sneakers Black/White EU 48 US 14",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/MEUAAeSw65tq3mk4/s-l225.jpg"
+      },
+      "price": {
+        "value": "600.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C307249132088%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/MEUAAeSw65tq3mk4/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/307249132088?_skw=rick+owens+ramones&hash=item478979b238:g:MEUAAeSw65tq3mk4",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/pmcAAeSwnZFq3mkf/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/2ykAAeSwrBhq3mkf/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/fKIAAeSwMnRq3mkf/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/exEAAeSwaR9q3mkf/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "307249132088",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-25T20:43:30.000Z",
+      "itemCreationDate": "2026-10-25T20:43:30.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|960098092769|0",
+      "title": "Mens Size 9 (EU 42) Rick Owens Ramones Slip On Shoes Cream / Orange Leather",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/3b4AAeSwLApq2Soj/s-l225.jpg"
+      },
+      "price": {
+        "value": "275.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C960098092769%7C0",
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/3b4AAeSwLApq2Soj/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "8.99",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-29T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-02T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/960098092769?_skw=rick+owens+ramones&hash=itemdf8a4e46e1:g:3b4AAeSwLApq2Soj",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/gTIAAeSwmPtq2Soj/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/dakAAeSw9SBq2Soj/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/1sgAAeSwpI1q2Soi/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/2RIAAeSwoNxq2Soj/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/aZsAAeSwq-9q2Soj/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/3i0AAeSw-1Jq2Soj/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/cBUAAeSwEYpq2Sok/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/2RkAAeSw6fJq2Sok/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "960098092769",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-21T22:15:02.000Z",
+      "itemCreationDate": "2026-10-21T22:15:02.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|267822909799|0",
+      "title": "Rick Owens DRKSHDW Ramones Black White Leather Sneakers Men's Comfort Punk US 10",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/b7AAAeSwfQ9p1eMd/s-l225.jpg"
+      },
+      "price": {
+        "value": "400.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C267822909799%7C0",
+      "condition": "New with defects",
+      "conditionId": "1750",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/b7AAAeSwfQ9p1eMd/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/267822909799?_skw=rick+owens+ramones&hash=item3e5b7d4967:g:b7AAAeSwfQ9p1eMd",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/PGIAAeSw5yBp1eMd/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/a6UAAeSwuEFp1eMd/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/aIcAAeSwotBp1eMd/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/T5IAAeSwatFp1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/iscAAeSwHe9p1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/V6AAAeSwrnxp1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/a6wAAeSw3ABp1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/aBQAAeSw6Sxp1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/bwQAAeSwpRJp1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ZF8AAeSw5Stp1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/0EYAAeSwishp1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ZnoAAeSw7d1p1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Yq0AAeSwE9Fp1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/adEAAeSwHllp1eMe/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ZTMAAeSw3a5p1eMe/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "267822909799",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-24T18:51:14.000Z",
+      "itemCreationDate": "2026-10-24T18:51:14.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|178431501555|0",
+      "title": "Size 46EU/13US - Rick Owens Mainline Leather Ramones",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/HJoAAeSwWaNqiSls/s-l225.jpg"
+      },
+      "price": {
+        "value": "654.55",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C178431501555%7C0",
+      "marketingPrice": {
+        "originalPrice": {
+          "value": "689.00",
+          "currency": "USD"
+        },
+        "discountPercentage": "5",
+        "discountAmount": {
+          "value": "34.45",
+          "currency": "USD"
+        },
+        "priceTreatment": "MARKDOWN"
+      },
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/HJoAAeSwWaNqiSls/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-30T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-05T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/178431501555?_skw=rick+owens+ramones&hash=item298b58a4f3:g:HJoAAeSwWaNqiSls",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/E6kAAeSwFh9qiSls/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/MZYAAeSwNuRqiSls/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/JkcAAeSwVf1qiSls/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/FMsAAeSwhYZqiSls/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/EYEAAeSwvDhqiSls/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/dyIAAeSwgW9qiSls/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/MzIAAeSwbp5qiSls/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/GykAAeSwF5BqiSls/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/EwoAAeSwJmhqiSlt/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/elcAAeSw0KVqiSls/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/GMsAAeSwDqFqiSls/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "178431501555",
+      "availableCoupons": true,
+      "itemOriginDate": "2026-08-22T04:41:55.000Z",
+      "itemCreationDate": "2026-08-22T04:41:55.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|168748461620|0",
+      "title": "Rick Owens Geobaskets US 11 EU 45",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/vakAAeSwrNRqolGa/s-l225.jpg"
+      },
+      "price": {
+        "value": "250.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C168748461620%7C0",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/vakAAeSwrNRqolGa/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-30T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-05T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/168748461620?_skw=rick+owens+ramones&hash=item274a312e34:g:vakAAeSwrNRqolGa",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/OLwAAeSw6wZqolGa/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/wVMAAeSwn5BqolGa/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/DEAAAeSwNjZqolGa/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/42IAAeSwBSVqolGb/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/xAsAAeSwAvhqolGb/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/u-EAAeSwjWtqolGb/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "168748461620",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-01T07:59:05.000Z",
+      "itemCreationDate": "2026-10-01T07:59:05.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|820263821949|0",
+      "title": "Rick Owens Ramone DRKSHDW Black Canvas High-Top Sneakers Lace-Up Side Zip EU 40",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/RK8AAeSwSitq2TEu/s-l225.jpg"
+      },
+      "price": {
+        "value": "249.99",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C820263821949%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/RK8AAeSwSitq2TEu/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/820263821949?_skw=rick+owens+ramones&hash=itembefb88a27d:g:RK8AAeSwSitq2TEu",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/PXIAAeSwzF5q2TEf/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/SS0AAeSw5Olq2TEf/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/PEIAAeSwLzxq2TEf/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/PeoAAeSwZllq2TEg/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/4DEAAeSwDYNq2TEg/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/OpcAAeSwl6xq2TEg/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/1jkAAeSwfuVq2TEg/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/SUgAAeSw46Vq2TEg/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "820263821949",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-21T21:41:48.000Z",
+      "itemCreationDate": "2026-10-21T21:41:48.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|168816141218|0",
+      "title": "Rick Owens Brown/White Lace-Up Low Top Sneakers Men's US 7.5 EU 40 NIB",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/WgsAAeSwWKVq3l70/s-l225.jpg"
+      },
+      "price": {
+        "value": "175.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C168816141218%7C0",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/WgsAAeSwWKVq3l70/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/168816141218?_skw=rick+owens+ramones&hash=item274e39e3a2:g:WgsAAeSwWKVq3l70&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7nVmmGVvwxjgAz%2BMa0OrPnrFytKBxKSWCo0AQhAUBoyfk%2BLlyXhUBdxlPttl1ihA3wO9IxyqbVtO4dKNvYEjODNkPT9sUPoPYoapmROMX3IxxfXlRnBbiFTX%2FBnmnYxdu%2BJgHBjHJxkswimbQV1ilsgQ5a5BJYttBMz3JuC5WGNnJAVvcuHauQ7pEKtUKVIINrCT4WUsAkPjpXXv2Z3XSRzO2TIEzumMk7tOsznCsomh4gkD67rDWuDQ9vM1yTGZchbq6AVvuP4qBdhqx4IvIX6y%2FxaQsgqLEKoO6h9eP2unA%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/pEIAAeSwN7lq3l63/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/4SYAAeSwOkpq3l69/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/138AAeSwQ55q3l7j/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "168816141218",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-25T19:57:54.000Z",
+      "itemCreationDate": "2026-10-25T19:57:54.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|137871737647|0",
+      "title": "Rick Owens Men's Low Top Lace-Up Sneakers Black/White Colorblock US 11 NIB",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/Rx8AAeSwI5Fq3Ol8/s-l225.jpg"
+      },
+      "price": {
+        "value": "260.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C137871737647%7C0",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Rx8AAeSwI5Fq3Ol8/s-l225.jpg"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/137871737647?_skw=rick+owens+ramones&hash=item2019cbc32f:g:Rx8AAeSwI5Fq3Ol8&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7luF6uaRpC6WeLZa3LgPyKhoiK74B43V%2B6jt3n2zwbF2v6nmerWK7rMItL2af%2Fu%2Fsygt9yU%2B7HbTegAY2Bo8lFXSB6OhzQ%2FW%2F3fMzYOnqasWg3392RZRwFXaDUgNcBgtIupx%2BItOvnzHjm5bt4fCZ9Rzxbgp6gZHRfziqAcewAl0ACveB7ag3aFa01VsiYX6zcZDjTUc%2F66peWpmDUDhVhakQpiE%2BS%2FqY%2BJzsJTrZ8mpOfxUN%2FlCmG9wC5gGbJMtbuo%2FynSstg%2Bfo0aH7nwJeyGEZiGTCmPnbHQOLqjZYsyGw%3D%3D",
+      "adultOnly": false,
+      "legacyItemId": "137871737647",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-24T17:25:32.000Z",
+      "itemCreationDate": "2026-10-24T17:25:32.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|398003423247|666303005944",
+      "title": "Rick Owens Men's Round Toe Lace-up Low Top Fashion Sneakers, Black & White",
+      "itemGroupHref": "https://api.ebay.com/buy/browse/v1/item/get_items_by_item_group?item_group_id=398003423247",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/i9MAAeSwqWNqGYrY/s-l225.jpg"
+      },
+      "price": {
+        "value": "355.00",
+        "currency": "USD"
+      },
+      "itemGroupType": "SELLER_DEFINED_VARIATIONS",
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C398003423247%7C666303005944",
+      "marketingPrice": {
+        "discountPercentage": "0"
+      },
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/i9MAAeSwqWNqGYrY/s-l960.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-11-04T08:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-12T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/398003423247?_skw=rick+owens+ramones&hash=item5caada480f:g:i9MAAeSwqWNqGYrY&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7lNzo%2B0bytA1qkc%2F0c%2BwVhsSqKpi7TiZitV9UiXli%2B%2FJxfjQhE%2Bd66S5oMtpB4iGyXInGuyqFwdeNOw1n%2FDRjQpXB9Fak5wuLCQIjKbjkg6--tMifQCTgYtLtYJjD%2F6w2%2B0YYSJtNJZ4BhjzoJ2LGPhE94rvSDCLgpGZUYZfEPdJs%2FhH%2FwVKU3zS1oKwF%2FscR72Oye5Yt8qHV%2Fa2m3SmuBpLIuE4k%2F1RDdQRt%2BR8qPV5K7FwTCJ2C4N%2B5kL2cuA7%2F2CpFQfdy0IUJNFOoRK6VhMIIl3GqAYGqoqi6o6C34v8w%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/eSYAAeSwcLZqGYra/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/kCcAAeSwupVqGYrb/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/gJEAAeSwPpxqGYrc/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/mWEAAeSwRbFqGYrd/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/plMAAeSww5dqGYre/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/iwwAAeSw16xqGYrf/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "398003423247",
+      "availableCoupons": true,
+      "itemOriginDate": "2026-05-29T12:51:49.000Z",
+      "itemCreationDate": "2026-05-30T12:51:51.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|168683812817|0",
+      "title": "Rick Owens DRKSHDW Megalace Ramones Size 43 (US 10)",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/DvkAAeSwLB5qpZuV/s-l225.jpg"
+      },
+      "price": {
+        "value": "450.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C168683812817%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/DvkAAeSwLB5qpZuV/s-l1600.jpg"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "epid": "6051956017",
+      "itemWebUrl": "https://www.ebay.com/itm/168683812817?_skw=rick+owens+ramones&hash=item274656b7d1:g:DvkAAeSwLB5qpZuV&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7mvERKiK4pARNpX5fklOPZbufHNcD9ruOLRyCCc9e7WCvi0Qeaz2w1PSfEv8y344E2i%2FgsVlT8twBkzo6yaDZJhxofwV4T4VS7Yum%2BX4hFPy2nlRgkWRFY80i3o8ATSIrYYfwtH%2BOu6FCljkzTUobviQHER9MbMvg2fbuu3tKDYYNeR1FjNVbpb5lNXksp6G027iIQPRhLApb0vnRkBp9MoZxBwKjKtEWgxZF%2Fbr8uwBoqh8WWYCKI%2FdUx2A3Bpbi%2FwW9SaaeOd0tVpv1saCCMa98WG1Cx9k9%2BT0fthPBHuWw%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/59QAAeSwAwdqpZvQ/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/2MgAAeSweGhqpZuj/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/EUMAAeSwpCRqpZuv/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/yDkAAeSwyD9qpZvU/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/kYMAAeSwzkdqpZuv/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/GuYAAeSwDaRqpZu7/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ChkAAeSwQUpqpZuz/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/K3sAAeSw7ydqpZu4/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/G0cAAeSw2MBqpZvJ/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/7foAAeSwl9hqpZvJ/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/MgkAAeSw4kFqpZvT/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "168683812817",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-09-12T18:45:34.000Z",
+      "itemCreationDate": "2026-09-12T18:45:34.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|178459017150|0",
+      "title": "Size 44EU/11US - Rick Owens Jumbo Lace Mouthwash",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/9hAAAeSwi0pqlvH9/s-l225.jpg"
+      },
+      "price": {
+        "value": "654.55",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C178459017150%7C0",
+      "marketingPrice": {
+        "originalPrice": {
+          "value": "689.00",
+          "currency": "USD"
+        },
+        "discountPercentage": "5",
+        "discountAmount": {
+          "value": "34.45",
+          "currency": "USD"
+        },
+        "priceTreatment": "MARKDOWN"
+      },
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/9hAAAeSwi0pqlvH9/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-30T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-05T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/178459017150?_skw=rick+owens+ramones&hash=item298cfc7fbe:g:9hAAAeSwi0pqlvH9",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ABwAAeSwk1JqlvH9/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/9toAAeSwrWpqlvH9/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/kfYAAeSw2rZqlvH9/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/sCcAAeSwgW9qlvH9/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/XBcAAeSwie9qlvH9/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/RFoAAeSwUXpqlvH9/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/fv8AAeSw0zlqlvH9/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/bucAAeSwoxhqlvH9/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/-0YAAeSwjspqlvH9/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "178459017150",
+      "availableCoupons": true,
+      "itemOriginDate": "2026-09-01T15:36:37.000Z",
+      "itemCreationDate": "2026-09-01T15:36:37.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|366577557316|0",
+      "title": "Cream Rick Owens Hightop Shoe",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/fzoAAeSw8fBqbSAC/s-l225.jpg"
+      },
+      "price": {
+        "value": "200.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C366577557316%7C0",
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/fzoAAeSw8fBqbSAC/s-l1600.jpg"
+        }
+      ],
+      "pickupOptions": [
+        {
+          "pickupLocationType": "ARRANGED_LOCATION"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/366577557316?_skw=rick+owens+ramones&hash=item5559b99f44:g:fzoAAeSw8fBqbSAC",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/sIIAAeSwtWFqbSAC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/4AsAAeSwAzZqbSAC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/rBcAAeSwEFNqbSAC/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/3HoAAeSw-jdqbSAD/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/WWgAAeSw9ZVqbSAD/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/G5QAAeSw1ihqbSAD/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "366577557316",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-07-31T22:25:04.000Z",
+      "itemCreationDate": "2026-07-31T22:25:04.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|307034926864|0",
+      "title": "Rick Owens RU21S6891 VYTR LOW SNEAKERS TRANSPARENT/MILK Sz 44 Ramones Rare",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/NA8AAeSwEQRqIcKY/s-l225.jpg"
+      },
+      "price": {
+        "value": "410.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C307034926864%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/NA8AAeSwEQRqIcKY/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/307034926864?_skw=rick+owens+ramones&hash=item477cb52f10:g:NA8AAeSwEQRqIcKY",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/AFIAAeSwmCZqIcKX/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/JKIAAeSwYJNqIcKX/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/GU4AAeSwoClqIcKX/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Pr4AAeSwL95qIcKY/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/F6EAAeSwknNqIcKY/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/KngAAeSw61tqIcKY/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "307034926864",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-06-04T18:29:50.000Z",
+      "itemCreationDate": "2026-06-30T17:27:38.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|237080374257|0",
+      "title": "Rick Owens Men’s US 10 Low Ramones",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/7eAAAeSwE6lqsCZf/s-l225.jpg"
+      },
+      "price": {
+        "value": "230.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C237080374257%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/7eAAAeSwE6lqsCZf/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/237080374257?_skw=rick+owens+ramones&hash=item3733176bf1:g:7eAAAeSwE6lqsCZf",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/SkcAAeSwM-NqsCZM/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/yG8AAeSwWt1qsCZM/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "237080374257",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-09-20T18:33:00.000Z",
+      "itemCreationDate": "2026-09-20T18:33:00.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|366751293996|0",
+      "title": "Rick Owens Porterville Jumbo Laces HighTop Sneakers “BLACK CREAM ”(10US/43)",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/qpUAAeSwQ4lq2XRA/s-l225.jpg"
+      },
+      "price": {
+        "value": "325.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C366751293996%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/qpUAAeSwQ4lq2XRA/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/366751293996?_skw=rick+owens+ramones&hash=item556414a22c:g:qpUAAeSwQ4lq2XRA",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/o6YAAeSwk6Vq2XRA/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/qrEAAeSwKvRq2XRA/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/qVcAAeSwVxNq2XRA/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/GVEAAeSwJARq2XR4/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "366751293996",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-22T02:27:22.000Z",
+      "itemCreationDate": "2026-10-22T02:27:22.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|366645774833|0",
+      "title": "Rick Owens DRKSHDW EU 39 US 9 E211 Ramones High Top Sneakers Canvas Black Milk",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/sFgAAeSwVf1qlfvn/s-l225.jpg"
+      },
+      "price": {
+        "value": "353.70",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C366645774833%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/sFgAAeSwVf1qlfvn/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-11-19T08:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-12-14T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/366645774833?_skw=rick+owens+ramones&hash=item555dca89f1:g:sFgAAeSwVf1qlfvn",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/EfgAAeSw0Hxqlfvr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/GqkAAeSwOCtqlfvv/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/IlQAAeSwhVlqlfvq/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/oCsAAeSwJK9qlfvv/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/KqkAAeSwNRJqlfvs/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/G3gAAeSwq2Jqlfvx/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/UIoAAeSwGatqlfvu/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/sKoAAeSwVf1qlfvx/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/aLEAAeSwR-1qlfv0/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/GasAAeSwQKZqlfv0/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "366645774833",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-09-03T05:24:41.000Z",
+      "itemCreationDate": "2026-09-03T05:24:41.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|298196477539|0",
+      "title": "DRKSHDW Ramones Low Slip On Boat Older Seasons Pre 2020",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/CEsAAeSwHpVp0omw/s-l225.jpg"
+      },
+      "price": {
+        "value": "235.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C298196477539%7C0",
+      "condition": "Pre-owned - Fair",
+      "conditionId": "3010",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/CEsAAeSwHpVp0omw/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "2.50",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-30T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-05T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/298196477539?_skw=rick+owens+ramones&hash=item456de52663:g:CEsAAeSwHpVp0omw&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7mZkDqDKgq2yNYm7eFpTByGFFdlNd0Af3DUK1GV1jPvijcc9%2FdXFOej77TUU9nrZOe9cXgiz7n3uSG8vCRwikVgdRphh12JHX3LC9R0bP4GlwNQz4rrovqqoekmhYiAUkrIcq2dn6I0PgphwPTrGMQS1vym7tGARICPq%2FZxbnzYk9X9lGcYd%2F7lDac0cHm7uKVd6NJMochMPouqyul%2BDu2Kjqjyt93IoxMw2AH58aE5LApaKxjvsRu11TQgnTmrQTBkSk7%2BJ%2FdEoQae%2FE5yJu7XLkLcu5sw%2F%2B3RA0g5u3bR5w%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/FoMAAeSwY8Fp0omu/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/6ooAAeSwjStp0omx/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/aHMAAeSwve5p0omy/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/b~8AAeSwt6Jp0omw/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/auYAAeSwarpp0omx/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/aaAAAeSwh91p0omx/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/t00AAeSw7rpp0omx/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/AuEAAeSwDFxp0omy/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "298196477539",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-04-05T16:15:44.000Z",
+      "itemCreationDate": "2026-04-05T16:15:44.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|860068847561|617218340978",
+      "title": "Rick Owens Men's Leather Low Top Sneakers, Brown",
+      "itemGroupHref": "https://api.ebay.com/buy/browse/v1/item/get_items_by_item_group?item_group_id=860068847561",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/2WsAAeSwRdNq2KSw/s-l225.jpg"
+      },
+      "price": {
+        "value": "318.25",
+        "currency": "USD"
+      },
+      "itemGroupType": "SELLER_DEFINED_VARIATIONS",
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C860068847561%7C617218340978",
+      "marketingPrice": {
+        "originalPrice": {
+          "value": "335.00",
+          "currency": "USD"
+        },
+        "discountPercentage": "5",
+        "discountAmount": {
+          "value": "16.75",
+          "currency": "USD"
+        },
+        "priceTreatment": "MARKDOWN"
+      },
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/2WsAAeSwRdNq2KSw/s-l960.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-11-17T08:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-12-02T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/860068847561?_skw=rick+owens+ramones&hash=itemc840191fc9:g:2WsAAeSwRdNq2KSw&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7lA9aDIslqtovlq7ckq9PJh%2BydcijPUNw7DSZ1kxzJaMURQ%2BhfjS9wv2uVXQp1OiChjzpiuz%2BFAPCBciseZK6oSEuio93%2Bn98H4w9gKuSrG7kbkXGP9ZF9e87gXx1ZYYF60XHdIkdVLZbbAjLab%2FWZqM151MznZmLdeLx0Jn1%2BD0fmaiHaanhDuwxd27VyGNrmDjzgVRwhYH%2FDlV5xEtmcX%2Bkueb7jK9bXh%2Bk4GA%2BHQE5O%2FK5eFRGHs8ZuIgo1qBCT5QTZAFeVbTNZLuQHrUlIFC466KVjhUWtzvTnANq%2FDYQ%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Do0AAeSwk1Jq2KSx/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/GckAAeSw0SZq2KSz/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/6iwAAeSwpOVq2KSx/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/towAAeSwyLdq2KSy/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/~mQAAeSwJmZq2KSy/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "860068847561",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-21T11:42:05.000Z",
+      "itemCreationDate": "2026-10-21T11:42:05.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|178432099849|0",
+      "title": "Size 41.5EU/8.5US - Rick Owens Textured Leather Ramone High Top",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/xrYAAeSweAVqibFr/s-l225.jpg"
+      },
+      "price": {
+        "value": "612.75",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C178432099849%7C0",
+      "marketingPrice": {
+        "originalPrice": {
+          "value": "645.00",
+          "currency": "USD"
+        },
+        "discountPercentage": "5",
+        "discountAmount": {
+          "value": "32.25",
+          "currency": "USD"
+        },
+        "priceTreatment": "MARKDOWN"
+      },
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/xrYAAeSweAVqibFr/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-30T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-05T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/178432099849?_skw=rick+owens+ramones&hash=item298b61c609:g:xrYAAeSweAVqibFr",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/2oQAAeSw0FZqibFr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/DYgAAeSwskFqibFr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/FgwAAeSwgW9qibFr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/DcIAAeSwe-pqibFr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/FksAAeSw0KVqibFr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/~7UAAeSwS8tqibFr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/BuMAAeSw7F9qibFr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/v~MAAeSwkAlqibFr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/wtQAAeSwvk9qibFr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/4XgAAeSwrd5qibFr/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "178432099849",
+      "availableCoupons": true,
+      "itemOriginDate": "2026-08-22T14:24:41.000Z",
+      "itemCreationDate": "2026-08-22T14:24:41.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|860049833750|0",
+      "title": "Rick Owen black / black jumbo lace lows size 8",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/njsAAeSwBgNq0dam/s-l225.jpg"
+      },
+      "price": {
+        "value": "240.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C860049833750%7C0",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/njsAAeSwBgNq0dam/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/860049833750?_skw=rick+owens+ramones&hash=itemc83ef6ff16:g:njsAAeSwBgNq0dam",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/AqcAAeSwrjFq0dan/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ofEAAeSw-ohq0dan/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/7-wAAeSwAz9q0dan/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ptMAAeSw-F1q0dao/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/~R0AAeSwke9q0dao/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/-8EAAeSwS09q0dao/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "860049833750",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-16T07:49:31.000Z",
+      "itemCreationDate": "2026-10-16T07:49:31.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|880017438014|0",
+      "title": "Rick Owens Mainline Leather Slip On Boatshoes",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/qgwAAeSwPLRqz9CV/s-l225.jpg"
+      },
+      "price": {
+        "value": "302.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C880017438014%7C0",
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/qgwAAeSwPLRqz9CV/s-l960.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "14.99",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-29T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-02T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/880017438014?_skw=rick+owens+ramones&hash=itemcce520753e:g:qgwAAeSwPLRqz9CV",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/qEIAAeSwiXBqz9CV/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/i8QAAeSwF2xqz9CV/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/q64AAeSwdF5qz9CV/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/lKgAAeSwcuNqz9CV/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/qXAAAeSwVXFqz9CV/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "880017438014",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-14T18:56:22.000Z",
+      "itemCreationDate": "2026-10-14T18:56:22.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|800827109277|0",
+      "title": "Rick Owens Vintage Low Sneakers",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/CxoAAeSwRUZqkj9Y/s-l225.jpg"
+      },
+      "price": {
+        "value": "259.99",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C800827109277%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/CxoAAeSwRUZqkj9Y/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-29T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-03T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/800827109277?_skw=rick+owens+ramones&hash=itemba7503ef9d:g:CxoAAeSwRUZqkj9Y",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/~7EAAeSwaGNqkj9Y/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/DLYAAeSwhq5qkj9Y/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/VYsAAeSwQUJqkj~X/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/13UAAeSwtOhqkj~c/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "800827109277",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-08-29T02:12:18.000Z",
+      "itemCreationDate": "2026-10-23T00:02:13.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|377566143055|0",
+      "title": "Rick Owens Gray/White",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/sPkAAeSw9wRqzZsA/s-l225.jpg"
+      },
+      "price": {
+        "value": "250.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C377566143055%7C0",
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/sPkAAeSw9wRqzZsA/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/377566143055?_skw=rick+owens+ramones&hash=item57e8b2224f:g:sPkAAeSw9wRqzZsA",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ibQAAeSw9D1qzZso/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/FAAAAeSwxYpqzZr~/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/eFoAAeSwHwBqzZr~/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/3o4AAeSwXKFqzZr~/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ciAAAeSwGMFqzZr~/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/AKMAAeSwUR1qzZv7/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/JekAAeSwFONqzZr~/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/S2IAAeSwIiNqzZr~/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Z0kAAeSwa3RqzZsA/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/sPoAAeSw9wRqzZsA/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "377566143055",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-13T02:54:17.000Z",
+      "itemCreationDate": "2026-10-13T02:54:17.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|407099708511|0",
+      "title": "Rick Owens DRKSHDW Ramones High Black Canvas Size 40",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/S5AAAeSwgPtqZiWd/s-l225.jpg"
+      },
+      "price": {
+        "value": "250.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C407099708511%7C0",
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/S5AAAeSwgPtqZiWd/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/407099708511?_skw=rick+owens+ramones&hash=item5ec908945f:g:S5AAAeSwgPtqZiWd",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/kXwAAeSwydZqZiWu/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/cSYAAeSwpfRqZiXO/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/ix8AAeSwo9lqZiXq/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/jI8AAeSwUIlqZiX7/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "407099708511",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-07-26T15:24:00.000Z",
+      "itemCreationDate": "2026-07-26T15:24:00.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|178568195248|0",
+      "title": "Size 43EU/10US - Rick Owens Jumo Lace Leather Low",
+      "leafCategoryIds": [
+        "15709"
+      ],
+      "categories": [
+        {
+          "categoryId": "15709",
+          "categoryName": "Athletic Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/T78AAeSwQ5Zqx-Q5/s-l225.jpg"
+      },
+      "price": {
+        "value": "717.25",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C178568195248%7C0",
+      "marketingPrice": {
+        "originalPrice": {
+          "value": "755.00",
+          "currency": "USD"
+        },
+        "discountPercentage": "5",
+        "discountAmount": {
+          "value": "37.75",
+          "currency": "USD"
+        },
+        "priceTreatment": "MARKDOWN"
+      },
+      "condition": "Pre-owned - Excellent",
+      "conditionId": "2990",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/T78AAeSwQ5Zqx-Q5/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-30T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-05T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/178568195248?_skw=rick+owens+ramones&hash=item29937e6cb0:g:T78AAeSwQ5Zqx-Q5",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/P5IAAeSwWl9qx-Q5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/RtAAAeSwDuhqx-Q5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/VOIAAeSwWgFqx-Q5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/VN4AAeSwsD9qx-Q5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/1L4AAeSw7pxqx-Q5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/WsMAAeSwTF1qx-Q5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/T7UAAeSwRGFqx-Q5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/TP4AAeSwFBFqx-Q5/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/SQwAAeSwfYpqx-Q5/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "178568195248",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-08T18:42:03.000Z",
+      "itemCreationDate": "2026-10-08T18:42:03.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|860080118036|0",
+      "title": "Genuine Rick Owens Men's Tower Geobasket Sneakers EUR 40/US 7 Black/Milk 60945",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/SK4AAeSwRb5q3RKC/s-l225.jpg"
+      },
+      "price": {
+        "value": "399.99",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C860080118036%7C0",
+      "condition": "Pre-owned - Good",
+      "conditionId": "3000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/SK4AAeSwRb5q3RKC/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "FIXED",
+          "shippingCost": {
+            "value": "0.00",
+            "currency": "USD"
+          },
+          "minEstimatedDeliveryDate": "2026-10-30T07:00:00.000Z",
+          "maxEstimatedDeliveryDate": "2026-11-06T08:00:00.000Z"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/860080118036?_skw=rick+owens+ramones&hash=itemc840c51914:g:SK4AAeSwRb5q3RKC",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/5NkAAeSwAndq3RKP/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/4IEAAeSwZmdq3RKd/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/7EcAAeSwrr1q3RKo/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/W3QAAeSwi1tq3RK1/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/C6oAAeSw~l9q3RJw/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/W5wAAeSwfjFq3RJw/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/6ngAAeSwO-1q3RLJ/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "860080118036",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-24T20:21:01.000Z",
+      "itemCreationDate": "2026-10-24T20:21:01.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": false,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|800805652813|0",
+      "title": "Rick Owens Ramones Leather High-Top Sneakers Black Milk Size 43",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/T-oAAeSw~gBq04-6/s-l225.jpg"
+      },
+      "price": {
+        "value": "650.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C800805652813%7C0",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/T-oAAeSw~gBq04-6/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/800805652813?_skw=rick+owens+ramones&hash=itemba73bc894d:g:T-oAAeSw~gBq04-6&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7n2XFMJOO3EPhnISeNUPBat6gQKdSzSgKlwneToMeHNcXlB2xgU52VOezu33jGUPyR4PH9hhcNvbLTCvafEXbTPjMklWARC41GlRpV0eXYzodI5r5rjK7jHBOa88RW77O4iKzVcJw64rLxGhoteep4id9dtj34KV86WgMyAjV7417oCGWRYrAd4lpIgqPq2%2FKj7rGcEU9epvSg28CPJX654kkyWN1cdmpmYinjMLcG06rqgxczhmYP7ng79vvG1ILldgCM0RTVng0fazarGKO%2F8J1a8qMDoSawXbSn7MoZ%2F2w%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/WjIAAeSwXSNq04-8/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/XQYAAeSw3DBq04-8/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/WYMAAeSwOb1q04-7/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/gVUAAeSw1LJq04-8/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/WjUAAeSwYppq04-7/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/EsgAAeSw11lq04-8/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/Wi4AAeSwXSNq04-7/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/XvYAAeSw1Hlq04-7/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/fdoAAeSwr4Rq04-8/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/WnYAAeSwvtdq04-7/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "800805652813",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-10-17T15:09:43.000Z",
+      "itemCreationDate": "2026-10-18T15:09:46.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    },
+    {
+      "itemId": "v1|920043700988|0",
+      "title": "Rick Owens High top trainers",
+      "leafCategoryIds": [
+        "24087"
+      ],
+      "categories": [
+        {
+          "categoryId": "24087",
+          "categoryName": "Casual Shoes"
+        },
+        {
+          "categoryId": "11450",
+          "categoryName": "Clothing, Shoes & Accessories"
+        },
+        {
+          "categoryId": "93427",
+          "categoryName": "Men's Shoes"
+        },
+        {
+          "categoryId": "260012",
+          "categoryName": "Men"
+        }
+      ],
+      "image": {
+        "imageUrl": "https://i.ebayimg.com/images/g/HQYAAeSwuxVqkNjr/s-l225.jpg"
+      },
+      "price": {
+        "value": "430.00",
+        "currency": "USD"
+      },
+      "itemHref": "https://api.ebay.com/buy/browse/v1/item/v1%7C920043700988%7C0",
+      "condition": "New with box",
+      "conditionId": "1000",
+      "thumbnailImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/HQYAAeSwuxVqkNjr/s-l1600.jpg"
+        }
+      ],
+      "shippingOptions": [
+        {
+          "shippingCostType": "CALCULATED"
+        }
+      ],
+      "buyingOptions": [
+        "FIXED_PRICE",
+        "BEST_OFFER"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/920043700988?_skw=rick+owens+ramones&hash=itemd636e0c2fc:g:HQYAAeSwuxVqkNjr&amdata=enc%3AAQALAAAA8Of5zIIojhOf%2BkQK%2Bxzjn7miInDI6UV8cu3B9ZwdNt43ZlHkfgRzZbpg3xf7TKU9LW8no8GTioNq5PUfg5BMoRBP3fUYzwc%2B6CKxrgJLaBngG2Iu8qwaQqop40njxsrLuQzrNA6lWkVv0rJJM6OfJxNhRziWbjXnVVHUHztUtHMdGTGv45mIs06LQdVRAmaToSNoGv3L0btwxTHJta7AyLEFHpIikOgI4SOrWaWimXOa%2FbVtix7IjVrAjdrDsSYMfX72UzhQJ9fNynfFF5xOLdLLaLjkF68ZkTqGBU%2FbKDUBrffAxQ27SmmXrTayujJRkQ%3D%3D",
+      "additionalImages": [
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/YUsAAeSwSHBqkNjr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/fgAAAeSwlyZqkNjr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/mOIAAeSwXm5qkNjr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/cuAAAeSwGDJqkNjr/s-l225.jpg"
+        },
+        {
+          "imageUrl": "https://i.ebayimg.com/images/g/fesAAeSw9OVqkNjr/s-l225.jpg"
+        }
+      ],
+      "adultOnly": false,
+      "legacyItemId": "920043700988",
+      "availableCoupons": false,
+      "itemOriginDate": "2026-08-28T00:44:23.000Z",
+      "itemCreationDate": "2026-10-16T02:47:12.000Z",
+      "topRatedBuyingExperience": false,
+      "priorityListing": true,
+      "listingMarketplaceId": "EBAY_US"
+    }
+  ]
+}
