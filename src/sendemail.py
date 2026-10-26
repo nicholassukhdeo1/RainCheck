@@ -50,7 +50,8 @@ def send_email(subject, body):
     msg.attach(MIMEText(body, 'html'))
 
     try:
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+        # timeout so a hung mail server can't stall the run forever
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=30) as server:
             # encrypt the connection before logging in
             server.starttls()
             server.login(sender_email, sender_password)

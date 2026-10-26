@@ -1,10 +1,12 @@
 from bs4 import BeautifulSoup
 from sendemail import send_email
-from db import get_connection, insert_listing, get_market_price, load_catalog
+from db import get_tracked_items, insert_listing, SchemaVersionError, TrackedItem
+from matching import title_matches
 from dataclasses import dataclass
 import json
 import logging
 import requests
+import sys
 
 # Rick Owens brand page - newest first, 100 items per page
 # (no trailing slash after 23000: with it Yahoo answers 308, an extra round trip every run)
@@ -137,42 +139,31 @@ def parse_listings(html):
     return listings
 
 
-def report_item_deals(item_dict, listings):
+def report_item_deals(item: TrackedItem, listings: list[YahooListing]) -> None:
     """
-    Filters already-parsed Yahoo listings by item keywords, removes overpriced listings,
-    ranks by discount from market price, and emails the top 5 deals.
+    Filters already-parsed Yahoo listings by the item's keywords and exclude keywords,
+    removes overpriced listings, ranks by discount from market price, and emails the top 5 deals.
     """
 
-    conn = get_connection()
-    brand_id = conn.execute(
-        "SELECT id FROM brands WHERE name = ?",
-        (item_dict["brand"],),
-    ).fetchone()["id"]
-    conn.close()
-
-    market_price = get_market_price(item_dict["brand"],item_dict["item name"])
+    # the item already carries its price (eBay first, catalog fallback), so no database read is needed
+    market_price = item.effective_price_usd
     if market_price is None:
+        print(f"Skipping {item.name}: no usable market price.")
         return
 
     deals = []
     for listing in listings:
-        title_text = listing.title.lower()
-
-        # only process listings whose title contains at least one item keyword
-
-        # any() is a method that returns True as long as ONE condition yields true
-
-        if not any(keyword in title_text for keyword in item_dict['keywords']):
+        # only process listings that match the item's keywords and none of its exclude keywords
+        # (the same rule the eBay job uses, so both halves of the comparison mean the same item)
+        # if the title doesn't match, FADE it and just keep it pushing, continue to next title.
+        if not title_matches(listing.title, item.keywords, item.exclude_keywords):
             continue
-
-        # if the title you're currently looking at doesnt have any of the keywords, FADE it
-        # and just keep it pushing, continue to next title.
 
         price_usd = listing.price_yen * 0.0062
         pct_cheaper = ((market_price - price_usd) / market_price) * 100
 
         if pct_cheaper > 0:
-            is_new = insert_listing(brand_id, listing.url, listing.title, listing.price_yen, listing.image_url)
+            is_new = insert_listing(item.brand_id, listing.url, listing.title, listing.price_yen, listing.image_url)
             if is_new:
                 deals.append({
                     "title": listing.title,
@@ -201,18 +192,27 @@ def report_item_deals(item_dict, listings):
         body.append("---")
 
     body_text = "<br>".join(body)
-    send_email(f"Daily Refresh on {item_dict['item name']}", body_text)
-    print(f"--- Yahoo Auctions Update for: {item_dict['item name']} ---")
+    send_email(f"Daily Refresh on {item.name}", body_text)
+    print(f"--- Yahoo Auctions Update for: {item.name} ---")
 
 
 def main():
-    # catalog first, so a bad catalog.json fails before any network call
-    catalog = load_catalog()
-    # fetch and parse once per run; errors propagate on purpose so a broken page
-    # means no emails and a non-zero exit instead of looking like "no deals today"
-    listings = parse_listings(fetch_yahoo_page(RICK_OWENS_URL))
-    for item in catalog:
-        report_item_deals(item, listings)
+    try:
+        # read the items first: opening the database checks its schema version,
+        # so an outdated database fails before any network call
+        items = get_tracked_items()
+        if not items:
+            print("No active items in the database. Add items to catalog.json, then run python3 src/db.py --seed.")
+            return
+        # fetch and parse once per run; errors propagate on purpose so a broken page
+        # means no emails and a non-zero exit instead of looking like "no deals today"
+        listings = parse_listings(fetch_yahoo_page(RICK_OWENS_URL))
+        for item in items:
+            report_item_deals(item, listings)
+    except SchemaVersionError as e:
+        # the one error with a message written for you (it names the fix), so no traceback
+        print(f"Error: {e}", file=sys.stderr)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

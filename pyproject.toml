@@ -3,3 +3,4 @@ minversion = "9.0"
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = ["-ra", "--strict-markers"]
+filterwarnings = ["error::ResourceWarning", "error::pytest.PytestUnraisableExceptionWarning"]

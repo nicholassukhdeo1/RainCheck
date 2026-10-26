@@ -1,4 +1,6 @@
+import gc
 import sqlite3
+import warnings
 from datetime import datetime, timedelta
 
 import pytest
@@ -309,3 +311,19 @@ def test_rc03a_c37_update_market_price_rejects_invalid_prices(seeded_db, db_conn
         db.update_market_price(item_id, bad_price)
 
     assert _items_table(db_conn) == before
+
+
+def test_rc03b_c46_insert_listing_with_unknown_brand_raises_and_leaks_no_connection(seeded_db):
+    def attempt():
+        with pytest.raises(sqlite3.IntegrityError):
+            db.insert_listing(99999, "https://x/orphan", "Title", 50000, None)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        attempt()
+        # the exception (and its traceback frames) are gone once attempt() returns, so an
+        # unclosed connection is now garbage and collecting it emits the ResourceWarning
+        gc.collect()
+
+    leaks = [w for w in caught if issubclass(w.category, ResourceWarning)]
+    assert leaks == []

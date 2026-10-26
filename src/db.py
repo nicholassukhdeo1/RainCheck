@@ -1,3 +1,4 @@
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -185,30 +186,36 @@ def get_connection():
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
 
-    version = _read_user_version(conn, path)
-    if version != SCHEMA_VERSION:
-        has_tables = bool(_user_tables(conn))
-        conn.close()
-        if not has_tables:
+    # why close on every error path: a connection that is never closed is only freed at
+    # garbage collection, which shows up as a ResourceWarning in some random later place.
+    # (`with sqlite3.connect(...)` would not help, it commits but does not close.)
+    try:
+        version = _read_user_version(conn, path)
+        if version != SCHEMA_VERSION:
+            has_tables = bool(_user_tables(conn))
+            if not has_tables:
+                raise SchemaVersionError(
+                    f"The database at {path} is empty. Run python3 src/db.py --seed to create it."
+                )
+            newer = " It was created by a newer RainCheck." if version > SCHEMA_VERSION else ""
             raise SchemaVersionError(
-                f"The database at {path} is empty. Run python3 src/db.py --seed to create it."
+                f"The database at {path} is at schema version {version} "
+                f"but this code expects version {SCHEMA_VERSION}.{newer} "
+                "Back up the database, then run python3 src/db.py"
             )
-        newer = " It was created by a newer RainCheck." if version > SCHEMA_VERSION else ""
-        raise SchemaVersionError(
-            f"The database at {path} is at schema version {version} "
-            f"but this code expects version {SCHEMA_VERSION}.{newer} "
-            "Back up the database, then run python3 src/db.py"
-        )
 
-    # SQLite ignores FOREIGN KEY constraints unless you turn them on,
-    # and it's per-connection, so this has to run every single time.
+        # SQLite ignores FOREIGN KEY constraints unless you turn them on,
+        # and it's per-connection, so this has to run every single time.
 
-    # basically a key refers to one of these tables that you make.
-    # and there's restrictions that you'll set on these tables for
-    # various reasons. a run is a row in a table. like row 3
-    # could contain the row with all of the data about the
-    # marathon you ran in shoe #7.
-    conn.execute("PRAGMA foreign_keys = ON")
+        # basically a key refers to one of these tables that you make.
+        # and there's restrictions that you'll set on these tables for
+        # various reasons. a run is a row in a table. like row 3
+        # could contain the row with all of the data about the
+        # marathon you ran in shoe #7.
+        conn.execute("PRAGMA foreign_keys = ON")
+    except BaseException:
+        conn.close()
+        raise
     return conn
 
 
@@ -556,21 +563,20 @@ def seed_from_catalog(catalog_path=None):
 def get_tracked_items():
     """
     Every active item with its keywords and prices, in id order.
-    Nothing in production calls this yet, the jobs still read catalog.json.
     """
-    conn = get_connection()
-    item_rows = conn.execute(
-        "SELECT items.id, items.brand_id, brands.name AS brand, items.name, "
-        "items.search_query, items.manual_price_usd, items.market_price_usd "
-        "FROM items JOIN brands ON brands.id = items.brand_id "
-        "WHERE items.active = 1 ORDER BY items.id"
-    ).fetchall()
-    keyword_rows = conn.execute(
-        "SELECT item_id, keyword, kind FROM item_keywords "
-        "WHERE item_id IN (SELECT id FROM items WHERE active = 1) "
-        "ORDER BY keyword"
-    ).fetchall()
-    conn.close()
+    # closing() closes the connection even if a query raises
+    with closing(get_connection()) as conn:
+        item_rows = conn.execute(
+            "SELECT items.id, items.brand_id, brands.name AS brand, items.name, "
+            "items.search_query, items.manual_price_usd, items.market_price_usd "
+            "FROM items JOIN brands ON brands.id = items.brand_id "
+            "WHERE items.active = 1 ORDER BY items.id"
+        ).fetchall()
+        keyword_rows = conn.execute(
+            "SELECT item_id, keyword, kind FROM item_keywords "
+            "WHERE item_id IN (SELECT id FROM items WHERE active = 1) "
+            "ORDER BY keyword"
+        ).fetchall()
 
     include, exclude = {}, {}
     for row in keyword_rows:
@@ -594,17 +600,18 @@ def get_tracked_items():
 
 
 def insert_listing(brand_id,url,title,price_yen,image_url):
-    conn = get_connection()
     now = datetime.now(timezone.utc).isoformat()
-    # the execute func returns if smth was inserted or not.
-    ifInserted = conn.execute(
-        "INSERT OR IGNORE INTO listings (brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at) VALUES (?,?,?,?,?,?,?)",
-        (brand_id,url,title,price_yen,image_url,now,now)
-    )
-    conn.commit()
-    # how u will check if smth was inserted or not (if it was a new listing)
-    is_new = (ifInserted.rowcount == 1)
-    conn.close()
+    # closing() closes the connection even when the insert raises (an unknown brand_id
+    # gives IntegrityError), so a failed insert can't leak an open connection
+    with closing(get_connection()) as conn:
+        # the execute func returns if smth was inserted or not.
+        ifInserted = conn.execute(
+            "INSERT OR IGNORE INTO listings (brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at) VALUES (?,?,?,?,?,?,?)",
+            (brand_id,url,title,price_yen,image_url,now,now)
+        )
+        conn.commit()
+        # how u will check if smth was inserted or not (if it was a new listing)
+        is_new = (ifInserted.rowcount == 1)
     return is_new
 
 
@@ -623,27 +630,25 @@ def update_market_price(item_id, price):
     ):
         raise ValueError(f"price must be a number greater than 0, got {price!r}")
 
-    conn = get_connection()
-    cursor = conn.execute(
-        "UPDATE items SET market_price_usd = ? WHERE id = ?",
-        (price,item_id)
-    )
-    conn.commit()
-    changed = (cursor.rowcount == 1)
-    conn.close()
+    with closing(get_connection()) as conn:
+        cursor = conn.execute(
+            "UPDATE items SET market_price_usd = ? WHERE id = ?",
+            (price,item_id)
+        )
+        conn.commit()
+        changed = (cursor.rowcount == 1)
     if changed:
         print("Market price updated!")
     return changed
 
 def get_item_id(brand_name,item_name):
     """Returns the item's id (active or not), or None if the brand or item doesn't exist."""
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT items.id FROM items JOIN brands ON brands.id = items.brand_id "
-        "WHERE brands.name = ? AND items.name = ?",
-        (brand_name,item_name)
-    ).fetchone()
-    conn.close()
+    with closing(get_connection()) as conn:
+        row = conn.execute(
+            "SELECT items.id FROM items JOIN brands ON brands.id = items.brand_id "
+            "WHERE brands.name = ? AND items.name = ?",
+            (brand_name,item_name)
+        ).fetchone()
     # no conn commit bc we are accessing only, not changing.
     return None if row is None else row["id"]
 
@@ -656,12 +661,11 @@ def get_market_price(brand_name,item_name):
     item_id = get_item_id(brand_name,item_name)
     if item_id is None:
         return None
-    conn = get_connection()
-    row = conn.execute(
-        "SELECT market_price_usd, manual_price_usd FROM items WHERE id = ?",
-        (item_id,)
-    ).fetchone()
-    conn.close()
+    with closing(get_connection()) as conn:
+        row = conn.execute(
+            "SELECT market_price_usd, manual_price_usd FROM items WHERE id = ?",
+            (item_id,)
+        ).fetchone()
     return _effective_price(row["market_price_usd"], row["manual_price_usd"])
 
 
