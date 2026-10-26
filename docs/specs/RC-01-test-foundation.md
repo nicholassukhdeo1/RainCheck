@@ -505,3 +505,19 @@ That is a bug in today's scraper, owned by RC-07, not by this item.
   The page is otherwise written unchanged, with the JSON block re-serialized in place.
 - New criterion 53 checks that no seller data reaches the committed Yahoo fixture.
 
+### Amendment 2 (2026-10-26): capture hardening from re-review
+
+- `strip_yahoo_seller_data(html)` also removes `prefectureCode` from every object with an `auctionId` key (matching the eBay `itemLocation` policy), and sets every `setCookies` value anywhere in the `__NEXT_DATA__` JSON to an empty list, because it holds the browser-ID cookies Yahoo issued to the capture request.
+- After sanitizing, it raises `RuntimeError` if any removed seller `userId` or `displayName` value still appears anywhere in the output page, inside or outside the JSON block.
+  This guards against Yahoo moving seller data somewhere the key-based stripping does not reach.
+- Criterion 48's `xfail` uses `raises=AssertionError`, so a missing live file fails the test as criterion 50 requires instead of counting as the expected failure.
+- Criterion 49 also asserts that no entry has an `itemLocation` key.
+- Criterion 53 is strengthened: no object anywhere in the `__NEXT_DATA__` JSON has a `seller` or `prefectureCode` key, and every `setCookies` value is empty.
+- New criterion 54: offline unit tests for `strip_yahoo_seller_data` using small synthetic pages, with no network:
+  a page with no `__NEXT_DATA__` block raises `RuntimeError`;
+  a block with invalid JSON raises `RuntimeError`;
+  a listing title containing `</script>` comes out escaped as `\u003c/script>`, the page still has exactly one closing tag for the block, and the JSON still parses to the original title;
+  `seller` and `prefectureCode` are removed only from objects that have `auctionId`;
+  `setCookies` values are emptied;
+  a page where a seller's `userId` or `displayName` also appears outside the JSON block raises `RuntimeError`.
+
