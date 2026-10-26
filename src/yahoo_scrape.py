@@ -89,15 +89,24 @@ def parse_listings(html):
     # walk the path one key at a time so the error can say exactly which step is missing
     dotted_path = ".".join(LISTING_PATH)
     node = data
+    parent = None
     for key in LISTING_PATH:
         if not isinstance(node, dict) or key not in node:
             raise YahooPageError(f"Yahoo __NEXT_DATA__ is missing the listing path {dotted_path} (stopped at '{key}')")
+        parent = node
         node = node[key]
     if not isinstance(node, list):
         raise YahooPageError(f"Yahoo __NEXT_DATA__ listing path {dotted_path} is not a list")
 
-    # an empty array is a legitimate "no results" page, not drift
     if not node:
+        # an empty array is only "no results" if Yahoo agrees; a placeholder array on a page
+        # that reports results (or is still loading) would otherwise bring back silent empty emails
+        total = parent.get("totalResultsAvailable")
+        reports_results = isinstance(total, int) and not isinstance(total, bool) and total > 0
+        if reports_results or parent.get("isFetching") is True:
+            raise YahooPageError(
+                f"Yahoo page reports results (totalResultsAvailable={total!r}) but {dotted_path} is empty"
+            )
         return []
 
     listings = []
@@ -167,7 +176,6 @@ def report_item_deals(item_dict, listings):
             if is_new:
                 deals.append({
                     "title": listing.title,
-                    "raw_price": listing.price_yen,
                     "price_usd": price_usd,
                     "pct_cheaper": pct_cheaper,
                     "link": listing.url,
