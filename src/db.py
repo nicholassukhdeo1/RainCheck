@@ -144,6 +144,27 @@ def _user_tables(conn):
     return {n for n in names if not n.startswith("sqlite_")}
 
 
+def _read_user_version(conn, path):
+    """
+    Reads PRAGMA user_version, the first statement that actually reads the file.
+    A path that exists but is not a SQLite database (a text file, say) fails
+    here with DatabaseError, so turn that into a clear SchemaVersionError.
+    OperationalError (locked, can't open) is a DatabaseError subclass too, but
+    that is not "not a database", so it is let through unchanged.
+    """
+    try:
+        return conn.execute("PRAGMA user_version").fetchone()[0]
+    except sqlite3.OperationalError:
+        conn.close()
+        raise
+    except sqlite3.DatabaseError:
+        conn.close()
+        raise SchemaVersionError(
+            f"The file at {path} is not a SQLite database, so it was not touched. "
+            "Check RAINCHECK_DB_PATH."
+        ) from None
+
+
 def get_connection():
     """
     Opens a connection to the SQLite database.
@@ -164,7 +185,7 @@ def get_connection():
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
 
-    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    version = _read_user_version(conn, path)
     if version != SCHEMA_VERSION:
         has_tables = bool(_user_tables(conn))
         conn.close()
@@ -237,6 +258,16 @@ def _migrate(conn, from_version):
         # time makes this fail with "database is locked" instead of interleaving
         conn.execute("BEGIN IMMEDIATE")
         try:
+            # we chose this step from a version read BEFORE the lock. another
+            # process may have migrated while we waited, so look again now that
+            # nobody else can write. stopping here gives a clear message instead
+            # of a confusing "duplicate column name" halfway through.
+            if conn.execute("PRAGMA user_version").fetchone()[0] != target - 1:
+                raise SchemaVersionError(
+                    f"The database at {get_db_path()} was upgraded concurrently by "
+                    "another process, so this migration was stopped. "
+                    "Run python3 src/db.py again to check its state."
+                )
             for statement in MIGRATIONS[target]:
                 conn.execute(statement)
             # the version bump is inside the transaction, so it rolls back with it.
@@ -244,8 +275,12 @@ def _migrate(conn, from_version):
             conn.execute(f"PRAGMA user_version = {int(target)}")
             conn.execute("COMMIT")
         except BaseException:
-            # any failure puts the file back exactly as it was before this step
-            conn.execute("ROLLBACK")
+            # any failure puts the file back exactly as it was before this step.
+            # only roll back if a transaction is still open: SQLite sometimes
+            # rolls back by itself (disk full), and a second ROLLBACK would hide
+            # the real error behind "no transaction is active"
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
             raise
         print(f"Migrated database at {get_db_path()} from schema version {target - 1} to {target}.")
 
@@ -261,7 +296,7 @@ def init_db():
     conn = sqlite3.connect(get_db_path(), isolation_level=None)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
-        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        version = _read_user_version(conn, get_db_path())
         tables = _user_tables(conn)
 
         if version > SCHEMA_VERSION:
