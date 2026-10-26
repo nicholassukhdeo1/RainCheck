@@ -556,7 +556,6 @@ def seed_from_catalog(catalog_path=None):
 def get_tracked_items():
     """
     Every active item with its keywords and prices, in id order.
-    Nothing in production calls this yet, the jobs still read catalog.json.
     """
     conn = get_connection()
     item_rows = conn.execute(

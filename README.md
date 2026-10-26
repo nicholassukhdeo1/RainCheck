@@ -30,6 +30,7 @@ src/
 ├── schema.sql       # the table definitions
 ├── yahoo_scrape.py  # scrape Yahoo Auctions Japan and email the best deals
 ├── ebay_pricing.py  # compute each item's market price from eBay and store it
+├── matching.py      # the keyword matcher both jobs share (include and exclude keywords)
 ├── sendemail.py     # sends the HTML email summary
 ├── setup.py         # interactive: build your watchlist, saved to catalog.json
 ├── catalog.json     # the watchlist of items being tracked
@@ -70,7 +71,9 @@ On each run the scraper pulls current listings, compares them against the item's
 
 ## Usage
 
-Update the market prices first (this needs the eBay credentials), then scrape and email the best deals:
+1. Edit `src/catalog.json` to change what is tracked.
+2. Run `python3 src/db.py --seed` to copy the catalog into the database.
+3. Update the market prices (this needs the eBay credentials), then scrape and email the best deals:
 
 ```bash
 python3 src/ebay_pricing.py   # update market prices from eBay
@@ -78,6 +81,12 @@ python3 src/yahoo_scrape.py   # scrape and email the best deals
 ```
 
 Both can be run from any directory.
+
+- Both jobs read the items only from the database, never from `catalog.json`, so a `catalog.json` edit takes effect only after you seed.
+- Both jobs ignore listings whose title contains an exclude keyword.
+- Matching is case-insensitive substring matching, so `low` also matches `yellow` (until RC-17 makes it word-aware).
+- eBay is searched with the item's `search_query`, or with the item name when it has none.
+- If a job finds an outdated or missing database, it prints one `Error:` line naming the command that fixes it and stops before any network request.
 
 `src/setup.py` is the exception.
 It reads and writes `catalog.json` relative to the current directory, so run it from inside `src/`:
@@ -90,7 +99,6 @@ python3 setup.py         # build your watchlist
 After adding items with it, run `python3 src/db.py --seed` so the new items reach the database.
 But first fix the entries `setup.py` wrote in `catalog.json`.
 Its `keywords` are placeholders that need fixing, and its `search_query` uses `+` between words, which seeding rejects, so rewrite it with spaces (or remove it).
-`setup.py` also does not write `exclude_keywords`, so `ebay_pricing.py` still needs `"exclude_keywords": []` (or a real list) added by hand to each new entry, or it stops with a `KeyError`, until RC-03b.
 (RC-14 replaces `setup.py`.)
 
 ## Database
