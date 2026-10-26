@@ -71,6 +71,9 @@ def strip_yahoo_seller_data(html):
 
     _strip_seller(data)
     clean = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    # seller-written titles could contain "</script>", which would close the tag early and
+    # corrupt the page. Next.js escapes "<" the same way; it is still valid JSON with the same data.
+    clean = clean.replace("<", "\\u003c")
     # splice by position (not re.sub) so backslashes in the JSON are never read as regex escapes
     return html[: match.start(2)] + clean + html[match.end(2):]
 
