@@ -46,28 +46,34 @@ These run first and one at a time, because everything else depends on them.
 
 These change the schema, so they run one at a time.
 
-### RC-03: Item configuration lives in the database
+### RC-03a: Item configuration in the database: schema, migration, upsert seeding
 
-- **Size:** L (likely split into two)
-- **Depends on:** RC-01
-- **Touches:** `src/schema.sql`, `src/db.py`, `src/catalog.json`, `src/yahoo_scrape.py`, `src/ebay_pricing.py`
-- **Why:** There are two sources of truth today.
-  The `item_keywords` table is written by the seed step but never read; both jobs read keywords from `catalog.json` instead.
-  Exclude keywords exist only in `catalog.json`, and the Yahoo scraper ignores them entirely, so Yahoo and eBay filter the same item differently.
-  The seed step uses `INSERT OR IGNORE`, so editing an item's price or keywords in `catalog.json` never reaches the database.
-  The `pod shorts` item still carries Ramones keywords, which is why it never gets a price.
+- **Size:** M
+- **Depends on:** RC-01, RC-02
+- **Touches:** `src/schema.sql`, `src/db.py`, `src/catalog.json`, `README.md`, tests
+- **Why:** The database cannot store exclude keywords, seeding never propagates catalog edits, and the catalog price and eBay price overwrite each other in one column.
+- **Scope:** Schema version 1 with a tested migration, validated upsert seeding, a read API for item configuration, the `pod shorts` data fix, and a backup-first upgrade of the user's database.
+- **Resume angle:** Designed a versioned SQLite migration and an idempotent, validated configuration sync with clear data ownership.
+
+### RC-03b: Both jobs read item configuration from the database
+
+- **Size:** M
+- **Depends on:** RC-03a
+- **Touches:** `src/yahoo_scrape.py`, `src/ebay_pricing.py`, new `src/matching.py`, `README.md`, tests
+- **Why:** After RC-03a the database holds the full configuration, but both jobs still read `catalog.json`, the Yahoo job ignores exclude keywords, and eBay is queried with the item name.
 - **Scope:**
-  - Store include and exclude keywords in the database.
-  - Make both jobs read item configuration from the database only; `catalog.json` becomes seed input.
-  - Turn seeding into an upsert so edits propagate.
-  - Apply exclude keywords in the Yahoo scraper.
-  - Fix the `pod shorts` data.
+  - `yahoo_scrape.main()` and `ebay_pricing.refresh_market_prices()` iterate `db.get_tracked_items()` (active items only) and never call `load_catalog()`.
+  - One shared `title_matches(title, keywords, exclude_keywords)` function used by both jobs: lowercase the title, any include keyword matches, no exclude keyword matches.
+  - The Yahoo job applies exclude keywords and judges deals against `effective_price_usd`, skipping items without a usable price.
+  - eBay queries use `search_query`, falling back to the item name when it is `NULL`.
+  - `report_item_deals` takes a `TrackedItem`, so the brand lookup crash and the `KeyError` on missing `exclude_keywords` disappear.
+  - Update the README "Usage" section: edit `catalog.json`, run `python3 src/db.py --seed`, then run the jobs.
 - **Resume angle:** Refactored to a single source of truth, eliminating configuration drift between two data pipelines.
 
 ### RC-04: Record which item each listing matched
 
 - **Size:** M
-- **Depends on:** RC-03
+- **Depends on:** RC-03b
 - **Touches:** `src/db.py`, `src/yahoo_scrape.py`
 - **Why:** The `listing_matches` table has existed since the schema was written and has never been used.
 - **Scope:** Write a `listing_matches` row whenever a listing matches an item.
@@ -77,7 +83,7 @@ These change the schema, so they run one at a time.
 ### RC-05: Listing lifecycle tracking
 
 - **Size:** M
-- **Depends on:** RC-03
+- **Depends on:** RC-03b
 - **Touches:** `src/db.py`, `src/yahoo_scrape.py`
 - **Why:** `last_seen_at` is set once and never updated, and `ended_at` and `final_price_yen` are never written.
 - **Scope:** Update `last_seen_at` when a listing is seen again.
@@ -87,7 +93,7 @@ These change the schema, so they run one at a time.
 ### RC-06: Market price history
 
 - **Size:** M
-- **Depends on:** RC-03
+- **Depends on:** RC-03b
 - **Touches:** `src/schema.sql`, `src/db.py`, `src/ebay_pricing.py`
 - **Why:** Each pricing run overwrites the last one, so there is no record of how an item's market price moves.
 - **Scope:** Add a history table storing item, median price, sample size, and timestamp for every run, keeping `items.market_price_usd` as the latest value.
@@ -183,7 +189,7 @@ The project is locked to Region `us-east-2`.
 ### RC-13: Multi-brand support
 
 - **Size:** M
-- **Depends on:** RC-03
+- **Depends on:** RC-03b
 - **Touches:** `src/schema.sql`, `src/db.py`, `src/yahoo_scrape.py`
 - **Why:** The Yahoo brand ID `103538` and the Rick Owens page URL are hardcoded, so RainCheck can only ever watch one brand.
 - **Scope:** Store each brand's Yahoo ID in the database and build the search URL per brand.
@@ -192,7 +198,7 @@ The project is locked to Region `us-east-2`.
 ### RC-14: Item management command line tool
 
 - **Size:** M
-- **Depends on:** RC-03
+- **Depends on:** RC-03a
 - **Touches:** `src/setup.py` (replaced), `src/db.py`
 - **Why:** `setup.py` hardcodes the brand, size, and Ramones keywords for every item you add, which is the root cause of the `pod shorts` bug.
   It also writes to `catalog.json` instead of the database.
@@ -219,3 +225,13 @@ The project is locked to Region `us-east-2`.
 - **Scope:** Store whether a listing is fixed price, its buy-now price, and its end time.
   Treat fixed-price and buy-now listings as real deals, and decide how to judge running auctions (for example, only near their end time).
 - **Resume angle:** Modeled auction versus fixed-price listings to cut false-positive deal alerts.
+
+### RC-17: Word-aware keyword matching
+
+- **Size:** S
+- **Depends on:** RC-03b
+- **Touches:** `src/matching.py`, tests
+- **Why:** Matching is plain substring matching, so the exclude keyword `low` also removes `yellow` and `follow`, and full-width Latin letters in Japanese titles (for example `ＲＡＭＯＮＥＳ`) never match ASCII keywords.
+- **Scope:** Normalize titles and keywords with Unicode NFKC before lowercasing, and match Latin keywords on word boundaries while keeping substring matching for Japanese text, which has no spaces.
+  Test against the live Yahoo and eBay fixtures to measure how many matches change.
+- **Resume angle:** Improved precision of text matching across English and Japanese listing titles.
