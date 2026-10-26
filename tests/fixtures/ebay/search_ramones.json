@@ -1,0 +1,80 @@
+{
+  "href": "https://api.ebay.com/buy/browse/v1/item_summary/search?q=rick+owens+ramones&limit=50",
+  "total": 6,
+  "limit": 50,
+  "offset": 0,
+  "itemSummaries": [
+    {
+      "itemId": "v1|110000000001|0",
+      "title": "Rick Owens Ramones High Top Black 42",
+      "price": {
+        "value": "700.00",
+        "currency": "USD"
+      },
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/110000000001"
+    },
+    {
+      "itemId": "v1|110000000002|0",
+      "title": "Rick Owens RAMONES Leather Sneakers",
+      "price": {
+        "value": "900.00",
+        "currency": "USD"
+      },
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/110000000002"
+    },
+    {
+      "itemId": "v1|110000000003|0",
+      "title": "Rick Owens Ramones Low Sneakers",
+      "price": {
+        "value": "300.00",
+        "currency": "USD"
+      },
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/110000000003"
+    },
+    {
+      "itemId": "v1|110000000004|0",
+      "title": "Rick Owens DRKSHDW Ramones Canvas",
+      "price": {
+        "value": "250.00",
+        "currency": "USD"
+      },
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/110000000004"
+    },
+    {
+      "itemId": "v1|110000000005|0",
+      "title": "Rick Owens Geobasket",
+      "price": {
+        "value": "1200.00",
+        "currency": "USD"
+      },
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/110000000005"
+    },
+    {
+      "itemId": "v1|110000000006|0",
+      "title": "Rick Owens Ramon High",
+      "price": {
+        "value": "1000.00",
+        "currency": "USD"
+      },
+      "buyingOptions": [
+        "FIXED_PRICE"
+      ],
+      "itemWebUrl": "https://www.ebay.com/itm/110000000006"
+    }
+  ]
+}
