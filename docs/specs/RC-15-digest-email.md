@@ -535,3 +535,13 @@ If Option B of Open question 1 is chosen, `src/db.py` is not touched.
 - **After merge:** revert the merge commit with a new PR.
   There is no schema change, and rows written by RC-15 have the same columns and URL format as before, so the old code reads them as "seen" with no data fix.
   The only visible effect of rolling back is the return of one email per item per run.
+
+## Amendments
+
+### Amendment 1 (2026-10-26): review hardening
+
+- `src/yahoo_scrape.py` `_parse_record`: a record whose `title` or `imageUrl` cannot be encoded as UTF-8 (for example a lone surrogate such as `\ud800`, which JSON can produce) is invalid: the record is skipped and counted in the existing skip warning, and an `imageUrl` that cannot be encoded is treated as invalid for the whole record.
+  Without this, one such listing makes `send_email` (or `insert_listing`) raise `UnicodeEncodeError` on every run while it stays on the page, so no digest is ever sent.
+- New criterion 57: `parse_listings` on a page with one valid record and one record whose title contains a lone surrogate returns only the valid listing and logs `Skipped 1 of 2 Yahoo listing records: 1 invalid, 0 duplicate`; `main()` on such a page sends one digest with the valid deal.
+- Test hardening: the criterion 30 purity test parses `src/digest.py` with `ast` and asserts no import of `db`, `requests`, `smtplib`, `sqlite3`, `sendemail`, or `yahoo_scrape`; the criterion 54 test also asserts `yahoo_scrape`'s source contains neither `Daily Refresh` nor `"<br>".join`; a new test makes `insert_listing` raise on the second call after a successful send and asserts the exception propagates, the first row stays, and the next run sends only the second deal.
+
