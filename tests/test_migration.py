@@ -249,3 +249,29 @@ def test_rc03a_c12_legacy_missing_market_price_source_is_refused(legacy_db):
         db.init_db()
 
     assert sha256(legacy_db) == before
+
+
+# --- Amendment 1: a file that is not a SQLite database (52) -------------------
+
+
+def test_rc03a_c52_non_sqlite_file_is_refused_everywhere_and_left_untouched(
+    fresh_path, capsys
+):
+    fresh_path.write_text("not a database")
+    before = sha256(fresh_path)
+
+    with pytest.raises(db.SchemaVersionError) as get_exc:
+        db.get_connection()
+    assert "not a sqlite database" in str(get_exc.value).lower()
+
+    with pytest.raises(db.SchemaVersionError) as init_exc:
+        db.init_db()
+    assert "not a sqlite database" in str(init_exc.value).lower()
+
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as main_exc:
+        db.main([])
+    assert main_exc.value.code == 1
+    assert "Error:" in capsys.readouterr().err
+
+    assert sha256(fresh_path) == before
