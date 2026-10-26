@@ -490,7 +490,9 @@ Subagents never touch the real database.
 Phase C must happen before the next real run of either job, because after RC-03a merges the jobs refuse to open a version 0 database.
 
 - **C0.** No RainCheck process is running: `pgrep -fl "yahoo_scrape|ebay_pricing|db.py"` prints nothing.
-- **C1.** `grep -c '^RAINCHECK_DB_PATH' src/.env .env 2>/dev/null` prints only zero counts, so the live database really is `src/raincheck.db`.
+  No RainCheck job is scheduled to start during the upgrade: `crontab -l 2>/dev/null | grep -i raincheck` and `launchctl list | grep -i raincheck` print nothing; if either does, pause that schedule until C9 is done.
+- **C1.** For each of `src/.env` and `.env` that exists, `grep -c '^[[:space:]]*\(export[[:space:]]\+\)\?RAINCHECK_DB_PATH' <file>` prints `0`, and `RAINCHECK_DB_PATH` is not set in the shell, so the live database really is `src/raincheck.db`.
+  Check each file separately: with two file arguments and one missing, `grep -c` output is easy to misread.
 - **C2.** `ls src/raincheck.db-*` finds no side files.
   If a `-journal` file exists, run `sqlite3 src/raincheck.db "PRAGMA integrity_check;"` once (opening rolls it back) and confirm it is gone.
 - **C3.** `git status --short` is empty and `git ls-files src/raincheck.db` prints nothing (untracked since RC-02).
@@ -531,6 +533,7 @@ Phase C must happen before the next real run of either job, because after RC-03a
   Show the user each item's preserved `market_price_usd` next to its new `manual_price_usd`.
   If the user confirms that a preserved value never came from eBay (a value equal to the catalog price is the usual sign, as expected for `pod shorts`), the orchestrator clears it for that item only, with the user's explicit confirmation per item: `sqlite3 src/raincheck.db "UPDATE items SET market_price_usd = NULL WHERE id = <id>;"`.
   Otherwise nothing is changed.
+  After any such update, run `sqlite3 src/raincheck.db "PRAGMA integrity_check; PRAGMA foreign_key_check;"`: it prints `ok` and nothing else.
 - **C10.** Keep `~/RainCheck-backups/raincheck-pre-rc03a.db` at least until both jobs have completed one real run; delete `rehearsal-rc03a.db` whenever convenient.
 
 ## Shared-file conflicts
@@ -627,6 +630,17 @@ For question 3, the user decided in advance for step C9: keep 420.0 as the eBay-
   - Restore `~/RainCheck-backups/raincheck-pre-rc03a.db` over `src/raincheck.db`, losing only listings first seen since Phase C (those deals may be emailed once more).
   - Or apply a manual down-migration in one transaction: `ALTER TABLE items ADD COLUMN market_price_source TEXT DEFAULT 'manual'`, `UPDATE items SET market_price_usd = manual_price_usd WHERE market_price_usd IS NULL`, drop `manual_price_usd`, `active`, and `item_keywords.kind` (first deleting exclude rows with `DELETE FROM item_keywords WHERE kind = 'exclude'`), and `PRAGMA user_version = 0`.
     This keeps all listings; it is documented here but not tested, so prefer the restore unless many new listings would be lost.
+
+## Amendments
+
+### Amendment 1 (2026-10-26): review hardening
+
+- `_migrate` only issues `ROLLBACK` when `conn.in_transaction` is true, so a failure that SQLite already rolled back (for example disk full) surfaces its real error instead of "cannot rollback - no transaction is active".
+- `init_db` re-reads `PRAGMA user_version` after `BEGIN IMMEDIATE` inside each migration step; if another process already applied that step, it rolls back and stops with a clear `SchemaVersionError` saying the database was upgraded concurrently, instead of failing on "duplicate column name".
+- A path that exists but is not a SQLite database (`sqlite3.DatabaseError` on the first `PRAGMA`) raises `SchemaVersionError` saying the file is not a SQLite database, from both `get_connection` and `init_db`, and leaves the file byte-identical; `db.main` prints it as an `Error:` line and exits 1.
+- New criterion 52: a file containing the text `not a database` at `RAINCHECK_DB_PATH` makes `get_connection()` and `init_db()` raise `SchemaVersionError` mentioning that it is not a SQLite database, `db.main([])` exits 1 with an `Error:` line on stderr, and the file's SHA-256 is unchanged.
+- Phase C: C0 also checks scheduled jobs, C1 checks each `.env` file separately, and C9 re-runs the integrity and foreign key checks after any manual price update.
+- Deferred to RC-03b: `update_market_price` now rejects a price of 0 or below, so `refresh_market_prices` must skip an item whose eBay median is not usable instead of stopping the whole run.
 
 ## Backlog text for the split and new items
 

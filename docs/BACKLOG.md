@@ -66,6 +66,7 @@ These change the schema, so they run one at a time.
   - One shared `title_matches(title, keywords, exclude_keywords)` function used by both jobs: lowercase the title, any include keyword matches, no exclude keyword matches.
   - The Yahoo job applies exclude keywords and judges deals against `effective_price_usd`, skipping items without a usable price.
   - eBay queries use `search_query`, falling back to the item name when it is `NULL`.
+  - `refresh_market_prices` skips an item whose eBay median is not a usable price (0 or below), because `update_market_price` now rejects it, so one item cannot stop the whole run.
   - `report_item_deals` takes a `TrackedItem`, so the brand lookup crash and the `KeyError` on missing `exclude_keywords` disappear.
   - Update the README "Usage" section: edit `catalog.json`, run `python3 src/db.py --seed`, then run the jobs.
 - **Resume angle:** Refactored to a single source of truth, eliminating configuration drift between two data pipelines.
