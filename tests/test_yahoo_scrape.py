@@ -102,7 +102,10 @@ def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
 def test_rc07_c25_null_market_price_skips_item(
     seeded_db, sent_emails, db_conn, ramones_entry, minimal_listings
 ):
-    db_conn.execute("UPDATE items SET market_price_usd = NULL WHERE name = ?", ("rick owens ramones",))
+    db_conn.execute(
+        "UPDATE items SET market_price_usd = NULL, manual_price_usd = NULL WHERE name = ?",
+        ("rick owens ramones",),
+    )
     db_conn.commit()
     yahoo_scrape.report_item_deals(ramones_entry, minimal_listings)
     assert _rows(db_conn) == []

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from conftest import assert_db_is_temp
+from dbhelpers import assert_legacy_data_preserved, dump_all, set_user_version, user_version
 
 TABLES = {"brands", "items", "item_keywords", "listings", "listing_matches"}
 
@@ -54,20 +55,27 @@ def test_rc02_c6_main_seed_produces_catalog_rows(fresh_path, test_catalog):
     db.main(["--seed"])
 
     assert _rows(fresh_path, "SELECT name, yahoo_brand_id FROM brands") == [("Rick Owens", "103538")]
-    items = _rows(fresh_path, "SELECT name, market_price_usd, search_query FROM items ORDER BY name")
+    items = _rows(
+        fresh_path,
+        "SELECT name, manual_price_usd, market_price_usd, search_query FROM items ORDER BY name",
+    )
     assert items == [
-        ("pod shorts", 300.0, "pod+shorts"),
-        ("rick owens ramones", 800.0, "rick+owens+ramones"),
+        ("pod shorts", 300.0, None, "pod shorts"),
+        ("rick owens ramones", 800.0, None, "rick owens ramones"),
     ]
     kws = _rows(
         fresh_path,
-        "SELECT i.name, k.keyword FROM item_keywords k JOIN items i ON i.id = k.item_id "
-        "ORDER BY i.name, k.keyword",
+        "SELECT i.name, k.kind, k.keyword FROM item_keywords k JOIN items i ON i.id = k.item_id "
+        "ORDER BY i.name, k.kind, k.keyword",
     )
     assert kws == [
-        ("pod shorts", "pod short"),
-        ("rick owens ramones", "ramon"),
-        ("rick owens ramones", "ramones"),
+        ("pod shorts", "exclude", "pants"),
+        ("pod shorts", "include", "pod short"),
+        ("rick owens ramones", "exclude", "canvas"),
+        ("rick owens ramones", "exclude", "drkshdw"),
+        ("rick owens ramones", "exclude", "low"),
+        ("rick owens ramones", "include", "ramon"),
+        ("rick owens ramones", "include", "ramones"),
     ]
 
 
@@ -91,7 +99,7 @@ def test_rc02_c8_main_seed_twice_keeps_row_counts(fresh_path, test_catalog):
     db.main(["--seed"])
     second = {t: _count(fresh_path, t) for t in ("brands", "items", "item_keywords")}
 
-    assert first == {"brands": 1, "items": 2, "item_keywords": 3}
+    assert first == {"brands": 1, "items": 2, "item_keywords": 7}
     assert second == first
 
 
@@ -163,3 +171,50 @@ def test_rc02_c13_main_calls_load_dotenv_before_opening_db(tmp_path, monkeypatch
     names = {r[0] for r in _rows(target, "SELECT name FROM sqlite_master WHERE type='table'")}
     assert TABLES <= names
     assert not (tmp_path / "test.db").exists()
+
+
+# --- RC-03a: migration and error reporting (criteria 38-40) ------------------
+
+
+def test_rc03a_c38_main_migrates_a_legacy_database(legacy_db, capsys):
+    import db
+
+    before = dump_all(legacy_db)
+
+    db.main([])
+
+    assert user_version(legacy_db) == 1
+    assert_legacy_data_preserved(legacy_db, before)
+    assert f"Migrated database at {legacy_db} from schema version 0 to 1." in capsys.readouterr().out
+
+
+def test_rc03a_c39_main_seed_with_invalid_catalog_exits_1_and_changes_no_items(
+    seeded_db, tmp_path, monkeypatch, capsys
+):
+    import db
+
+    before = _rows(seeded_db, "SELECT * FROM items ORDER BY id")
+    bad = tmp_path / "bad_catalog.json"
+    bad.write_text('[{"brand": "Rick Owens", "item name": "x", "market_price": 0}]')
+    monkeypatch.setattr(db, "CATALOG_PATH", bad)
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit) as exc:
+        db.main(["--seed"])
+
+    assert exc.value.code == 1
+    assert capsys.readouterr().err.startswith("Error: Catalog is invalid:")
+    assert _rows(seeded_db, "SELECT * FROM items ORDER BY id") == before
+
+
+def test_rc03a_c40_main_on_a_newer_database_exits_1(temp_db, capsys):
+    import db
+
+    set_user_version(temp_db, 2)
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit) as exc:
+        db.main([])
+
+    assert exc.value.code == 1
+    assert "Error:" in capsys.readouterr().err

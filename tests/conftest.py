@@ -101,6 +101,27 @@ def seeded_db(temp_db, test_catalog):
 
 
 @pytest.fixture
+def legacy_db(tmp_path):
+    """A pre-RC-03 (schema version 0) database with rows mirroring the old real one.
+
+    Built with plain sqlite3 from the two SQL files, never through db.init_db,
+    and left at PRAGMA user_version 0.  Returns the database path.
+    """
+    assert_db_is_temp(tmp_path)
+    path = tmp_path / "test.db"
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.executescript((FIXTURES_DIR / "db" / "schema_v0.sql").read_text(encoding="utf-8"))
+        conn.executescript((FIXTURES_DIR / "db" / "legacy_v0_rows.sql").read_text(encoding="utf-8"))
+        conn.commit()
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 0
+    finally:
+        conn.close()
+    return path
+
+
+@pytest.fixture
 def db_conn(tmp_path):
     import db
 

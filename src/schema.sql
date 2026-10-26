@@ -1,22 +1,39 @@
+-- Schema version 1 (PRAGMA user_version = 1).
+-- This file always describes the LATEST version, and it is only used to create
+-- a brand new database. An existing database is upgraded by MIGRATIONS in
+-- db.py instead, because CREATE TABLE IF NOT EXISTS cannot add a column to a
+-- table that already exists. Change both together.
+
 CREATE TABLE IF NOT EXISTS brands (
     id              INTEGER PRIMARY KEY,
     name            TEXT NOT NULL UNIQUE,
     yahoo_brand_id  TEXT NOT NULL UNIQUE
 );
 
+-- items: one row per tracked item.
+-- Two prices on purpose, each with exactly one writer:
+--   manual_price_usd  = the fallback price typed in catalog.json (written only by seeding)
+--   market_price_usd  = the latest eBay-derived price (written only by update_market_price)
+-- so re-seeding can never overwrite an eBay price.
+-- active = 0 means "removed from catalog.json"; we keep the row (instead of
+-- deleting it) because other tables point at items.id.
 CREATE TABLE IF NOT EXISTS items (
-    id                   INTEGER PRIMARY KEY,
-    brand_id             INTEGER NOT NULL REFERENCES brands(id),
-    name                 TEXT NOT NULL,
-    market_price_usd     REAL,
-    market_price_source  TEXT DEFAULT 'manual',
-    search_query         TEXT,
+    id                INTEGER PRIMARY KEY,
+    brand_id          INTEGER NOT NULL REFERENCES brands(id),
+    name              TEXT NOT NULL,
+    market_price_usd  REAL,
+    search_query      TEXT,
+    manual_price_usd  REAL CHECK (manual_price_usd IS NULL OR manual_price_usd > 0),
+    active            INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
     UNIQUE (brand_id, name)
 );
 
+-- item_keywords: the primary key (item_id, keyword) means a word can be an
+-- include or an exclude for an item, never both (that item could never match).
 CREATE TABLE IF NOT EXISTS item_keywords (
     item_id  INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
     keyword  TEXT NOT NULL,
+    kind     TEXT NOT NULL DEFAULT 'include' CHECK (kind IN ('include', 'exclude')),
     PRIMARY KEY (item_id, keyword)
 );
 
