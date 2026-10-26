@@ -1,12 +1,38 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 import sqlite3
 import json
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "raincheck.db")
-SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
-CATALOG_PATH = os.path.join(os.path.dirname(__file__), "catalog.json")
+from dotenv import load_dotenv
+
+SRC_DIR = Path(__file__).resolve().parent
+DEFAULT_DB_PATH = SRC_DIR / "raincheck.db"
+SCHEMA_PATH = SRC_DIR / "schema.sql"
+CATALOG_PATH = SRC_DIR / "catalog.json"
+
+
+def get_db_path():
+    """
+    Returns the database file to use.
+    RAINCHECK_DB_PATH wins when it is set to something non-empty,
+    otherwise we fall back to src/raincheck.db.
+    This runs on every call (not once at import) so tests can point
+    the code at a throwaway database while the process is running.
+    """
+    return os.environ.get("RAINCHECK_DB_PATH") or str(DEFAULT_DB_PATH)
+
+
+def load_catalog(path=None):
+    """
+    Reads the catalog JSON and returns it as a list of dicts.
+    The default path is built from this file's location, not the
+    current directory, so every script works no matter where you run it.
+    CATALOG_PATH is looked up at call time so tests can swap it out.
+    """
+    with open(path or CATALOG_PATH, "r") as f:
+        return json.load(f)
 
 
 def get_connection():
@@ -15,7 +41,7 @@ def get_connection():
     row_factory lets you access columns by name (row['title'])
     instead of by index (row[1]), which is far more readable.
     """
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
 
     # SQLite ignores FOREIGN KEY constraints unless you turn them on,
@@ -39,17 +65,13 @@ def init_db():
     conn.executescript(schema)
     conn.commit()
     conn.close()
-    print("Database initialized.")
-
-
-if __name__ == "__main__":
-    init_db()
+    # show which file we touched so it is obvious when RAINCHECK_DB_PATH is in play
+    print(f"Database initialized at {get_db_path()}.")
 
 
 #helps us read the brands and items in catalog and store it into our db
-def seed_from_catalog():
-    with open(CATALOG_PATH, "r") as f:
-        catalog = json.load(f)
+def seed_from_catalog(catalog_path=None):
+    catalog = load_catalog(catalog_path)
     conn = get_connection()
     for entry in catalog:
         # the question marks are placeholder values for those columns.
@@ -131,3 +153,9 @@ def get_market_price(brand_name,item_name):
     ).fetchone()["market_price_usd"]
     conn.close()
     return m_price
+
+
+if __name__ == "__main__":
+    # load .env here so RAINCHECK_DB_PATH set there is honored, like the other scripts
+    load_dotenv()
+    init_db()

@@ -58,6 +58,33 @@ python setup.py          # build your watchlist
 python yahoo_scrape.py   # scrape and email the best deals
 ```
 
+## Configuration
+
+Two optional environment variables change how RainCheck behaves.
+Set them in your shell or in `.env`.
+
+- `RAINCHECK_DB_PATH` - path to the SQLite database file.
+  When unset or empty, RainCheck uses `src/raincheck.db`.
+  A relative path is resolved against the directory you run the command from.
+  The parent directory must already exist.
+- `RAINCHECK_DRY_RUN` - when set to anything except `0`, `false`, `no`, `off`, or empty, emails are printed instead of sent.
+  Unrecognized values (such as a typo like `ture`) also count as on, so a typo never sends real email.
+  Dry run only affects email.
+  Database writes still happen, so a dry run against your real database marks listings as seen and they will not be emailed later.
+  Pair `RAINCHECK_DRY_RUN=1` with a throwaway `RAINCHECK_DB_PATH`.
+
+eBay pricing also needs `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET` (see `.env.example`).
+
+## Running tests
+
+The test suite runs fully offline against a throwaway database.
+From the repository root:
+
+```bash
+pip install -r requirements-dev.txt
+python3 -m pytest
+```
+
 ## Notes
 
 This is a personal learning project, built to sharpen my Python and get comfortable with scraping and automation end-to-end.

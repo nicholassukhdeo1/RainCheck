@@ -1,21 +1,20 @@
 import os, base64, requests, statistics
-import json
-from db import get_item_id,update_market_price
+from db import get_item_id, update_market_price, load_catalog
 
 from dotenv import load_dotenv
 load_dotenv()
 
-client_id = os.environ["EBAY_CLIENT_ID"] 
-client_secret = os.environ["EBAY_CLIENT_SECRET"]
-
-creds = f"{client_id}:{client_secret}"
-
-# ebay takes ur credentials in base64 encryption
-b64 = base64.b64encode(creds.encode()).decode()
-
-
 
 def get_ebay_token():
+
+    # read credentials here, not at import, so importing this module never
+    # fails when the variables are missing (fresh worktrees, tests).
+    client_id = os.environ["EBAY_CLIENT_ID"]
+    client_secret = os.environ["EBAY_CLIENT_SECRET"]
+
+    # ebay takes ur credentials in base64 encryption
+    creds = f"{client_id}:{client_secret}"
+    b64 = base64.b64encode(creds.encode()).decode()
 
     URL_ = "https://api.ebay.com/identity/v1/oauth2/token"
 
@@ -72,28 +71,20 @@ def refresh_market_prices():
 
     my_token = get_ebay_token()
 
-    with open("catalog.json", "r") as f:
-        item_list = json.load(f)
-        for item in item_list:
-            price = ebay_market_price(item["item name"],item["keywords"],item["exclude_keywords"],my_token)
-            if price is None:
-                continue
+    for item in load_catalog():
+        price = ebay_market_price(item["item name"],item["keywords"],item["exclude_keywords"],my_token)
+        if price is None:
+            continue
 
-            item_id = get_item_id(item["brand"],item["item name"])
+        item_id = get_item_id(item["brand"],item["item name"])
 
-            update_market_price(item_id,price)
+        update_market_price(item_id,price)
 
 
-                
+def main():
+    # refresh_market_prices fetches its own token, so we do not fetch one here too
+    refresh_market_prices()
 
 
 if __name__ == "__main__":
-
-    my_token = get_ebay_token()
-
-    refresh_market_prices()
-
-    
-
-
-
+    main()
