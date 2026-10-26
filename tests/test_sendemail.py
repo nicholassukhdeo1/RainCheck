@@ -15,7 +15,7 @@ def _no_smtp(monkeypatch):
 def test_c17_dry_run_prints_email_and_never_builds_smtp(monkeypatch, capsys):
     monkeypatch.setenv("RAINCHECK_DRY_RUN", "1")
     _no_smtp(monkeypatch)
-    sendemail.send_email("Subj", "<b>Body</b>")
+    sendemail.send_email("Subj", "<b>Body</b>", "Body text")
     out = capsys.readouterr().out
     assert "[DRY RUN] Email not sent" in out
     assert "Subject: Subj" in out
@@ -23,16 +23,21 @@ def test_c17_dry_run_prints_email_and_never_builds_smtp(monkeypatch, capsys):
 
 
 def test_c18_dry_run_without_any_email_env_prints_not_configured(monkeypatch, capsys):
+    """RC-15 criterion 33: exact new dry-run block, returns True."""
     for name in ("SENDER_EMAIL", "SENDER_PASSWORD", "RECEIVER_EMAIL"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("RAINCHECK_DRY_RUN", "1")
     _no_smtp(monkeypatch)
-    sendemail.send_email("Subj", "<b>Body</b>")
+    result = sendemail.send_email("Subj", "<b>H</b>", "T")
+    assert result is True
     assert capsys.readouterr().out == (
         "[DRY RUN] Email not sent (RAINCHECK_DRY_RUN is set).\n"
         "To: (not configured)\n"
         "Subject: Subj\n"
-        "<b>Body</b>\n"
+        "--- text/plain ---\n"
+        "T\n"
+        "--- text/html ---\n"
+        "<b>H</b>\n"
     )
 
 
@@ -40,11 +45,11 @@ def test_c19_dry_run_recipient_prefers_receiver_then_sender(monkeypatch, capsys)
     monkeypatch.setenv("RAINCHECK_DRY_RUN", "1")
     _no_smtp(monkeypatch)
     monkeypatch.setenv("SENDER_EMAIL", "a@example.com")
-    sendemail.send_email("S", "B")
+    sendemail.send_email("S", "B", "T")
     assert "To: a@example.com" in capsys.readouterr().out
 
     monkeypatch.setenv("RECEIVER_EMAIL", "b@example.com")
-    sendemail.send_email("S", "B")
+    sendemail.send_email("S", "B", "T")
     assert "To: b@example.com" in capsys.readouterr().out
 
 
@@ -90,7 +95,7 @@ def test_c21_real_path_uses_gmail_smtp_with_login_and_sendmail(monkeypatch):
             record["sendmail"].append((sender, receiver, message))
 
     monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
-    sendemail.send_email("Subj", "Body")
+    sendemail.send_email("Subj", "Body", "Body text")
     assert record["init"] == [("smtp.gmail.com", 587)]
     assert record["starttls"] == 1
     assert record["login"] == [("a@example.com", "pw")]
@@ -127,5 +132,79 @@ def test_rc03b_c47_smtp_connection_has_a_30_second_timeout(monkeypatch):
             pass
 
     monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
-    sendemail.send_email("Subj", "Body")
+    sendemail.send_email("Subj", "Body", "Body text")
     assert inits == [(("smtp.gmail.com", 587), {"timeout": 30})]
+
+
+# ---- RC-15 criteria 31-32: multipart/alternative and the True/False result ---------
+
+
+def _recording_smtp(monkeypatch, *, fail_in=None):
+    """Installs a fake smtplib.SMTP; fail_in is None, 'init', 'login' or 'sendmail'."""
+    monkeypatch.delenv("RAINCHECK_DRY_RUN", raising=False)
+    monkeypatch.setenv("SENDER_EMAIL", "a@example.com")
+    monkeypatch.setenv("SENDER_PASSWORD", "pw")
+    monkeypatch.setenv("RECEIVER_EMAIL", "b@example.com")
+    sent = []
+
+    class FakeSMTP:
+        def __init__(self, *args, **kwargs):
+            if fail_in == "init":
+                raise OSError("down")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def starttls(self):
+            pass
+
+        def login(self, user, password):
+            if fail_in == "login":
+                raise smtplib.SMTPException("boom")
+
+        def sendmail(self, sender, receiver, message):
+            if fail_in == "sendmail":
+                raise smtplib.SMTPException("boom")
+            sent.append(message)
+
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    return sent
+
+
+def test_rc15_c31_real_path_sends_multipart_alternative_text_then_html(monkeypatch):
+    import email
+
+    sent = _recording_smtp(monkeypatch)
+    assert sendemail.send_email("Subj", "<p>テスト</p>", "テスト") is True
+    assert len(sent) == 1
+    msg = email.message_from_string(sent[0])
+    assert msg.get_content_type() == "multipart/alternative"
+    assert msg["Subject"] == "Subj"
+    parts = msg.get_payload()
+    assert [p.get_content_type() for p in parts] == ["text/plain", "text/html"]
+    assert [p.get_content_charset() for p in parts] == ["utf-8", "utf-8"]
+    assert parts[0].get_payload(decode=True).decode("utf-8") == "テスト"
+    assert parts[1].get_payload(decode=True).decode("utf-8") == "<p>テスト</p>"
+
+
+@pytest.mark.parametrize("fail_in", ["init", "login", "sendmail"])
+def test_rc15_c32_smtp_failure_returns_false_prints_error_and_does_not_raise(
+    monkeypatch, capsys, fail_in
+):
+    _recording_smtp(monkeypatch, fail_in=fail_in)
+    result = sendemail.send_email("Subj", "<p>x</p>", "x")
+    assert result is False
+    lines = capsys.readouterr().out.splitlines()
+    assert any(line.startswith("Error: unable to send email (") for line in lines)
+    assert "Email sent!" not in lines
+
+
+def test_rc15_c34_missing_credential_still_raises_keyerror(monkeypatch):
+    monkeypatch.delenv("RAINCHECK_DRY_RUN", raising=False)
+    monkeypatch.delenv("SENDER_EMAIL", raising=False)
+    monkeypatch.delenv("SENDER_PASSWORD", raising=False)
+    with pytest.raises(KeyError):
+        sendemail.send_email("Subj", "<p>x</p>", "x")

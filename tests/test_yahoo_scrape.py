@@ -1,16 +1,22 @@
 """Yahoo pipeline tests.
 
-RC-07 rewrote the RC-01 criteria 14, 45, 46, 47 against parse_listings /
-report_item_deals (they keep their RC-01 names) and added criteria 20-29.
+RC-07 rewrote the RC-01 criteria 14, 45, 46, 47 against parse_listings (they keep
+their RC-01 names) and added criteria 20-29.
+RC-15 replaced report_item_deals with find_item_deals / build_sections and made main()
+send one digest; the superseded tests keep their names and now run main().
 """
 import dataclasses
+import re
+from datetime import date
+
+from bs4 import BeautifulSoup
 
 import pytest
 import requests
 
 import db
 import yahoo_scrape
-from dbhelpers import run as sql_run, set_user_version, sha256
+from dbhelpers import rows as sql_rows, run as sql_run, set_user_version, sha256
 from yahoo_scrape import RICK_OWENS_URL
 
 URL_1 = "https://auctions.yahoo.co.jp/jp/auction/t1000000001"
@@ -53,139 +59,484 @@ def _rows(conn):
     return conn.execute("SELECT url, price_yen, image_url FROM listings ORDER BY url").fetchall()
 
 
-# ---- Pipeline (criteria 20-25) -----------------------------------------------------
+# ---- helpers for the pure tests ----------------------------------------------------
+
+AUCTION = "https://auctions.yahoo.co.jp/jp/auction/"
 
 
-def test_c45_inserts_only_the_two_matching_cheap_listings(
-    seeded_db, sent_emails, db_conn, ramones_item, minimal_listings
+def inline_item(item_id=1, name="rick owens ramones", keywords=("ramones", "ramon"),
+                exclude=(), price=800.0, brand_id=1):
+    return db.TrackedItem(
+        id=item_id, brand_id=brand_id, brand="Rick Owens", name=name, search_query=None,
+        keywords=tuple(keywords), exclude_keywords=tuple(exclude),
+        manual_price_usd=price, market_price_usd=None,
+    )
+
+
+def inline_listing(n, title=None, yen=10000, image=None):
+    return yahoo_scrape.YahooListing(
+        auction_id=f"t{n}", url=f"{AUCTION}t{n}", title=title or f"Rick Owens Ramones {n}",
+        price_yen=yen, image_url=image,
+    )
+
+
+def seven_ramones_listings():
+    # 10000..70000 yen against an 800 USD market: all are deals, cheapest has the best discount
+    return [inline_listing(n, yen=10000 * n) for n in range(1, 8)]
+
+
+def _soup(html):
+    return BeautifulSoup(html, "html.parser")
+
+
+def _row_urls(html):
+    """The listing URL of each data row, in order, read from the Listing cell's link."""
+    urls = []
+    for tr in _soup(html).find_all("tr"):
+        tds = tr.find_all("td")
+        if tds:
+            urls.append(tds[1].find("a")["href"])
+    return urls
+
+
+# ---- Finding deals (criteria 1-9) --------------------------------------------------
+
+
+def test_rc15_c1_find_item_deals_returns_both_deals_best_first_with_full_fields(
+    ramones_item, minimal_listings
 ):
-    yahoo_scrape.report_item_deals(ramones_item, minimal_listings)
+    from digest import Deal
+
+    deals = yahoo_scrape.find_item_deals(ramones_item, minimal_listings, set())
+    assert [d.url for d in deals] == [URL_1, URL_4]
+    assert all(isinstance(d, Deal) for d in deals)
+    first, second = deals
+    assert first.item_id == ramones_item.id
+    assert first.brand_id == ramones_item.brand_id
+    assert first.title == "Rick Owens Ramones High Top 42"
+    assert first.price_yen == 50000
+    assert first.price_usd == pytest.approx(310.0)
+    assert first.market_price_usd == 800.0
+    assert first.discount_pct == pytest.approx(61.25)
+    assert first.image_url == "https://auc-pctr.c.yimg.jp/i/test/1.jpg"
+    assert second.discount_pct == pytest.approx(22.5)
+
+
+def test_rc15_c2_skip_urls_are_excluded(ramones_item, minimal_listings):
+    deals = yahoo_scrape.find_item_deals(ramones_item, minimal_listings, {URL_1})
+    assert [d.url for d in deals] == [URL_4]
+
+
+def test_rc15_c3_exclude_keywords_from_the_item_apply(ramones_item, minimal_listings):
+    item = dataclasses.replace(ramones_item, exclude_keywords=("high",))
+    assert [d.url for d in yahoo_scrape.find_item_deals(item, minimal_listings, set())] == [URL_4]
+
+
+def test_rc15_c4_effective_price_drives_the_deal_math(ramones_item, minimal_listings):
+    item = dataclasses.replace(ramones_item, market_price_usd=400.0)
+    assert item.effective_price_usd == 400.0
+    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set())
+    assert [d.url for d in deals] == [URL_1]
+    assert deals[0].discount_pct == pytest.approx(22.5)
+    assert deals[0].market_price_usd == 400.0
+
+
+def test_rc15_c5_no_usable_price_returns_empty_and_prints_nothing(
+    ramones_item, minimal_listings, capsys
+):
+    item = dataclasses.replace(ramones_item, market_price_usd=None, manual_price_usd=None)
+    assert yahoo_scrape.find_item_deals(item, minimal_listings, set()) == []
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err == ""
+
+
+def test_rc15_c6_a_listing_exactly_at_market_is_not_a_deal(ramones_item, minimal_listings):
+    item = dataclasses.replace(ramones_item, market_price_usd=310.0)
+    assert [d.url for d in yahoo_scrape.find_item_deals(item, minimal_listings, set())] == []
+    # strictly above market is not a deal either
+    item = dataclasses.replace(ramones_item, market_price_usd=300.0)
+    assert yahoo_scrape.find_item_deals(item, minimal_listings, set()) == []
+
+
+def test_rc15_c7_equal_discounts_keep_input_order():
+    listings = [inline_listing(1, "Ramones A", 20000), inline_listing(2, "Ramones B", 20000),
+                inline_listing(3, "Ramones C", 20000)]
+    deals = yahoo_scrape.find_item_deals(inline_item(), listings, set())
+    assert [d.title for d in deals] == ["Ramones A", "Ramones B", "Ramones C"]
+
+
+def test_rc15_c8_brand_comes_from_the_item_not_a_name_lookup(ramones_item, minimal_listings):
+    item = dataclasses.replace(ramones_item, brand="Not In Database")
+    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set())
+    assert [d.url for d in deals] == [URL_1, URL_4]
+    assert {d.brand_id for d in deals} == {ramones_item.brand_id}
+
+
+def test_rc15_c9_pure_functions_need_no_database(tmp_path):
+    path = tmp_path / "test.db"
+    assert not path.exists()
+    items = [inline_item(1), inline_item(2, "pod shorts", keywords=("pod short",), price=300.0)]
+    listings = [inline_listing(1, yen=20000), inline_listing(2, "Rick Owens Pod Shorts", 10000)]
+    deals = yahoo_scrape.find_item_deals(items[0], listings, set())
+    sections = yahoo_scrape.build_sections(items, listings, set())
+    assert [d.url for d in deals] == [f"{AUCTION}t1"]
+    assert [s.item_name for s in sections] == ["rick owens ramones", "pod shorts"]
+    assert not path.exists()
+
+
+# ---- Building sections (criteria 10-13) --------------------------------------------
+
+
+def test_rc15_c10_top_five_per_item_best_discount_first_with_not_shown_count():
+    from digest import ItemDeals
+
+    sections = yahoo_scrape.build_sections([inline_item()], seven_ramones_listings(), set())
+    assert len(sections) == 1
+    sec = sections[0]
+    assert isinstance(sec, ItemDeals)
+    assert sec.item_name == "rick owens ramones"
+    assert sec.market_price_usd == 800.0
+    assert [d.price_yen for d in sec.deals] == [10000, 20000, 30000, 40000, 50000]
+    assert sec.not_shown == 2
+
+
+def test_rc15_c10_default_limit_is_five_and_limit_is_adjustable():
+    assert yahoo_scrape.TOP_DEALS_PER_ITEM == 5
+    sec = yahoo_scrape.build_sections([inline_item()], seven_ramones_listings(), set(), per_item_limit=2)[0]
+    assert len(sec.deals) == 2 and sec.not_shown == 5
+
+
+def test_rc15_c11_a_listing_that_is_a_deal_for_two_items_appears_only_under_the_first():
+    first = inline_item(1, "first", keywords=("ramones",))
+    second = inline_item(2, "second", keywords=("ramones",))
+    listings = [inline_listing(1, yen=20000)]
+    sections = yahoo_scrape.build_sections([first, second], listings, set())
+    assert [s.item_name for s in sections] == ["first"]
+
+
+def test_rc15_c11_claim_holds_even_when_the_first_section_cut_the_listing():
+    first = inline_item(1, "first", keywords=("ramones",))
+    second = inline_item(2, "second", keywords=("sneakers",))
+    listings = [
+        inline_listing(1, "Rick Owens Ramones High", 10000),
+        inline_listing(2, "Rick Owens Ramones Sneakers", 20000),
+    ]
+    sections = yahoo_scrape.build_sections([first, second], listings, set(), per_item_limit=1)
+    assert [s.item_name for s in sections] == ["first"]
+    assert [d.url for d in sections[0].deals] == [f"{AUCTION}t1"]
+    assert sections[0].not_shown == 1
+
+
+def test_rc15_c11_second_item_keeps_its_other_deals():
+    first = inline_item(1, "first", keywords=("ramones",))
+    second = inline_item(2, "second", keywords=("ramones", "geobasket"))
+    listings = [inline_listing(1, "Ramones A", 20000), inline_listing(2, "Geobasket B", 30000)]
+    sections = yahoo_scrape.build_sections([first, second], listings, set())
+    assert [(s.item_name, [d.title for d in s.deals]) for s in sections] == [
+        ("first", ["Ramones A"]), ("second", ["Geobasket B"]),
+    ]
+
+
+def test_rc15_c12_items_without_deals_or_price_make_no_section_and_order_is_input_order():
+    items = [
+        inline_item(1, "first", keywords=("ramones",)),
+        inline_item(2, "no price", keywords=("ramones",), price=None),
+        inline_item(3, "no match", keywords=("zzz",)),
+        inline_item(4, "last", keywords=("geobasket",)),
+    ]
+    listings = [inline_listing(1, "Ramones A", 20000), inline_listing(2, "Geobasket B", 30000)]
+    sections = yahoo_scrape.build_sections(items, listings, set())
+    assert [s.item_name for s in sections] == ["first", "last"]
+
+
+def test_rc15_c13_known_urls_are_in_no_section():
+    listings = [inline_listing(1, yen=20000), inline_listing(2, yen=30000)]
+    sections = yahoo_scrape.build_sections([inline_item()], listings, {f"{AUCTION}t1"})
+    assert [d.url for s in sections for d in s.deals] == [f"{AUCTION}t2"]
+    assert yahoo_scrape.build_sections([inline_item()], listings, {f"{AUCTION}t1", f"{AUCTION}t2"}) == []
+
+
+def test_rc15_c13_known_urls_may_be_any_collection():
+    listings = [inline_listing(1, yen=20000)]
+    for known in ([f"{AUCTION}t1"], (f"{AUCTION}t1",), frozenset({f"{AUCTION}t1"})):
+        assert yahoo_scrape.build_sections([inline_item()], listings, known) == []
+
+
+# ---- Pipeline through main() (criteria 39-47) --------------------------------------
+
+
+def test_c45_inserts_only_the_two_matching_cheap_listings(yahoo_http, seeded_db, sent_emails, db_conn):
+    yahoo_scrape.main()
     assert [(r["url"], r["price_yen"]) for r in _rows(db_conn)] == [(URL_1, 50000), (URL_4, 100000)]
 
 
-def test_c46_one_email_sorted_by_discount_with_percentages(
-    seeded_db, sent_emails, ramones_item, minimal_listings
-):
-    yahoo_scrape.report_item_deals(ramones_item, minimal_listings)
+def test_rc15_c40_recorded_rows_carry_the_item_brand(yahoo_http, seeded_db, sent_emails, db_conn):
+    yahoo_scrape.main()
+    stored = db_conn.execute("SELECT url, brand_id FROM listings ORDER BY url").fetchall()
+    assert [r["url"] for r in stored] == [URL_1, URL_4]
+    assert {r["brand_id"] for r in stored} == {_item("rick owens ramones").brand_id}
+
+
+def test_c46_one_email_sorted_by_discount_with_percentages(yahoo_http, seeded_db, sent_emails):
+    yahoo_scrape.main()
     assert len(sent_emails) == 1
-    subject, body = sent_emails[0]
-    assert subject == "Daily Refresh on rick owens ramones"
-    assert URL_1 in body and URL_4 in body
-    assert body.index(URL_1) < body.index(URL_4)
-    assert "61.3% cheaper than market" in body
-    assert "22.5% cheaper than market" in body
+    subject, html, text = sent_emails[0]
+    assert re.fullmatch(r"RainCheck: 2 new deals - \d{4}-\d{2}-\d{2}", subject)
+    assert _row_urls(html) == [URL_1, URL_4]
+    rows = [tr for tr in _soup(html).find_all("tr") if tr.find("td")]
+    assert [r.find_all("td")[4].get_text(strip=True) for r in rows] == ["61.3%", "22.5%"]
+    assert "cheaper than market" not in html and "cheaper than market" not in text
+    assert text.index(URL_1) < text.index(URL_4)
 
 
-def test_c47_second_run_inserts_no_new_rows(
-    seeded_db, sent_emails, db_conn, ramones_item, minimal_listings
-):
-    yahoo_scrape.report_item_deals(ramones_item, minimal_listings)
+def test_c47_second_run_inserts_no_new_rows(yahoo_http, seeded_db, sent_emails, db_conn, capsys):
+    """RC-15 criterion 41: the second run sends nothing and says so."""
+    yahoo_scrape.main()
     first = _rows(db_conn)
-    yahoo_scrape.report_item_deals(ramones_item, minimal_listings)
+    capsys.readouterr()
+    yahoo_scrape.main()
     assert _rows(db_conn) == first
     assert len(first) == 2
+    assert len(sent_emails) == 1
+    assert yahoo_scrape.NO_DEALS_LINE == "No new deals; no email sent."
+    assert "No new deals; no email sent." in capsys.readouterr().out
 
 
 def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
-    seeded_db, sent_emails, db_conn, ramones_item, malformed_listings
+    fake_http, fixtures_dir, seeded_db, sent_emails, db_conn
 ):
-    yahoo_scrape.report_item_deals(ramones_item, malformed_listings)
+    fake_http.add("GET", RICK_OWENS_URL, text=_html(fixtures_dir, "brand_page_malformed.html"))
+    yahoo_scrape.main()
     rows = {r["url"]: r for r in _rows(db_conn)}
     assert set(rows) == {X1, Z2, X3}
     assert rows[Z2]["price_yen"] == 40000
     assert rows[X3]["image_url"] is None
     assert len(sent_emails) == 1
-    body = sent_emails[0][1]
-    assert body.index(X3) < body.index(X1) < body.index(Z2)
-    assert "84.5% cheaper than market" in body
+    html = sent_emails[0][1]
+    assert _row_urls(html) == [X3, X1, Z2]
+    soup = _soup(html)
+    assert len(soup.find_all("img")) == 2
+    first_cells = [tr.find_all("td")[0] for tr in soup.find_all("tr") if tr.find("td")]
+    assert first_cells[0].get_text(strip=True) == "No image"
+    assert first_cells[0].find("img") is None
+    assert first_cells[1].find("img") is not None and first_cells[2].find("img") is not None
+    discounts = [tr.find_all("td")[4].get_text(strip=True) for tr in soup.find_all("tr") if tr.find("td")]
     # 76.75 is exact in binary, and format() rounds the tie to even, so this is always 76.8
-    assert "76.8% cheaper than market" in body
-    assert "69.0% cheaper than market" in body
-    assert body.count("Image: ") == 2
-    assert "Image: None" not in body
+    assert discounts == ["84.5%", "76.8%", "69.0%"]
 
 
 def test_rc07_c25_null_market_price_skips_item(
-    seeded_db, sent_emails, db_conn, minimal_listings, capsys
+    yahoo_http, seeded_db, sent_emails, db_conn, capsys
 ):
+    """RC-15 criterion 46."""
     db_conn.execute(
         "UPDATE items SET market_price_usd = NULL, manual_price_usd = NULL WHERE name = ?",
         ("rick owens ramones",),
     )
     db_conn.commit()
-    item = _item("rick owens ramones")
-    yahoo_scrape.report_item_deals(item, minimal_listings)
+    yahoo_scrape.main()
     assert _rows(db_conn) == []
     assert sent_emails == []
-    assert "Skipping rick owens ramones: no usable market price." in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Skipping rick owens ramones: no usable market price." in out
+    assert "No new deals; no email sent." in out
 
 
-# ---- RC-03b item-based report_item_deals (criteria 9-12) ---------------------------
+def test_rc15_c42_deals_are_recorded_only_after_the_send(yahoo_http, seeded_db, monkeypatch):
+    seen_during_send = []
+
+    def inspecting_send(subject, html_body, text_body):
+        seen_during_send.append(sql_rows(seeded_db, "SELECT url FROM listings"))
+        return True
+
+    monkeypatch.setattr(yahoo_scrape, "send_email", inspecting_send)
+    yahoo_scrape.main()
+    assert seen_during_send == [[]]
+    assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")] == [URL_1, URL_4]
 
 
-def test_rc03b_c9_exclude_keywords_from_the_item_apply(
-    seeded_db, sent_emails, db_conn, ramones_item, minimal_listings
+def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
+    yahoo_http, seeded_db, monkeypatch, capsys
 ):
-    item = dataclasses.replace(ramones_item, exclude_keywords=("high",))
-    yahoo_scrape.report_item_deals(item, minimal_listings)
-    assert [r["url"] for r in _rows(db_conn)] == [URL_4]
-    assert len(sent_emails) == 1
-    body = sent_emails[0][1]
-    assert URL_4 in body and URL_1 not in body
+    calls = []
 
+    def failing_send(subject, html_body, text_body):
+        calls.append(subject)
+        return False
 
-def test_rc03b_c10_brand_comes_from_the_item_not_a_name_lookup(
-    seeded_db, sent_emails, db_conn, ramones_item, minimal_listings
-):
-    item = dataclasses.replace(ramones_item, brand="Not In Database")
-    yahoo_scrape.report_item_deals(item, minimal_listings)
-    stored = db_conn.execute("SELECT url, brand_id FROM listings ORDER BY url").fetchall()
-    assert [r["url"] for r in stored] == [URL_1, URL_4]
-    assert {r["brand_id"] for r in stored} == {ramones_item.brand_id}
-
-
-def test_rc03b_c11_effective_price_of_the_item_drives_the_deal_math(
-    seeded_db, sent_emails, db_conn, ramones_item, minimal_listings
-):
-    db.update_market_price(ramones_item.id, 400.0)
-    item = _item("rick owens ramones")
-    assert item.effective_price_usd == 400.0
-    yahoo_scrape.report_item_deals(item, minimal_listings)
-    assert [r["url"] for r in _rows(db_conn)] == [URL_1]
-    assert len(sent_emails) == 1
-    assert "22.5% cheaper than market" in sent_emails[0][1]
-
-
-def test_rc03b_c12_item_without_usable_price_is_skipped_with_a_line(
-    seeded_db, sent_emails, db_conn, minimal_listings, capsys
-):
-    db_conn.execute(
-        "UPDATE items SET market_price_usd = NULL, manual_price_usd = NULL WHERE name = ?",
-        ("rick owens ramones",),
+    monkeypatch.setattr(yahoo_scrape, "send_email", failing_send)
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    assert exc.value.code == 1
+    assert len(calls) == 1
+    assert capsys.readouterr().err == (
+        "Error: digest email not sent, so its deals were not recorded and "
+        "will be offered again next run (2 deals).\n"
     )
-    db_conn.commit()
-    yahoo_scrape.report_item_deals(_item("rick owens ramones"), minimal_listings)
-    assert _rows(db_conn) == []
-    assert sent_emails == []
-    assert "Skipping rick owens ramones: no usable market price." in capsys.readouterr().out
+    assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+
+    delivered = []
+
+    def ok_send(subject, html_body, text_body):
+        delivered.append((subject, html_body))
+        return True
+
+    monkeypatch.setattr(yahoo_scrape, "send_email", ok_send)
+    yahoo_scrape.main()
+    assert len(delivered) == 1
+    assert _row_urls(delivered[0][1]) == [URL_1, URL_4]
+    assert len(sql_rows(seeded_db, "SELECT url FROM listings")) == 2
 
 
-# ---- main() ------------------------------------------------------------------------
+def test_rc15_c43_failed_send_message_uses_singular_for_one_deal(
+    yahoo_http, seeded_db, monkeypatch, capsys
+):
+    sql_run(seeded_db, "UPDATE items SET manual_price_usd = 400.0 WHERE name = ?", ("rick owens ramones",))
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda s, h, t: False)
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    assert exc.value.code == 1
+    assert capsys.readouterr().err.endswith("will be offered again next run (1 deal).\n")
+
+
+def test_rc15_c44_a_listing_stored_by_an_earlier_run_is_not_shown(
+    yahoo_http, seeded_db, sent_emails
+):
+    db.insert_listing(_item("rick owens ramones").brand_id, URL_1, "Rick Owens Ramones High Top 42", 50000, None)
+    yahoo_scrape.main()
+    assert len(sent_emails) == 1
+    assert sent_emails[0][0].startswith("RainCheck: 1 new deal - ")
+    assert _row_urls(sent_emails[0][1]) == [URL_4]
+
+
+def test_rc15_c45_top_five_per_item_end_to_end_and_leftovers_next_run(
+    yahoo_http, seeded_db, sent_emails, monkeypatch
+):
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: seven_ramones_listings())
+    listings = seven_ramones_listings()
+    yahoo_scrape.main()
+    assert len(sent_emails) == 1
+    subject, html, text = sent_emails[0]
+    assert subject.startswith("RainCheck: 5 new deals - ")
+    assert _row_urls(html) == [l.url for l in listings[:5]]
+    assert "and 2 more new deals not shown" in html
+    assert "and 2 more new deals not shown" in text
+    stored = [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")]
+    assert stored == sorted(l.url for l in listings[:5])
+
+    yahoo_scrape.main()
+    assert len(sent_emails) == 2
+    subject2, html2, text2 = sent_emails[1]
+    assert subject2.startswith("RainCheck: 2 new deals - ")
+    assert _row_urls(html2) == [l.url for l in listings[5:]]
+    assert "not shown" not in html2 and "not shown" not in text2
+
+
+def test_rc15_c39_pipeline_main_prints_no_per_deal_console_lines(
+    yahoo_http, seeded_db, sent_emails, capsys
+):
+    yahoo_scrape.main()
+    out = capsys.readouterr().out
+    assert "Title:" not in out and "Product Link:" not in out and "--- Yahoo Auctions Update" not in out
 
 
 def test_c14_main_works_from_unrelated_cwd_and_emails_once_per_item(
     yahoo_http, test_catalog, seeded_db, sent_emails, monkeypatch, tmp_path
 ):
+    """RC-15 criterion 39: one digest for all items."""
     monkeypatch.chdir(tmp_path)
     yahoo_scrape.main()
-    assert [s for s, _ in sent_emails] == [
-        "Daily Refresh on rick owens ramones",
-        "Daily Refresh on pod shorts",
-    ]
+    assert len(sent_emails) == 1
+    subject, html, _text = sent_emails[0]
+    assert re.fullmatch(r"RainCheck: 2 new deals - \d{4}-\d{2}-\d{2}", subject)
+    soup = _soup(html)
+    assert [h.get_text() for h in soup.find_all("h2")] == ["rick owens ramones"]
+    assert _row_urls(html) == [URL_1, URL_4]
     assert len(yahoo_http.calls) == 1
     method, url, kwargs = yahoo_http.calls[0]
     assert (method, url) == ("GET", RICK_OWENS_URL)
     assert kwargs.get("timeout") == 30
+
+
+def test_rc15_c50_dry_run_end_to_end_prints_whole_digest_and_records(
+    yahoo_http, seeded_db, monkeypatch, capsys
+):
+    import smtplib
+
+    def boom(*args, **kwargs):
+        raise AssertionError("smtplib.SMTP must not be constructed in dry run")
+
+    monkeypatch.setattr(smtplib, "SMTP", boom)
+    monkeypatch.setenv("RAINCHECK_DRY_RUN", "1")
+    yahoo_scrape.main()
+    out = capsys.readouterr().out
+    assert "[DRY RUN] Email not sent" in out
+    assert re.search(r"^Subject: RainCheck: 2 new deals - \d{4}-\d{2}-\d{2}$", out, re.MULTILINE)
+    assert "--- text/plain ---" in out
+    assert "--- text/html ---" in out
+    assert URL_1 in out
+    assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")] == [URL_1, URL_4]
+
+    yahoo_scrape.main()
+    out2 = capsys.readouterr().out
+    assert "No new deals; no email sent." in out2
+    assert "[DRY RUN]" not in out2
+
+
+def test_rc15_c41_empty_yahoo_page_sends_nothing(
+    fake_http, fixtures_dir, seeded_db, sent_emails, monkeypatch, capsys
+):
+    fake_http.add("GET", RICK_OWENS_URL, text=_html(fixtures_dir, "brand_page_minimal.html"))
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: [])
+    yahoo_scrape.main()
+    assert sent_emails == []
+    assert "No new deals; no email sent." in capsys.readouterr().out
+    assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+
+
+# ---- RC-03b item-based pure rules moved to find_item_deals: see criteria 3, 4, 8 ----
+
+
+def test_rc03b_c9_exclude_keywords_from_the_item_apply(ramones_item, minimal_listings):
+    """RC-15 criterion 3."""
+    item = dataclasses.replace(ramones_item, exclude_keywords=("high",))
+    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set())
+    assert [d.url for d in deals] == [URL_4]
+
+
+def test_rc03b_c10_brand_comes_from_the_item_not_a_name_lookup(ramones_item, minimal_listings):
+    """RC-15 criterion 8."""
+    item = dataclasses.replace(ramones_item, brand="Not In Database")
+    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set())
+    assert [d.url for d in deals] == [URL_1, URL_4]
+    assert {d.brand_id for d in deals} == {ramones_item.brand_id}
+
+
+def test_rc03b_c11_effective_price_of_the_item_drives_the_deal_math(
+    seeded_db, ramones_item, minimal_listings
+):
+    """RC-15 criterion 4."""
+    db.update_market_price(ramones_item.id, 400.0)
+    item = _item("rick owens ramones")
+    assert item.effective_price_usd == 400.0
+    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set())
+    assert [d.url for d in deals] == [URL_1]
+    assert deals[0].discount_pct == pytest.approx(22.5)
+
+
+def test_rc03b_c12_item_without_usable_price_is_skipped_with_a_line(
+    yahoo_http, seeded_db, sent_emails, db_conn, capsys
+):
+    """RC-15 criterion 46."""
+    db_conn.execute(
+        "UPDATE items SET market_price_usd = NULL, manual_price_usd = NULL WHERE name = ?",
+        ("rick owens ramones",),
+    )
+    db_conn.commit()
+    yahoo_scrape.main()
+    assert _rows(db_conn) == []
+    assert sent_emails == []
+    assert "Skipping rick owens ramones: no usable market price." in capsys.readouterr().out
 
 
 # ---- Fetching and failure behavior (criteria 26-29) --------------------------------
@@ -265,22 +616,31 @@ def test_rc03b_c13_main_reads_exclude_keywords_from_the_database(
     assert [r["url"] for r in _rows(db_conn)] == [URL_1]
 
 
-def test_rc03b_c14_main_skips_inactive_items(yahoo_http, seeded_db, sent_emails):
+def test_rc03b_c14_main_skips_inactive_items(yahoo_http, seeded_db, sent_emails, monkeypatch):
+    """RC-15 criterion 48: find_item_deals is spied, since pod shorts has no deals anyway."""
     sql_run(seeded_db, "UPDATE items SET active = 0 WHERE name = ?", ("pod shorts",))
+    real = yahoo_scrape.find_item_deals
+    called_for = []
+
+    def spy(item, listings, skip_urls):
+        called_for.append(item.name)
+        return real(item, listings, skip_urls)
+
+    monkeypatch.setattr(yahoo_scrape, "find_item_deals", spy)
     yahoo_scrape.main()
-    assert [s for s, _ in sent_emails] == ["Daily Refresh on rick owens ramones"]
+    assert called_for == ["rick owens ramones"]
+    assert len(sent_emails) == 1
     assert len(yahoo_http.calls) == 1
 
 
 def test_rc03b_c15_main_does_not_read_catalog_json(
     yahoo_http, seeded_db, sent_emails, monkeypatch, tmp_path
 ):
+    """RC-15 criterion 49."""
     monkeypatch.setattr(db, "CATALOG_PATH", tmp_path / "does_not_exist.json")
     yahoo_scrape.main()
-    assert [s for s, _ in sent_emails] == [
-        "Daily Refresh on rick owens ramones",
-        "Daily Refresh on pod shorts",
-    ]
+    assert len(sent_emails) == 1
+    assert sent_emails[0][0].startswith("RainCheck: 2 new deals - ")
     assert not hasattr(yahoo_scrape, "load_catalog")
 
 
@@ -340,3 +700,8 @@ def test_rc03b_c21_yahoo_job_uses_the_shared_matcher():
     import matching
 
     assert yahoo_scrape.title_matches is matching.title_matches
+
+
+def test_rc15_c54_report_item_deals_is_gone():
+    assert not hasattr(yahoo_scrape, "report_item_deals")
+    assert yahoo_scrape.YEN_TO_USD == 0.0062

@@ -186,7 +186,10 @@ def sent_emails(monkeypatch):
     import yahoo_scrape
 
     emails = []
-    monkeypatch.setattr(
-        yahoo_scrape, "send_email", lambda subject, body: emails.append((subject, body))
-    )
+
+    def fake_send_email(subject, html_body, text_body):
+        emails.append((subject, html_body, text_body))
+        return True
+
+    monkeypatch.setattr(yahoo_scrape, "send_email", fake_send_email)
     return emails
