@@ -470,3 +470,17 @@ Revert the merge commit.
 No schema or data migration is involved.
 Rows written after the change use the same columns and, for auctions, the same URL format as before; flea market rows (`paypayfleamarket.yahoo.co.jp` URLs) are harmless to the old code.
 Note that reverting restores the old scraper, which finds zero listings on the current Yahoo page, so a rollback restores the broken state rather than a working one.
+
+## Amendments
+
+### Amendment 1 (2026-10-26): review hardening
+
+- An empty listing array is only a legitimate "no results" page when Yahoo agrees there are no results.
+  The listing array's parent object (`props.pageProps.initialState.search.items.listing`) carries `totalResultsAvailable` (an int, 2351 in the live capture) and `isFetching` (a bool).
+  If the array is empty and either `totalResultsAvailable` is an int greater than 0 or `isFetching` is `True`, `parse_listings` raises `YahooPageError` with a message saying the page reports results but contains none.
+  Otherwise an empty array still returns `[]` with no warning, so criterion 18 holds for a page with neither field or with `totalResultsAvailable` 0.
+  This closes the scenario where Yahoo moves to client-side loading and leaves an empty placeholder array, which would bring back silent empty emails.
+- New criterion 36: an inline page whose listing array is empty and whose parent has `totalResultsAvailable: 5` raises `YahooPageError`; the same with `isFetching: true` raises; the same with `totalResultsAvailable: 0` returns `[]`.
+- New criterion 37: a record whose `auctionId` uses full-width characters (for example `ａ１２`) is skipped as invalid, and a record with `isFleamarketItem` set to the string `"true"` or the number `1` gets an auction URL, not a flea-market URL.
+- The unused `raw_price` key is removed from the deal dictionary in `report_item_deals`.
+
