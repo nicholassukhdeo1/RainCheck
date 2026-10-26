@@ -197,3 +197,48 @@ def test_rc07_c19_all_invalid_records_raise_with_counts():
     items = [{"auctionId": f"a{n}", "title": "Rick Owens Ramones"} for n in range(3)]
     with pytest.raises(yahoo_scrape.YahooPageError, match="0 of 3"):
         yahoo_scrape.parse_listings(_page_with_items(items))
+
+
+# ---- Amendment 1: empty array must agree with the page's own result count ----------
+
+
+def _page_with_listing_parent(items, **parent_fields):
+    listing = {"items": items, **parent_fields}
+    data = {"props": {"pageProps": {"initialState": {"search": {"items": {"listing": listing}}}}}}
+    return _shell(json.dumps(data))
+
+
+@pytest.mark.parametrize(
+    "parent_fields",
+    [{"totalResultsAvailable": 5}, {"isFetching": True}, {"totalResultsAvailable": 5, "isFetching": True}],
+)
+def test_rc07_c36_empty_array_but_page_reports_results_raises(parent_fields):
+    with pytest.raises(yahoo_scrape.YahooPageError):
+        yahoo_scrape.parse_listings(_page_with_listing_parent([], **parent_fields))
+
+
+@pytest.mark.parametrize(
+    "parent_fields",
+    [{"totalResultsAvailable": 0}, {"totalResultsAvailable": 0, "isFetching": False}, {"isFetching": False}],
+)
+def test_rc07_c36_empty_array_and_page_agrees_no_results_returns_empty(parent_fields, caplog):
+    with caplog.at_level(logging.DEBUG):
+        result = yahoo_scrape.parse_listings(_page_with_listing_parent([], **parent_fields))
+    assert result == []
+    assert _yahoo_warnings(caplog) == []
+
+
+def test_rc07_c37_full_width_auction_id_is_skipped_as_invalid():
+    items = [
+        {"auctionId": "ａ１２", "title": "Rick Owens Ramones", "price": 100},
+        {"auctionId": "a12", "title": "Rick Owens Ramones", "price": 100},
+    ]
+    result = yahoo_scrape.parse_listings(_page_with_items(items))
+    assert [l.auction_id for l in result] == ["a12"]
+
+
+@pytest.mark.parametrize("flag", ["true", 1])
+def test_rc07_c37_non_boolean_flea_market_flag_gets_auction_url(flag):
+    items = [{"auctionId": "z123", "title": "Rick Owens Ramones", "price": 100, "isFleamarketItem": flag}]
+    result = yahoo_scrape.parse_listings(_page_with_items(items))
+    assert [l.url for l in result] == [AUCTION + "z123"]
