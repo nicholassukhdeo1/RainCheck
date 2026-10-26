@@ -12,18 +12,63 @@ def _require(path):
     return path
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RC-07: Yahoo's Next.js redesign removed the Product__* classes, so the scraper selectors match nothing",
-)
-def test_c48_live_yahoo_page_has_all_four_selectors(fixtures_dir):
-    path = _require(fixtures_dir / "yahoo" / "brand_page_live.html")
-    soup = BeautifulSoup(path.read_bytes(), "html.parser")
-    assert soup.find_all("h3")
-    assert soup.find_all("span", class_="Product__priceValue u-textRed")
-    assert soup.find_all("a", class_="Product__titleLink js-browseHistory-add js-rapid-override")
-    assert soup.find_all("img", class_="Product__imageData")
+def _live_html(fixtures_dir):
+    return _require(fixtures_dir / "yahoo" / "brand_page_live.html").read_text(encoding="utf-8")
+
+
+def _raw_live_records(html):
+    soup = BeautifulSoup(html, "html.parser")
+    node = json.loads(soup.find("script", id="__NEXT_DATA__").string)
+    for key in ("props", "pageProps", "initialState", "search", "items", "listing", "items"):
+        node = node[key]
+    return node
+
+
+def test_rc07_c30_live_page_parses_every_record_without_warning(fixtures_dir, caplog):
+    import logging
+
+    import yahoo_scrape
+
+    html = _live_html(fixtures_dir)
+    raw = _raw_live_records(html)
+    assert raw, "live fixture has no records (test would be vacuous)"
+    with caplog.at_level(logging.DEBUG):
+        listings = yahoo_scrape.parse_listings(html)
+    assert len(listings) == len(raw)
+    assert len({l.auction_id for l in listings}) == len(listings)
+    assert [r for r in caplog.records if r.name == "yahoo_scrape" and r.levelno >= logging.WARNING] == []
+
+
+def test_rc07_c31_live_urls_match_json_ld_item_list_in_order(fixtures_dir):
+    import yahoo_scrape
+
+    html = _live_html(fixtures_dir)
+    soup = BeautifulSoup(html, "html.parser")
+    item_list = None
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(data, dict) and data.get("@type") == "ItemList":
+            item_list = data
+            break
+    assert item_list is not None, "no JSON-LD ItemList in the live fixture"
+    expected = [e["url"] for e in item_list["itemListElement"]]
+    assert expected, "JSON-LD list is empty (test would be vacuous)"
+    assert [l.url for l in yahoo_scrape.parse_listings(html)] == expected
+
+
+def test_rc07_c32_live_listings_have_sane_fields(fixtures_dir):
+    import yahoo_scrape
+
+    listings = yahoo_scrape.parse_listings(_live_html(fixtures_dir))
+    assert listings
+    for l in listings:
+        assert l.title and l.title.strip()
+        assert isinstance(l.price_yen, int) and not isinstance(l.price_yen, bool)
+        assert l.price_yen >= 1
+        assert l.image_url is None or l.image_url.startswith("https://")
 
 
 def test_c49_live_ebay_search_has_expected_shape_and_no_seller(fixtures_dir):
