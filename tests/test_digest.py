@@ -274,6 +274,25 @@ def test_rc15_a2_market_price_appears_once_per_item_not_in_every_row():
     assert soup.get_text().count("$800.00") == 1
 
 
+def test_rc15_a2_header_and_deal_cells_have_bottom_borders_and_image_column_is_100px():
+    sections = [section(deals=[deal_1(), deal_4()]), section(name="pod shorts", market=300.0)]
+    tables = soup_of(build_digest(sections, RUN_DATE)).find_all("table")
+    assert len(tables) == 2
+    for table in tables:
+        header = table.find("tr")
+        ths = header.find_all("th")
+        assert len(ths) == 3
+        for th in ths:
+            assert "border-bottom" in th["style"].replace(" ", "")
+        image_th = next(th for th in ths if th.get_text() == "Image")
+        assert "width:100px" in image_th["style"].replace(" ", "")
+        rows = data_rows(table)
+        assert rows
+        for row in rows:
+            for td in row.find_all("td"):
+                assert "border-bottom" in td["style"].replace(" ", "")
+
+
 def test_rc15_a2_no_class_attributes_and_no_style_element():
     soup = soup_of(build_digest([section(not_shown=2)], RUN_DATE))
     assert soup.find("style") is None
@@ -486,6 +505,11 @@ def test_rc15_c28_whitespace_in_titles_is_collapsed_in_html_alt_and_text():
 
 
 def test_rc15_c29_large_digest_stays_under_gmail_clipping_size_and_is_600px_wide():
+    # Deliberately pathological input: 10 sections (the real catalog has 2) and titles made
+    # entirely of "<&>", which grow about 4x when HTML-escaped and appear twice per row (alt and
+    # link text). With the Amendment 2 layout this is about 101,960 bytes, while a realistic digest
+    # (2 items x 5 deals, 65-character Japanese titles) is about 13 KB. A failure here after a small
+    # markup change means the budget is tight for this extreme input, not that real emails are clipped.
     sections = []
     for s in range(10):
         deals = []
