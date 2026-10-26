@@ -27,9 +27,8 @@ def _tables(path):
 
 
 def test_c02_unfaked_network_call_is_blocked():
-    # An IP literal avoids DNS, which would fail before the socket guard is hit.
     with pytest.raises(RuntimeError, match="Network access is blocked"):
-        requests.get("http://93.184.216.34/")
+        requests.get("https://example.com")
 
 
 def test_c03_env_points_into_tmp_path_and_dry_run_on(tmp_path):

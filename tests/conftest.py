@@ -2,6 +2,7 @@
 
 The fixture names here are a contract that later backlog items reuse.
 """
+import copy
 import json
 import socket
 import sqlite3
@@ -46,6 +47,10 @@ def _block_network(monkeypatch):
 
     monkeypatch.setattr(socket.socket, "connect", _blocked)
     monkeypatch.setattr(socket.socket, "connect_ex", _blocked)
+    # Also block DNS, so a hostname request fails with the same error instead
+    # of making a real lookup and raising requests.ConnectionError.
+    monkeypatch.setattr(socket, "getaddrinfo", _blocked)
+    monkeypatch.setattr(socket, "create_connection", _blocked)
 
 
 def assert_db_is_temp(tmp_path):
@@ -116,7 +121,7 @@ class FakeResponse:
 
     def json(self):
         if self._json is not None:
-            return self._json
+            return copy.deepcopy(self._json)
         return json.loads(self.text)
 
     def raise_for_status(self):
