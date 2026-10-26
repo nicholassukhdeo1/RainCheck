@@ -96,13 +96,22 @@ def _html_row(deal):
 
     listing_cell = f'<a href="{_e(deal.url)}">{_e(title)}</a>' if safe_url else _e(title)
 
+    # three columns (image, listing, price) instead of five: five were too narrow on a phone.
+    # market price now shows once in the section heading, and the discount sits under the price.
+    # the border goes on each td because many email clients ignore borders on a tr.
+    # line-height is set once on the container div (see build_digest) and inherited, and the
+    # image column width comes from the header cell, to keep each row small: Gmail clips
+    # messages over about 102 KB (criterion 29)
+    cell_border = "border-bottom:1px solid #eee"
     return (
         "<tr>"
-        f"<td>{image_cell}</td>"
-        f"<td>{listing_cell}</td>"
-        f"<td>{_e(_yen(deal.price_yen))}<br>{_e(_usd(deal.price_usd))}</td>"
-        f"<td>{_e(_usd(deal.market_price_usd))}</td>"
-        f"<td>{_e(_pct(deal.discount_pct))}</td>"
+        f'<td style="vertical-align:top;{cell_border}">{image_cell}</td>'
+        f'<td style="vertical-align:top;{cell_border}">{listing_cell}</td>'
+        # nowrap keeps the yen amount from splitting across lines in the narrow price column
+        f'<td align="right" style="vertical-align:top;text-align:right;white-space:nowrap;{cell_border}">'
+        f"{_e(_yen(deal.price_yen))}<br>{_e(_usd(deal.price_usd))}<br>"
+        f'<strong style="color:#1a7f37;">{_e(_pct(deal.discount_pct) + " off")}</strong>'
+        "</td>"
         "</tr>"
     )
 
@@ -121,19 +130,36 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
 
     html_parts = [
         "<!DOCTYPE html>",
-        f'<html><head><meta charset="utf-8"><title>{safe_subject}</title></head>',
+        # the viewport tag stops phones from shrinking the page to a desktop-width view
+        f'<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{safe_subject}</title></head>',
         '<body style="margin:0;padding:16px;font-family:Arial,Helvetica,sans-serif;color:#222222;">',
         # 600px is the conventional email width: fits Gmail's reading pane and phones
-        '<div style="max-width:600px;margin:0 auto;">',
+        '<div style="max-width:600px;margin:0 auto;line-height:1.4;">',
         f'<h1 style="font-size:20px;">{safe_subject}</h1>',
     ]
     text_lines = [subject, ""]
 
     for section in sections:
-        html_parts.append(f'<h2 style="font-size:16px;">{_e(section.item_name)}</h2>')
-        html_parts.append('<table width="100%" cellpadding="6" style="border-collapse:collapse;width:100%;">')
+        market = _e("market " + _usd(section.market_price_usd))
         html_parts.append(
-            "<tr><th>Image</th><th>Listing</th><th>Price</th><th>Market</th><th>Discount</th></tr>"
+            f'<h2 style="font-size:16px;margin:0 0 8px;">{_e(section.item_name)} '
+            f'<span style="font-weight:normal;color:#666;">({market})</span></h2>'
+        )
+        # margin-bottom keeps the not-shown line and the next heading from touching the table
+        html_parts.append(
+            '<table width="100%" cellpadding="8" cellspacing="0" '
+            'style="border-collapse:collapse;width:100%;margin-bottom:16px;">'
+        )
+        # borders go on the th cells because many clients ignore them on tr; a second border on
+        # the tr would only add bytes (it repeats per section) for clients that already draw this one
+        th_border = "border-bottom:1px solid #ddd"
+        html_parts.append(
+            "<tr>"
+            # the align attribute handles left alignment; it is the most widely supported form
+            f'<th align="left" style="width:100px;{th_border}">Image</th>'
+            f'<th align="left" style="{th_border}">Listing</th>'
+            f'<th align="right" style="text-align:right;{th_border}">Price</th>'
+            "</tr>"
         )
         text_lines.append(f"{section.item_name} (market price {_usd(section.market_price_usd)})")
         text_lines.append("")
