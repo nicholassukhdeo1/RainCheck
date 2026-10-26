@@ -136,7 +136,8 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
         '<body style="margin:0;padding:16px;font-family:Arial,Helvetica,sans-serif;color:#222222;">',
         # 600px is the conventional email width: fits Gmail's reading pane and phones
         '<div style="max-width:600px;margin:0 auto;line-height:1.4;">',
-        f'<h1 style="font-size:20px;">{safe_subject}</h1>',
+        # 18px so the longest realistic subject fits a 375px phone without breaking the date at a hyphen
+        f'<h1 style="font-size:18px;">{safe_subject}</h1>',
     ]
     text_lines = [subject, ""]
 
