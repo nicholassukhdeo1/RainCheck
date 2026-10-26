@@ -163,7 +163,7 @@ def report_item_deals(item: TrackedItem, listings: list[YahooListing]) -> None:
         pct_cheaper = ((market_price - price_usd) / market_price) * 100
 
         if pct_cheaper > 0:
-            is_new = insert_listing(item.brand_id,listing.url, listing.title, listing.price_yen, listing.image_url)
+            is_new = insert_listing(item.brand_id, listing.url, listing.title, listing.price_yen, listing.image_url)
             if is_new:
                 deals.append({
                     "title": listing.title,
