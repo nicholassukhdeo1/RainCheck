@@ -10,6 +10,7 @@ It needs EBAY_CLIENT_ID and EBAY_CLIENT_SECRET (from .env or the shell)
 and live network access. It never touches a database or sends email.
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -34,12 +35,53 @@ EBAY_OUT = ROOT / "tests" / "fixtures" / "ebay" / "search_live.json"
 TIMEOUT = 30
 
 
+# Yahoo is a Next.js page: the listing data lives in one JSON blob inside this script tag.
+# A regex (not BeautifulSoup) so everything outside the blob is written back byte-for-byte.
+NEXT_DATA_RE = re.compile(
+    r'(<script[^>]*\bid="__NEXT_DATA__"[^>]*>)(.*?)(</script>)', re.DOTALL
+)
+
+
+def _strip_seller(node):
+    """Recursively removes `seller` from every dict that looks like a listing (has auctionId)."""
+    if isinstance(node, dict):
+        if "auctionId" in node:
+            node.pop("seller", None)
+        for value in node.values():
+            _strip_seller(value)
+    elif isinstance(node, list):
+        for value in node:
+            _strip_seller(value)
+
+
+def strip_yahoo_seller_data(html):
+    """
+    Returns the page with seller data (userId, displayName, city) removed from
+    the __NEXT_DATA__ JSON, so no personal data is committed.
+    Fails closed: if the block is missing or is not valid JSON we raise instead
+    of returning the page, so an unsanitized page can never be written.
+    """
+    match = NEXT_DATA_RE.search(html)
+    if match is None:
+        raise RuntimeError("No __NEXT_DATA__ script block found; refusing to write unsanitized page")
+    try:
+        data = json.loads(match.group(2))
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"__NEXT_DATA__ is not valid JSON ({e}); refusing to write unsanitized page")
+
+    _strip_seller(data)
+    clean = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    # splice by position (not re.sub) so backslashes in the JSON are never read as regex escapes
+    return html[: match.start(2)] + clean + html[match.end(2):]
+
+
 def capture_yahoo():
     response = requests.get(RICK_OWENS_URL, timeout=TIMEOUT)
     response.raise_for_status()
+    # sanitize before anything touches disk
+    clean_html = strip_yahoo_seller_data(response.content.decode("utf-8"))
     YAHOO_OUT.parent.mkdir(parents=True, exist_ok=True)
-    # raw bytes, so the saved page is exactly what Yahoo sent
-    YAHOO_OUT.write_bytes(response.content)
+    YAHOO_OUT.write_text(clean_html, encoding="utf-8")
 
 
 def capture_ebay():
