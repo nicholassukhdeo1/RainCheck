@@ -75,6 +75,15 @@ def _parse_record(record):
     if not isinstance(image_url, str) or not image_url:
         image_url = None
 
+    # JSON can carry a lone surrogate like "\ud800" that UTF-8 cannot encode; one such listing
+    # would otherwise crash the send/insert step on every run while it stays on the page
+    for text in (title, image_url):
+        if text is not None:
+            try:
+                text.encode("utf-8")
+            except UnicodeEncodeError:
+                return None
+
     # only a literal True counts as a flea market item
     prefix = FLEAMARKET_URL_PREFIX if record.get("isFleamarketItem") is True else AUCTION_URL_PREFIX
 
