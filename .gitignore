@@ -12,6 +12,7 @@ build/
 venv/
 
 # Editor / tooling
-.claude/
+# Personal Claude Code settings stay private; shared agent definitions in .claude/agents/ are committed.
+.claude/settings.local.json
 
 sqlTips.txt
