@@ -9,7 +9,32 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+DRY_RUN_ENV = "RAINCHECK_DRY_RUN"
+
+
+def is_dry_run():
+    """
+    True when RAINCHECK_DRY_RUN is set to anything except an "off" value.
+    Fails safe: a typo like "ture" suppresses email instead of sending it.
+    """
+    value = os.environ.get(DRY_RUN_ENV, "").strip().lower()
+    return value not in ("", "0", "false", "no", "off")
+
+
 def send_email(subject, body):
+    # dry run returns before we touch SMTP or SENDER_PASSWORD, so it works with no credentials
+    if is_dry_run():
+        recipient = (
+            os.environ.get("RECEIVER_EMAIL")
+            or os.environ.get("SENDER_EMAIL")
+            or "(not configured)"
+        )
+        print("[DRY RUN] Email not sent (RAINCHECK_DRY_RUN is set).")
+        print(f"To: {recipient}")
+        print(f"Subject: {subject}")
+        print(body)
+        return
+
     sender_email = os.environ["SENDER_EMAIL"]
     sender_password = os.environ["SENDER_PASSWORD"]
 

@@ -1,8 +1,7 @@
 from bs4 import BeautifulSoup
 from sendemail import send_email
-from db import get_connection, insert_listing, get_market_price
+from db import get_connection, insert_listing, get_market_price, load_catalog
 import requests
-import json
 import re
 
 
@@ -90,8 +89,10 @@ def yahoo_jp_scrape(item_dict, brand_url):
 # Rick Owens brand page — newest first, 100 items per page
 RICK_OWENS_URL = "https://auctions.yahoo.co.jp/category/list/23000/?auccat=23000&s1=new&o1=d&brand_id=103538&n=100"
 
-if __name__ == "__main__":
-    with open("catalog.json", "r") as f:
-        item_list = json.load(f)
-    for item in item_list:
+def main():
+    for item in load_catalog():
         yahoo_jp_scrape(item, RICK_OWENS_URL)
+
+
+if __name__ == "__main__":
+    main()
