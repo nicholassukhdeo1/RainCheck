@@ -39,8 +39,9 @@ Parallelism rules:
 
 - Features touching different files may run in parallel, each in its own worktree.
 - Features touching `src/schema.sql`, `src/db.py`, or `src/catalog.json` run one at a time.
-- Worktrees branch from the last commit, so uncommitted work is invisible to agents.
-  Commit before starting a feature.
+- Agent worktrees are created from `main`, not from the branch you are on, so they start without the feature's spec and tests.
+  Commit the spec and tests on the feature branch, then tell the implementer that branch's name; its first step fast-forwards its worktree onto it.
+  Uncommitted work is invisible to agents.
 
 ## Conventions
 

@@ -14,5 +14,7 @@ venv/
 # Editor / tooling
 # Personal Claude Code settings stay private; shared agent definitions in .claude/agents/ are committed.
 .claude/settings.local.json
+# Agent worktrees are full checkouts created on demand; they never belong in the repository.
+.claude/worktrees/
 
 sqlTips.txt

@@ -12,6 +12,11 @@ The tests under `tests/` define done.
 
 ## Process
 
+0. Set up your worktree before anything else.
+   Your worktree is created from `main`, so it does not yet have the feature's spec and tests.
+   Confirm `git status --short` is clean, run `git merge --ff-only <feature-branch>` with the branch name the orchestrator gave you, and check that `git log` shows the spec and test commits.
+   If the fast-forward fails or the tests are missing, stop and report instead of implementing.
+   A fresh worktree also has no `.venv`: create one with `python3 -m venv .venv` and install `requirements-dev.txt` into it.
 1. Read the spec and the tests written for it.
 2. Read the surrounding code before changing it, and match its style.
 3. Implement the smallest change that satisfies every acceptance criterion.
