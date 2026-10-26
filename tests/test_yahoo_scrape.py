@@ -284,7 +284,7 @@ def test_c46_one_email_sorted_by_discount_with_percentages(yahoo_http, seeded_db
     assert re.fullmatch(r"RainCheck: 2 new deals - \d{4}-\d{2}-\d{2}", subject)
     assert _row_urls(html) == [URL_1, URL_4]
     rows = [tr for tr in _soup(html).find_all("tr") if tr.find("td")]
-    assert [r.find_all("td")[4].get_text(strip=True) for r in rows] == ["61.3%", "22.5%"]
+    assert [r.find_all("td")[2].find("strong").get_text() for r in rows] == ["61.3% off", "22.5% off"]
     assert "cheaper than market" not in html and "cheaper than market" not in text
     assert text.index(URL_1) < text.index(URL_4)
 
@@ -320,9 +320,11 @@ def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
     assert first_cells[0].get_text(strip=True) == "No image"
     assert first_cells[0].find("img") is None
     assert first_cells[1].find("img") is not None and first_cells[2].find("img") is not None
-    discounts = [tr.find_all("td")[4].get_text(strip=True) for tr in soup.find_all("tr") if tr.find("td")]
+    discounts = [
+        tr.find_all("td")[2].find("strong").get_text() for tr in soup.find_all("tr") if tr.find("td")
+    ]
     # 76.75 is exact in binary, and format() rounds the tie to even, so this is always 76.8
-    assert discounts == ["84.5%", "76.8%", "69.0%"]
+    assert discounts == ["84.5% off", "76.8% off", "69.0% off"]
 
 
 def test_rc07_c25_null_market_price_skips_item(
@@ -450,7 +452,9 @@ def test_c14_main_works_from_unrelated_cwd_and_emails_once_per_item(
     subject, html, _text = sent_emails[0]
     assert re.fullmatch(r"RainCheck: 2 new deals - \d{4}-\d{2}-\d{2}", subject)
     soup = _soup(html)
-    assert [h.get_text() for h in soup.find_all("h2")] == ["rick owens ramones"]
+    assert [h.get_text() for h in soup.find_all("h2")] == [
+        "rick owens ramones (market $800.00)"
+    ]
     assert _row_urls(html) == [URL_1, URL_4]
     assert len(yahoo_http.calls) == 1
     method, url, kwargs = yahoo_http.calls[0]

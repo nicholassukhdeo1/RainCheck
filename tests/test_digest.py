@@ -68,7 +68,9 @@ def test_rc15_c14_sections_with_empty_deals_are_ignored_even_with_not_shown():
     assert build_digest([ItemDeals("x", 800.0, (), 3)], RUN_DATE) is None
     d = build_digest([ItemDeals("empty", 800.0, (), 3), section()], RUN_DATE)
     assert d is not None
-    assert [h.get_text() for h in soup_of(d).find_all("h2")] == ["rick owens ramones"]
+    assert [h.get_text() for h in soup_of(d).find_all("h2")] == [
+        "rick owens ramones (market $800.00)"
+    ]
 
 
 # ---- criteria 15, 16 ---------------------------------------------------------------
@@ -115,17 +117,19 @@ def test_rc15_c17_document_structure_title_h1_h2_table_and_headers():
     soup = soup_of(d)
     assert [t.get_text() for t in soup.find_all("title")] == [d.subject]
     assert [h.get_text() for h in soup.find_all("h1")] == [d.subject]
-    assert [h.get_text() for h in soup.find_all("h2")] == ["rick owens ramones", "pod shorts"]
+    assert [h.get_text() for h in soup.find_all("h2")] == [
+        "rick owens ramones (market $800.00)", "pod shorts (market $300.00)",
+    ]
     tables = soup.find_all("table")
     assert len(tables) == 2
     for table in tables:
         header = table.find("tr")
         assert [th.get_text() for th in header.find_all("th")] == [
-            "Image", "Listing", "Price", "Market", "Discount",
+            "Image", "Listing", "Price",
         ]
     rows = data_rows(tables[0])
     assert len(rows) == 2
-    assert all(len(r.find_all("td")) == 5 for r in rows)
+    assert all(len(r.find_all("td")) == 3 for r in rows)
     assert [r.find_all("td")[1].get_text(" ", strip=True) for r in rows] == [
         "Rick Owens Ramones High Top 42", "Rick Owens Ramon Sneakers",
     ]
@@ -135,18 +139,19 @@ def test_rc15_c17_document_structure_title_h1_h2_table_and_headers():
 def test_rc15_c18_cells_show_formatted_yen_usd_market_and_discount():
     d = build_digest([section()], RUN_DATE)
     cells = data_rows(soup_of(d).find("table"))[0].find_all("td")
-    assert [c.get_text(" ", strip=True) for c in cells[1:]] == [
-        "Rick Owens Ramones High Top 42", "¥50,000 $310.00", "$800.00", "61.3%",
-    ]
+    assert len(cells) == 3
+    assert cells[1].get_text(" ", strip=True) == "Rick Owens Ramones High Top 42"
+    assert cells[2].get_text(" ", strip=True) == "¥50,000 $310.00 61.3% off"
+    assert soup_of(d).find("h2").find("span").get_text() == "(market $800.00)"
 
 
 def test_rc15_c18_thousands_separators_in_yen_usd_and_market():
     big = make_deal(price_yen=200000, price_usd=1240.0, market_price_usd=1500.0, discount_pct=17.3333)
     d = build_digest([section(market=1500.0, deals=[big])], RUN_DATE)
     cells = data_rows(soup_of(d).find("table"))[0].find_all("td")
-    assert cells[2].get_text(" ", strip=True) == "¥200,000 $1,240.00"
-    assert cells[3].get_text(" ", strip=True) == "$1,500.00"
-    assert cells[4].get_text(" ", strip=True) == "17.3%"
+    assert len(cells) == 3
+    assert cells[2].get_text(" ", strip=True) == "¥200,000 $1,240.00 17.3% off"
+    assert soup_of(d).find("h2").find("span").get_text() == "(market $1,500.00)"
 
 
 def test_rc15_c19_image_cell_has_linked_img_with_exactly_five_attributes():
@@ -181,6 +186,100 @@ def test_rc15_c20_listing_cell_link_has_deal_url_and_display_title():
     assert links[0].get_text() == "Rick Owens Ramones High Top 42"
 
 
+# ---- Amendment 2: phone-friendly three-column layout -------------------------------
+
+
+def _price_cell(d):
+    return data_rows(soup_of(d).find("table"))[0].find_all("td")[2]
+
+
+def test_rc15_a2_exactly_one_viewport_meta_in_head_after_charset():
+    soup = soup_of(build_digest([section()], RUN_DATE))
+    viewports = soup.find_all("meta", attrs={"name": "viewport"})
+    assert len(viewports) == 1
+    assert viewports[0]["content"] == "width=device-width, initial-scale=1"
+    head = soup.find("head")
+    assert viewports[0].parent is head
+    metas = head.find_all("meta", recursive=False)
+    charset_index = next(i for i, m in enumerate(metas) if m.has_attr("charset"))
+    assert metas.index(viewports[0]) > charset_index
+
+
+def test_rc15_a2_every_table_has_cellpadding_8_and_cellspacing_0():
+    sections = [section(), section(name="pod shorts", market=300.0, deals=[make_deal(url=URL_4 + "z")])]
+    tables = soup_of(build_digest(sections, RUN_DATE)).find_all("table")
+    assert len(tables) == 2
+    for table in tables:
+        assert table["cellpadding"] == "8"
+        assert table["cellspacing"] == "0"
+
+
+def test_rc15_a2_header_alignment_image_listing_left_price_right():
+    header = soup_of(build_digest([section()], RUN_DATE)).find("table").find("tr")
+    ths = {th.get_text(): th for th in header.find_all("th")}
+    assert list(ths) == ["Image", "Listing", "Price"]
+    assert ths["Image"]["align"] == "left"
+    assert ths["Listing"]["align"] == "left"
+    assert ths["Price"]["align"] == "right"
+
+
+def test_rc15_a2_price_cell_is_right_aligned_nowrap_with_one_strong_discount_and_two_br():
+    cell = _price_cell(build_digest([section()], RUN_DATE))
+    style = cell["style"].replace(" ", "")
+    assert "white-space:nowrap" in style
+    assert "text-align:right" in style
+    strongs = cell.find_all("strong")
+    assert len(strongs) == 1
+    assert strongs[0].get_text() == "61.3% off"
+    assert len(cell.find_all("br")) == 2
+
+
+def test_rc15_a2_price_cell_discount_text_format_for_each_deal():
+    d = build_digest([section(deals=[deal_1(), deal_4()])], RUN_DATE)
+    rows = data_rows(soup_of(d).find("table"))
+    assert [r.find_all("td")[2].find("strong").get_text() for r in rows] == ["61.3% off", "22.5% off"]
+    assert [r.find_all("td")[2].get_text(" ", strip=True) for r in rows] == [
+        "¥50,000 $310.00 61.3% off", "¥100,000 $620.00 22.5% off",
+    ]
+
+
+def test_rc15_a2_every_deal_cell_is_vertically_top_aligned():
+    d = build_digest([section(deals=[deal_1(), make_deal(image_url=None, url="javascript:x")])], RUN_DATE)
+    rows = data_rows(soup_of(d).find("table"))
+    assert len(rows) == 2
+    for row in rows:
+        tds = row.find_all("td")
+        assert len(tds) == 3
+        for td in tds:
+            assert "vertical-align:top" in td["style"].replace(" ", "")
+
+
+def test_rc15_a2_heading_has_exactly_one_market_span():
+    sections = [section(), section(name="pod shorts", market=1234.5, deals=[make_deal(url=URL_4 + "z")])]
+    h2s = soup_of(build_digest(sections, RUN_DATE)).find_all("h2")
+    assert len(h2s) == 2
+    assert [len(h.find_all("span")) for h in h2s] == [1, 1]
+    assert [h.find("span").get_text() for h in h2s] == ["(market $800.00)", "(market $1,234.50)"]
+    assert [h.get_text() for h in h2s] == [
+        "rick owens ramones (market $800.00)", "pod shorts (market $1,234.50)",
+    ]
+
+
+def test_rc15_a2_market_price_appears_once_per_item_not_in_every_row():
+    d = build_digest([section(deals=[deal_1(), deal_4()])], RUN_DATE)
+    soup = soup_of(d)
+    table = soup.find("table")
+    assert "$800.00" not in table.get_text()
+    assert [th.get_text() for th in table.find_all("th")] == ["Image", "Listing", "Price"]
+    assert soup.get_text().count("$800.00") == 1
+
+
+def test_rc15_a2_no_class_attributes_and_no_style_element():
+    soup = soup_of(build_digest([section(not_shown=2)], RUN_DATE))
+    assert soup.find("style") is None
+    assert all("class" not in el.attrs for el in soup.find_all(True))
+
+
 # ---- criteria 21-25: HTML safety ---------------------------------------------------
 
 EVIL_TITLE = "<script>alert(\"x\")</script> & 'q'"
@@ -197,7 +296,8 @@ def test_rc15_c21_title_and_item_name_are_escaped_everywhere():
     row = data_rows(soup.find("table"))[0]
     assert row.find_all("td")[1].find("a").get_text() == EVIL_TITLE
     assert row.find("img")["alt"] == EVIL_TITLE
-    assert soup.find("h2").get_text() == EVIL_NAME
+    assert soup.find("h2").get_text() == EVIL_NAME + " (market $800.00)"
+    assert soup.find("h2").find("span").get_text() == "(market $800.00)"
     # raw markup from the seller never appears unescaped
     assert "<script>" not in d.html
     assert "<b>bold</b>" not in d.html
