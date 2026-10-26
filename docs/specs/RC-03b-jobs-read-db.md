@@ -46,13 +46,13 @@ Both jobs still read `catalog.json` directly, so the database and the jobs can d
 
 - Word-aware matching, NFKC normalization, and full-width Latin letters (RC-17).
   Matching stays plain substring matching, so `low` still matches `yellow`.
-- Any change to `src/schema.sql` or `src/catalog.json`, or to `src/db.py` beyond the docstring.
+- Any change to `src/schema.sql`, to `src/catalog.json` beyond the two keywords in the Resolved note, or to `src/db.py` beyond the docstring and Amendment 1.
 - Recording which item a listing matched (RC-04) or updating `last_seen_at` (RC-05).
 - Retries, backoff, per-item isolation of network errors, `logging` instead of `print`, and clean messages for errors other than `SchemaVersionError` (RC-10; see Open questions 2 and 3).
 - The debug listing of every eBay result that `ebay_market_price` prints (`src/ebay_pricing.py:63-64`) (RC-10).
 - Minimum sample size, outlier trimming, clearing a stale eBay price, and eBay summaries without `price` or `title` (RC-09; see "Known issues").
 - The hardcoded yen rate (RC-08), empty per-item emails and the email layout (RC-15), multiple brands (RC-13), and `src/setup.py` (RC-14).
-- Changing keywords in `src/catalog.json`, such as adding `ラモーンズ` (see "Observations for the user").
+- Changing other keywords in `src/catalog.json` (the two keyword additions in the Resolved note are in scope).
 
 ## Design
 
@@ -70,7 +70,7 @@ Both jobs still read `catalog.json` directly, so the database and the jobs can d
 | `tests/test_yahoo_scrape.py` | Criteria 8-21; superseded updates. |
 | `tests/test_ebay_pricing.py` | Criteria 22-35. |
 
-Not modified: `src/schema.sql`, `src/catalog.json`, `src/sendemail.py`, `src/setup.py`, `tests/conftest.py`, `tests/dbhelpers.py`, and every fixture file.
+Not modified: `src/schema.sql`, `src/setup.py`, `tests/conftest.py`, `tests/dbhelpers.py`, and every fixture file (`src/catalog.json`, `src/sendemail.py`, and `pyproject.toml` change per the Resolved note and Amendment 1).
 
 ### Schema changes and migration
 
@@ -232,7 +232,7 @@ Measured on the committed live fixtures with the real `src/catalog.json` keyword
   Adding `ラモーンズ` to the Ramones keywords in `catalog.json` would catch the first; the second would then be dropped by the `drkshdw` exclude, which shows why excludes matter on Yahoo.
   `ローカット` (low cut) is not caught by the `low` exclude, because it is written in katakana.
 - One listing is titled `Rick Owens PODS ... ポッズ`; `pod short` does not match it.
-- These are catalog data choices and can be made in a separate small commit; this spec does not change `catalog.json`.
+- These are catalog data choices; the user chose to make them in this item (see the Resolved note).
 
 ## Acceptance criteria
 
@@ -386,7 +386,7 @@ The verifier states in its report how many live requests it made: one Yahoo requ
 ## Shared-file conflicts
 
 Yes, but only `src/db.py`, and only a docstring line (Open question 5).
-`src/schema.sql` and `src/catalog.json` are not touched.
+`src/schema.sql` is not touched; `src/catalog.json` gains the two keywords in the Resolved note.
 If the user declines Open question 5, RC-03b touches no shared file.
 
 In practice RC-03b should run alone either way: RC-08, RC-15, and RC-16 touch `src/yahoo_scrape.py`, RC-09 and RC-06 touch `src/ebay_pricing.py`, RC-04, RC-05, RC-13, and RC-17 depend on RC-03b, and RC-14 touches `src/db.py`.
@@ -445,5 +445,18 @@ After merge, the user's database needs `python3 src/db.py --seed` once for these
   sqlite3 -header src/raincheck.db "SELECT i.name, i.search_query, i.active, k.kind, k.keyword FROM items i JOIN item_keywords k ON k.item_id = i.id ORDER BY i.id, k.kind, k.keyword;"
   ```
 
-  `user_version` is `1`, seeding prints `Catalog seeded.` with no `Deactivated` line, and the keyword table shows `drkshdw`, `canvas`, `low` as Ramones excludes and `pants` as the pod shorts exclude.
+  `user_version` is `1`, seeding prints `Catalog seeded.` with no `Deactivated` line, and the keyword table shows `ramon`, `ramones`, `ラモーンズ` as Ramones includes, `canvas`, `drkshdw`, `low`, `ローカット` as Ramones excludes, and `pants` as the pod shorts exclude.
   Then run `python3 src/ebay_pricing.py` before `python3 src/yahoo_scrape.py`, so `pod shorts` is priced with its new query before the next deal email.
+
+## Amendments
+
+### Amendment 1 (2026-10-26): review hardening
+
+- `src/db.py`: every function that opens a connection closes it on every path, including when a query raises (for example `insert_listing` with an unknown `brand_id` raising `sqlite3.IntegrityError`).
+  Today such a connection is left open until garbage collection, which shows up as a `ResourceWarning: unclosed database` attributed to whichever test happens to be running.
+- `pyproject.toml`: pytest treats `ResourceWarning` and `pytest.PytestUnraisableExceptionWarning` as errors, so a leaked connection fails the suite instead of hiding as a warning.
+- `src/sendemail.py`: the SMTP connection gets `timeout=30`, as the project convention requires for every network call; a hung mail server could otherwise stall the Yahoo job forever.
+- New criterion 46: `insert_listing` with an unknown `brand_id` raises `sqlite3.IntegrityError` and leaves no open connection (no `ResourceWarning` under the strict warning filter).
+- New criterion 47: the real SMTP path constructs `smtplib.SMTP("smtp.gmail.com", 587, timeout=30)`.
+- Test fix: criterion 19's test also asserts the database file's SHA-256 is unchanged, as criterion 16 does.
+

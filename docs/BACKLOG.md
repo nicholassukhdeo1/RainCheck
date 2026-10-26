@@ -204,7 +204,7 @@ The project is locked to Region `us-east-2`.
 - **Touches:** `src/setup.py` (replaced), `src/db.py`
 - **Why:** `setup.py` hardcodes the brand, size, and Ramones keywords for every item you add, which is the root cause of the `pod shorts` bug.
   It also writes to `catalog.json` instead of the database.
-  It writes entries without `exclude_keywords` and with Ramones keywords and `+` search queries, which seeding now rejects, so every item added through it needs hand edits before `python3 src/db.py --seed` (the jobs' `KeyError` on missing `exclude_keywords` is gone since RC-03b).
+  It hardcodes Ramones keywords for every item and writes `+` search queries, which seeding now rejects, so every item added through it needs hand edits before `python3 src/db.py --seed` (the jobs' `KeyError` on missing `exclude_keywords` is gone since RC-03b).
 - **Scope:** Replace it with commands to add, list, update, and remove items, with real per-item keywords, writing to the database.
 - **Resume angle:** Built a command line interface for managing tracked items.
 
