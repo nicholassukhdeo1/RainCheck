@@ -60,7 +60,8 @@ On each run the scraper pulls current listings, compares them against the item's
    EBAY_CLIENT_SECRET=your_ebay_client_secret
    ```
    `SENDER_PASSWORD` is a Gmail [app password](https://myaccount.google.com/apppasswords), not your normal account password.
-   The `.env` file can live in `src/` or in the repository root, because `load_dotenv()` searches upward from the `src/` folder.
+   `load_dotenv()` searches upward from the script's own folder (`src/`), so the `.env` file can live in `src/` or in the repository root.
+   (Under a debugger it searches from the current directory instead.)
    See "Configuration" below for the optional variables.
 3. Create and seed the database:
    ```bash
@@ -87,6 +88,7 @@ python3 setup.py         # build your watchlist
 ```
 
 After adding items with it, run `python3 src/db.py --seed` so the new items reach the database.
+`setup.py` does not write `exclude_keywords` yet, so add `"exclude_keywords": []` (or a real list) to each new entry in `catalog.json` by hand before running `ebay_pricing.py`, or it stops with a `KeyError` (RC-14 replaces `setup.py`).
 
 ## Database
 
