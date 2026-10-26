@@ -86,7 +86,7 @@ def yahoo_jp_scrape(item_dict, brand_url):
     print(f"--- Yahoo Auctions Update for: {item_dict['item name']} ---")
 
 
-# Rick Owens brand page — newest first, 100 items per page
+# Rick Owens brand page - newest first, 100 items per page
 RICK_OWENS_URL = "https://auctions.yahoo.co.jp/category/list/23000/?auccat=23000&s1=new&o1=d&brand_id=103538&n=100"
 
 def main():

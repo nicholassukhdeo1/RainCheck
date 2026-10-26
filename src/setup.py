@@ -14,7 +14,7 @@ try:
     with open("catalog.json", "r") as f:
         item_list = json.load(f)
 except FileNotFoundError:
-    # first run — no file exists yet, so start fresh
+    # first run - no file exists yet, so start fresh
     item_list = []
 
 while stop != "done":
