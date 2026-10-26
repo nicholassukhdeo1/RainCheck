@@ -98,3 +98,34 @@ def test_c21_real_path_uses_gmail_smtp_with_login_and_sendmail(monkeypatch):
     sender, receiver, message = record["sendmail"][0]
     assert (sender, receiver) == ("a@example.com", "b@example.com")
     assert "Subject: Subj" in message
+
+
+def test_rc03b_c47_smtp_connection_has_a_30_second_timeout(monkeypatch):
+    monkeypatch.delenv("RAINCHECK_DRY_RUN", raising=False)
+    monkeypatch.setenv("SENDER_EMAIL", "a@example.com")
+    monkeypatch.setenv("SENDER_PASSWORD", "pw")
+    monkeypatch.setenv("RECEIVER_EMAIL", "b@example.com")
+    inits = []
+
+    class FakeSMTP:
+        def __init__(self, *args, **kwargs):
+            inits.append((args, kwargs))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def starttls(self):
+            pass
+
+        def login(self, user, password):
+            pass
+
+        def sendmail(self, sender, receiver, message):
+            pass
+
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    sendemail.send_email("Subj", "Body")
+    assert inits == [(("smtp.gmail.com", 587), {"timeout": 30})]

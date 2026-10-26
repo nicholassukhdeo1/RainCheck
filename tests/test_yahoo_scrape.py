@@ -329,9 +329,11 @@ def test_rc03b_c19_main_on_newer_schema_version_is_a_clean_error(
     temp_db, fake_http, sent_emails, capsys
 ):
     set_user_version(temp_db, 2)
+    before = sha256(temp_db)
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
     _assert_clean_schema_error(capsys, fake_http, sent_emails, exc)
+    assert sha256(temp_db) == before
 
 
 def test_rc03b_c21_yahoo_job_uses_the_shared_matcher():
