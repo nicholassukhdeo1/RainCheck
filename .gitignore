@@ -18,3 +18,10 @@ venv/
 .claude/worktrees/
 
 sqlTips.txt
+
+# Local data: the SQLite database is created on each machine and is never committed.
+# SQLite can also create -journal, -wal, and -shm side files next to a database.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

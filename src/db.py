@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
+import argparse
 import sqlite3
 import json
 import os
@@ -155,7 +156,24 @@ def get_market_price(brand_name,item_name):
     return m_price
 
 
-if __name__ == "__main__":
+def main(argv=None):
+    # parse first so --help and bad arguments exit before any database file is created
+    parser = argparse.ArgumentParser(
+        description="Create the RainCheck database tables if they do not exist."
+    )
+    parser.add_argument(
+        "--seed",
+        action="store_true",
+        help="after creating the tables, seed brands, items, and keywords from catalog.json",
+    )
+    args = parser.parse_args(argv)
+
     # load .env here so RAINCHECK_DB_PATH set there is honored, like the other scripts
     load_dotenv()
     init_db()
+    if args.seed:
+        seed_from_catalog()
+
+
+if __name__ == "__main__":
+    main()
