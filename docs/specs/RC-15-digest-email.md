@@ -559,4 +559,11 @@ The plain-text part, the subject, the escaping rules, and `is_safe_http_url` are
 - Criteria 17-20 change accordingly: the header row is `Image | Listing | Price`; each deal row has exactly three cells; criterion 18's cell texts become the listing title and `¥50,000 $310.00 61.3% off` (the price cell's `get_text(" ", strip=True)`); the market price appears in the `<h2>`'s `<span>` as `(market $800.00)`.
   Criterion 25 additionally allows `meta`, `span`, and `strong` elements and `name`/`content` attributes on the viewport `meta`.
 - The orchestrator's mockup that was checked in the browser is the reference for the rendered result.
-
+- Implementation notes (render-equivalent deviations from the mockup, recorded for the user's review in the pull request):
+  - The exact mockup styles made the criterion 29 worst case 105,624 bytes, over its 102,000-byte limit, so repeated per-row styles were trimmed to 101,960 bytes.
+  - `line-height:1.4` is set once on the `max-width:600px` container and inherited, instead of on the listing and price cells, so headings and the not-shown line also use 1.4.
+  - The 100px image column width is set on the `Image` header cell only; the 100px `<img>` holds the column in every row.
+  - Bottom borders are on the `th` and `td` cells, not the `tr`, because many email clients ignore row borders.
+  - The border and muted colors use the short hex forms (`#eee`, `#ddd`, `#666`), and the left-aligned header cells use `align="left"` alone, while the right-aligned `Price` header and price cell keep both `align="right"` and `text-align:right`.
+  - The `<h1>` is 18px instead of 20px, so the longest realistic subject (`RainCheck: 10 new deals - 2026-10-26`, 323px) fits a 375px phone without breaking the date at a hyphen.
+  - Criterion 29's input is deliberately pathological (10 sections and titles made entirely of `<&>`, which grow about 4x when escaped); a realistic digest for the 2-item catalog is about 13 KB, so its 40-byte headroom is a property of the test input, not a clipping risk in real emails.
