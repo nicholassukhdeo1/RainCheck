@@ -28,19 +28,27 @@ def test_c23_seed_inserts_brand_items_and_keywords(seeded_db, db_conn):
     brands = db_conn.execute("SELECT name, yahoo_brand_id FROM brands").fetchall()
     assert [(b["name"], b["yahoo_brand_id"]) for b in brands] == [("Rick Owens", "103538")]
     items = {
-        r["name"]: (r["market_price_usd"], r["search_query"])
-        for r in db_conn.execute("SELECT name, market_price_usd, search_query FROM items")
+        r["name"]: (r["manual_price_usd"], r["market_price_usd"], r["search_query"])
+        for r in db_conn.execute(
+            "SELECT name, manual_price_usd, market_price_usd, search_query FROM items"
+        )
     }
     assert items == {
-        "rick owens ramones": (800.0, "rick+owens+ramones"),
-        "pod shorts": (300.0, "pod+shorts"),
+        "rick owens ramones": (800.0, None, "rick owens ramones"),
+        "pod shorts": (300.0, None, "pod shorts"),
     }
     kws = {}
     for r in db_conn.execute(
-        "SELECT i.name AS n, k.keyword AS k FROM item_keywords k JOIN items i ON i.id = k.item_id"
+        "SELECT i.name AS n, k.kind AS kind, k.keyword AS k "
+        "FROM item_keywords k JOIN items i ON i.id = k.item_id"
     ):
-        kws.setdefault(r["n"], set()).add(r["k"])
-    assert kws == {"rick owens ramones": {"ramones", "ramon"}, "pod shorts": {"pod short"}}
+        kws.setdefault((r["n"], r["kind"]), set()).add(r["k"])
+    assert kws == {
+        ("rick owens ramones", "include"): {"ramones", "ramon"},
+        ("rick owens ramones", "exclude"): {"drkshdw", "canvas", "low"},
+        ("pod shorts", "include"): {"pod short"},
+        ("pod shorts", "exclude"): {"pants"},
+    }
 
 
 def test_c24_seeding_twice_does_not_duplicate_rows(seeded_db, db_conn):
@@ -48,7 +56,11 @@ def test_c24_seeding_twice_does_not_duplicate_rows(seeded_db, db_conn):
     db.seed_from_catalog()
     after = {t: _count(db_conn, t) for t in ("brands", "items", "item_keywords")}
     assert before == after
-    assert before == {"brands": 1, "items": 2, "item_keywords": 3}
+    assert before == {"brands": 1, "items": 2, "item_keywords": 7}
+    kinds = dict(
+        db_conn.execute("SELECT kind, COUNT(*) FROM item_keywords GROUP BY kind").fetchall()
+    )
+    assert kinds == {"include": 3, "exclude": 4}
 
 
 def test_c25_insert_new_listing_returns_true_and_stores_utc_timestamps(seeded_db, db_conn):
@@ -119,11 +131,181 @@ def test_c31_update_market_price_changes_only_target_item(seeded_db, db_conn):
     item_id = db.get_item_id("Rick Owens", "rick owens ramones")
     db.update_market_price(item_id, 912.5)
     assert db.get_market_price("Rick Owens", "rick owens ramones") == 912.5
-    row = db_conn.execute("SELECT market_price_usd FROM items WHERE name='pod shorts'").fetchone()
-    assert row["market_price_usd"] == 300.0
+    row = db_conn.execute(
+        "SELECT market_price_usd, manual_price_usd FROM items WHERE name='pod shorts'"
+    ).fetchone()
+    assert row["market_price_usd"] is None
+    assert row["manual_price_usd"] == 300.0
 
 
 def test_c32_get_market_price_returns_none_for_null_price(seeded_db, db_conn):
-    db_conn.execute("UPDATE items SET market_price_usd = NULL WHERE name = 'pod shorts'")
+    db_conn.execute(
+        "UPDATE items SET market_price_usd = NULL, manual_price_usd = NULL WHERE name = 'pod shorts'"
+    )
     db_conn.commit()
     assert db.get_market_price("Rick Owens", "pod shorts") is None
+
+
+# --- RC-03a: read API and lookups (criteria 30-37) ---------------------------
+
+
+def _items_table(conn):
+    return [tuple(r) for r in conn.execute("SELECT * FROM items ORDER BY id").fetchall()]
+
+
+def test_rc03a_c30_get_tracked_items_returns_full_configuration(seeded_db, db_conn):
+    ids = [r["id"] for r in db_conn.execute("SELECT id FROM items ORDER BY id")]
+    brand_id = _brand_id(db_conn)
+
+    tracked = db.get_tracked_items()
+
+    assert all(isinstance(t, db.TrackedItem) for t in tracked)
+    assert tracked == [
+        db.TrackedItem(
+            id=ids[0],
+            brand_id=brand_id,
+            brand="Rick Owens",
+            name="rick owens ramones",
+            search_query="rick owens ramones",
+            keywords=("ramon", "ramones"),
+            exclude_keywords=("canvas", "drkshdw", "low"),
+            manual_price_usd=800.0,
+            market_price_usd=None,
+        ),
+        db.TrackedItem(
+            id=ids[1],
+            brand_id=brand_id,
+            brand="Rick Owens",
+            name="pod shorts",
+            search_query="pod shorts",
+            keywords=("pod short",),
+            exclude_keywords=("pants",),
+            manual_price_usd=300.0,
+            market_price_usd=None,
+        ),
+    ]
+
+
+# (market_price_usd, manual_price_usd, expected effective price)
+PRICE_CASES = [
+    pytest.param(912.5, 800.0, 912.5, id="ebay-wins"),
+    pytest.param(None, 800.0, 800.0, id="null-market-falls-back"),
+    pytest.param(0, 800.0, 800.0, id="zero-market-falls-back"),
+    pytest.param(-1, 800.0, 800.0, id="negative-market-falls-back"),
+    pytest.param(float("inf"), 800.0, 800.0, id="infinite-market-falls-back"),
+    pytest.param(None, None, None, id="nothing-usable"),
+    pytest.param(0, None, None, id="zero-market-and-no-manual"),
+    pytest.param(-1, None, None, id="negative-market-and-no-manual"),
+]
+
+
+def _set_prices(conn, market, manual):
+    conn.execute(
+        "UPDATE items SET market_price_usd = ?, manual_price_usd = ? WHERE name = 'rick owens ramones'",
+        (market, manual),
+    )
+    conn.commit()
+
+
+@pytest.mark.parametrize("market,manual,expected", PRICE_CASES)
+def test_rc03a_c31_effective_price_rule(seeded_db, db_conn, market, manual, expected):
+    _set_prices(db_conn, market, manual)
+    tracked = {t.name: t for t in db.get_tracked_items()}
+    assert tracked["rick owens ramones"].effective_price_usd == expected
+
+
+@pytest.mark.parametrize("market,manual,expected", PRICE_CASES)
+def test_rc03a_c33_get_market_price_uses_the_effective_price_rule(
+    seeded_db, db_conn, market, manual, expected
+):
+    _set_prices(db_conn, market, manual)
+    assert db.get_market_price("Rick Owens", "rick owens ramones") == expected
+
+
+def test_rc03a_c32_inactive_items_are_not_tracked(seeded_db, db_conn):
+    db_conn.execute("UPDATE items SET active = 0 WHERE name = 'pod shorts'")
+    db_conn.commit()
+    assert [t.name for t in db.get_tracked_items()] == ["rick owens ramones"]
+
+
+def test_rc03a_c32_no_active_items_gives_empty_list(seeded_db, db_conn):
+    db_conn.execute("UPDATE items SET active = 0 WHERE id > 0")
+    db_conn.commit()
+    assert db.get_tracked_items() == []
+
+
+def test_rc03a_c32_item_without_exclude_rows_has_empty_exclude_tuple(seeded_db, db_conn):
+    brand_id = _brand_id(db_conn)
+    db_conn.execute("INSERT INTO items (brand_id, name) VALUES (?, 'plain item')", (brand_id,))
+    item_id = db_conn.execute("SELECT id FROM items WHERE name = 'plain item'").fetchone()["id"]
+    db_conn.execute("INSERT INTO item_keywords (item_id, keyword) VALUES (?, 'plain')", (item_id,))
+    db_conn.commit()
+
+    plain = [t for t in db.get_tracked_items() if t.name == "plain item"][0]
+
+    assert plain.exclude_keywords == ()
+    assert plain.keywords == ("plain",)
+
+
+def test_rc03a_c34_unknown_brand_returns_none(seeded_db):
+    assert db.get_item_id("No Such Brand", "pod shorts") is None
+    assert db.get_market_price("No Such Brand", "pod shorts") is None
+
+
+def test_rc03a_c34_unknown_item_of_known_brand_returns_none(seeded_db):
+    assert db.get_item_id("Rick Owens", "no such item") is None
+    assert db.get_market_price("Rick Owens", "no such item") is None
+
+
+def test_rc03a_c35_get_item_id_returns_inactive_items(seeded_db, db_conn):
+    expected = db_conn.execute("SELECT id FROM items WHERE name = 'pod shorts'").fetchone()["id"]
+    db_conn.execute("UPDATE items SET active = 0 WHERE name = 'pod shorts'")
+    db_conn.commit()
+    assert db.get_item_id("Rick Owens", "pod shorts") == expected
+
+
+def test_rc03a_c36_update_market_price_reports_a_change_and_touches_one_cell(
+    seeded_db, db_conn, capsys
+):
+    item_id = db.get_item_id("Rick Owens", "rick owens ramones")
+    before = _items_table(db_conn)
+    capsys.readouterr()
+
+    assert db.update_market_price(item_id, 912.5) is True
+
+    assert "Market price updated!" in capsys.readouterr().out
+    after = _items_table(db_conn)
+    cols = [r[1] for r in db_conn.execute("PRAGMA table_info(items)")]
+    market = cols.index("market_price_usd")
+    for old, new in zip(before, after):
+        if old[0] == item_id:
+            changed = [cols[i] for i in range(len(cols)) if old[i] != new[i]]
+            assert changed == ["market_price_usd"]
+            assert new[market] == 912.5
+        else:
+            assert old == new
+
+
+def test_rc03a_c36_update_market_price_for_unknown_id_returns_false(seeded_db, db_conn, capsys):
+    before = _items_table(db_conn)
+    capsys.readouterr()
+
+    assert db.update_market_price(9999, 912.5) is False
+
+    assert "Market price updated!" not in capsys.readouterr().out
+    assert _items_table(db_conn) == before
+
+
+@pytest.mark.parametrize(
+    "bad_price",
+    [0, -1, float("nan"), float("inf"), True, None, "900"],
+    ids=["zero", "negative", "nan", "inf", "bool", "none", "string"],
+)
+def test_rc03a_c37_update_market_price_rejects_invalid_prices(seeded_db, db_conn, bad_price):
+    item_id = db.get_item_id("Rick Owens", "rick owens ramones")
+    before = _items_table(db_conn)
+
+    with pytest.raises(ValueError):
+        db.update_market_price(item_id, bad_price)
+
+    assert _items_table(db_conn) == before

@@ -73,8 +73,10 @@ def test_c09_path_is_not_cached_between_connections(monkeypatch, tmp_path):
     first, second = tmp_path / "a.db", tmp_path / "b.db"
     monkeypatch.setenv("RAINCHECK_DB_PATH", str(first))
     assert db.get_db_path() == str(first)
+    db.init_db()
     db.get_connection().close()
     monkeypatch.setenv("RAINCHECK_DB_PATH", str(second))
+    db.init_db()
     db.get_connection().close()
     assert first.exists() and second.exists()
 

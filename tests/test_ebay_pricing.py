@@ -4,6 +4,8 @@ import json
 import pytest
 import requests
 
+import db
+
 TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
 EXCLUDES = ["drkshdw", "canvas", "low"]
@@ -132,7 +134,8 @@ def test_c43_refresh_one_token_one_search_per_item_and_updates_prices(
         r["name"]: r["market_price_usd"]
         for r in db_conn.execute("SELECT name, market_price_usd FROM items")
     }
-    assert prices == {"rick owens ramones": 900.0, "pod shorts": 300.0}
+    assert prices == {"rick owens ramones": 900.0, "pod shorts": None}
+    assert db.get_market_price("Rick Owens", "pod shorts") == 300.0
 
 
 def test_c44_main_requests_exactly_one_token(ebay_pricing, creds, ebay_http, seeded_db):
