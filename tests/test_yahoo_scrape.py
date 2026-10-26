@@ -703,5 +703,105 @@ def test_rc03b_c21_yahoo_job_uses_the_shared_matcher():
 
 
 def test_rc15_c54_report_item_deals_is_gone():
+    import inspect
+
     assert not hasattr(yahoo_scrape, "report_item_deals")
     assert yahoo_scrape.YEN_TO_USD == 0.0062
+    source = inspect.getsource(yahoo_scrape)
+    assert "Daily Refresh" not in source
+    assert '"<br>".join' not in source
+
+
+# ---- Amendment 1: unencodable text (lone surrogates) and insert failure after send ---
+
+
+def _surrogate_page(bad_title=None, bad_image=None):
+    """A results page with one valid Ramones deal and one record carrying a lone surrogate.
+
+    json.dumps escapes the surrogate as the six characters \\ud800, which is how Yahoo's JSON
+    could carry it; json.loads turns that back into a str that cannot be encoded as UTF-8.
+    """
+    import json
+
+    good = {"auctionId": "t1000000001", "title": "Rick Owens Ramones High Top 42",
+            "price": 50000, "imageUrl": "https://auc-pctr.c.yimg.jp/i/test/1.jpg"}
+    bad = {"auctionId": "t1000000002", "title": bad_title or "Rick Owens Ramones Bad 44",
+           "price": 20000, "imageUrl": bad_image or "https://auc-pctr.c.yimg.jp/i/test/2.jpg"}
+    data = {"props": {"pageProps": {"initialState": {"search": {"items": {"listing": {
+        "items": [good, bad]}}}}}}}
+    raw = json.dumps(data)
+    assert "\\ud800" in raw
+    return (
+        '<html><body><script id="__NEXT_DATA__" type="application/json">'
+        + raw + "</script></body></html>"
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"bad_title": "Rick Owens Ramones \ud800 Bad"}, {"bad_image": "https://img.test/\ud800.jpg"}],
+    ids=["title", "image_url"],
+)
+def test_rc15_c57_lone_surrogate_makes_the_record_invalid(kwargs, caplog):
+    import logging
+
+    with caplog.at_level(logging.DEBUG):
+        listings = yahoo_scrape.parse_listings(_surrogate_page(**kwargs))
+    assert [l.url for l in listings] == [URL_1]
+    warnings = [r for r in caplog.records if r.name == "yahoo_scrape" and r.levelno >= logging.WARNING]
+    assert [w.getMessage() for w in warnings] == [
+        "Skipped 1 of 2 Yahoo listing records: 1 invalid, 0 duplicate"
+    ]
+    for l in listings:
+        l.title.encode("utf-8")
+        if l.image_url is not None:
+            l.image_url.encode("utf-8")
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{"bad_title": "Rick Owens Ramones \ud800 Bad"}, {"bad_image": "https://img.test/\ud800.jpg"}],
+    ids=["title", "image_url"],
+)
+def test_rc15_c57_main_sends_one_digest_with_the_valid_deal(kwargs, fake_http, seeded_db, sent_emails):
+    fake_http.add("GET", RICK_OWENS_URL, text=_surrogate_page(**kwargs))
+    yahoo_scrape.main()
+    assert len(sent_emails) == 1
+    subject, html, text = sent_emails[0]
+    assert subject.startswith("RainCheck: 1 new deal - ")
+    assert _row_urls(html) == [URL_1]
+    html.encode("utf-8")
+    text.encode("utf-8")
+    assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings")] == [URL_1]
+
+
+def test_rc15_insert_failure_after_send_propagates_and_next_run_sends_only_the_rest(
+    yahoo_http, seeded_db, monkeypatch
+):
+    delivered = []
+
+    def ok_send(subject, html_body, text_body):
+        delivered.append(html_body)
+        return True
+
+    monkeypatch.setattr(yahoo_scrape, "send_email", ok_send)
+    real_insert = yahoo_scrape.insert_listing
+    calls = []
+
+    def flaky_insert(*args, **kwargs):
+        calls.append(args[1])
+        if len(calls) == 2:
+            raise RuntimeError("database is locked")
+        return real_insert(*args, **kwargs)
+
+    monkeypatch.setattr(yahoo_scrape, "insert_listing", flaky_insert)
+    with pytest.raises(RuntimeError, match="database is locked"):
+        yahoo_scrape.main()
+    assert len(delivered) == 1
+    assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings")] == [URL_1]
+
+    monkeypatch.setattr(yahoo_scrape, "insert_listing", real_insert)
+    yahoo_scrape.main()
+    assert len(delivered) == 2
+    assert _row_urls(delivered[1]) == [URL_4]
+    assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")] == [URL_1, URL_4]

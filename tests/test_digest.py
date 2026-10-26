@@ -413,6 +413,16 @@ def test_rc15_c30_build_digest_prints_nothing(capsys):
 
 
 def test_rc15_c30_digest_module_is_pure_in_its_imports():
-    """Guards the 'pure' rule behaviorally: the module exposes no I/O collaborators."""
-    for name in ("db", "yahoo_scrape", "sendemail", "requests", "smtplib"):
-        assert not hasattr(digest_module, name)
+    """Parses src/digest.py: it must import none of the I/O or job modules."""
+    import ast
+    from pathlib import Path
+
+    source = Path(digest_module.__file__).read_text(encoding="utf-8")
+    forbidden = {"db", "requests", "smtplib", "sqlite3", "sendemail", "yahoo_scrape"}
+    imported = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            imported |= {alias.name.split(".")[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            imported.add(node.module.split(".")[0])
+    assert imported & forbidden == set()
