@@ -6,6 +6,7 @@
 ## Summary
 
 Establish whether Yahoo's public pages can identify the completed state, sale outcome, actual end time, and final sale price of a stored RainCheck auction by its exact auction ID.
+The verified yen amounts in this study are individual Yahoo Auctions Japan sale observations, not a market-value estimate.
 The current evidence supports a sold example but does not pass the unsold and relisting gate, so this draft specifies a no-go for production completion writes until that evidence is captured.
 
 ## Motivation
@@ -14,6 +15,8 @@ The current evidence supports a sold example but does not pass the unsold and re
 `src/db.py:781-809` refreshes `last_seen_at` only when a stored URL appears again, and `src/yahoo_scrape.py:399-401` reads just the newest active results page.
 A missing URL may have fallen outside that page, so it cannot prove an auction ended or what it sold for.
 `src/yahoo_scrape.py:115-124` retains an auction ID while parsing active results, and the stored URL contains that ID, which gives a possible exact lookup key.
+RainCheck's existing `items.market_price_usd` is an eBay-based US market estimate.
+If a later feature derives a market value from completed Yahoo Auctions Japan sales, it must identify that value explicitly as a Yahoo Japan market-value estimate in its storage and presentation, separate from the eBay-based US estimate.
 
 ### Evidence as of 2026-10-27
 
@@ -42,6 +45,7 @@ These observations support further source discovery, not production writes.
 - Capture sanitized, dated public examples of sold, unsold, still-active, no-bid relisted, removed or expired, and malformed pages without using credentials or the real database.
 - Check whether the same auction URL can represent multiple auction cycles, and whether the public page exposes a stable cycle identifier.
 - Record a pass or no-go decision with the supporting page URLs, capture dates, visible fields, and limitations before implementation is approved.
+- Distinguish an exact auction's observed final yen price from any market-value estimate derived from multiple sales.
 - Preserve `ended_at` and `final_price_yen` as `NULL` when the gate fails or a page is unavailable or ambiguous.
 
 **Out of scope:**
@@ -51,6 +55,7 @@ These observations support further source discovery, not production writes.
 - Treating the current bid or start price as a final sale price without an independently verified sale outcome.
 - Reading a seller's private account, using credentials, scraping buyer identities, or contacting sellers.
 - Recovering historical prices from third-party archives or estimating the final price.
+- Computing a Yahoo Japan market-value aggregate, blending Yahoo and eBay valuations, replacing `items.market_price_usd`, or presenting an observed auction sale price as a market estimate.
 
 ## Design
 
@@ -61,6 +66,7 @@ These observations support further source discovery, not production writes.
 | `docs/specs/RC-18-auction-completion-feasibility.md` | Record evidence, gate, no-go outcome, and decisions. |
 
 If the gate later passes, write a separate implementation amendment or smaller RC-18b spec before editing code.
+Any later Yahoo Japan market-value estimate requires its own explicit spec, with a source label and distinct storage and presentation from the existing eBay-based US market estimate.
 That implementation would likely touch `src/db.py` for candidate selection and exact-ID updates, `src/yahoo_scrape.py` or a separate Yahoo completion module for bounded fetch and parse, and `tests/test_db.py` plus a new completion test file and sanitized Yahoo page fixtures.
 It may touch `src/schema.sql` if a distinct auction-cycle key or outcome column is required.
 The future spec must name every actual file after the source shape and cycle semantics are established.
@@ -103,6 +109,8 @@ If further public discovery cannot satisfy the gate, close RC-18 with this limit
 6. No source code, test, fixture, schema, catalog, or configuration file changes in this feasibility item; no real database or credentials are accessed.
 7. In any future implementation, an active result missing from the newest page, a scheduled end in the past, an HTTP 404, and an expired or malformed page leave `ended_at` and `final_price_yen` unchanged.
 8. In any future implementation, a verified ended-without-sale record has `final_price_yen = NULL`; a positive final yen value is stored only for a verified sale of the exact auction identity and cycle.
+9. The evidence record labels verified prices as individual Yahoo Auctions Japan sale observations in yen and does not label them as a market-value estimate.
+10. This feasibility item defines no Yahoo Japan market-value aggregate or combined valuation, and leaves the eBay-based US estimate in `items.market_price_usd` unchanged.
 
 ## Edge cases
 
