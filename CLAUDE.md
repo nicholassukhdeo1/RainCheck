@@ -12,6 +12,7 @@ It is written in Python with a SQLite database.
 - `src/catalog.json` is the list of tracked items.
 - `docs/BACKLOG.md` is the prioritized feature list; `docs/specs/` holds one approved spec per feature.
 - `.claude/agents/` defines the planner, test-writer, implementer, reviewer, and verifier agents.
+  `.codex/agents/` holds the same five ported for OpenAI Codex, and `AGENTS.md` is the Codex handoff; keep them in sync with these files.
 
 ## Guidance level
 
