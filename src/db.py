@@ -1,6 +1,6 @@
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -665,6 +665,36 @@ def get_known_listing_urls(urls: Iterable[str]) -> set[str]:
             url for url in wanted
             if conn.execute("SELECT 1 FROM listings WHERE url = ?", (url,)).fetchone() is not None
         }
+
+
+def update_last_seen_at(urls: Iterable[str], observed_at: datetime) -> int:
+    """Refresh previously stored listings observed at a later UTC time."""
+    if not isinstance(observed_at, datetime) or observed_at.utcoffset() != timedelta(0):
+        raise ValueError("observed_at must be a UTC datetime")
+
+    # Preserve page order while consuming a one-shot iterable and ignoring repeated URLs.
+    unique_urls = dict.fromkeys(urls)
+    if not unique_urls:
+        return 0
+
+    timestamp = observed_at.isoformat()
+    with closing(get_connection()) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            changed = 0
+            for url in unique_urls:
+                cursor = conn.execute(
+                    "UPDATE listings SET last_seen_at = ? "
+                    "WHERE url = ? AND last_seen_at < ?",
+                    (timestamp, url, timestamp),
+                )
+                changed += cursor.rowcount
+            conn.commit()
+            return changed
+        except BaseException:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
 
 
 def update_market_price(item_id, price):

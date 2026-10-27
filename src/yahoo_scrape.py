@@ -6,11 +6,12 @@ from db import (
     get_known_listing_urls,
     get_tracked_items,
     record_listing_match,
+    update_last_seen_at,
 )
 from digest import Deal, ItemDeals, build_digest
 from matching import title_matches
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Collection, Sequence
 import json
 import logging
@@ -237,6 +238,8 @@ def main():
         # fetch and parse once per run; errors propagate on purpose so a broken page
         # means no emails and a non-zero exit instead of looking like "no deals today"
         listings = parse_listings(fetch_yahoo_page(RICK_OWENS_URL))
+        # A parsed page is a fresh observation even when it contains no new deals.
+        update_last_seen_at((listing.url for listing in listings), datetime.now(timezone.utc))
         for item in items:
             if item.effective_price_usd is None:
                 print(f"Skipping {item.name}: no usable market price.")
