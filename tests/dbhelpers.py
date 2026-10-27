@@ -1,7 +1,7 @@
-"""Plain-sqlite3 helpers shared by the RC-03a tests.
+"""Plain-sqlite3 helpers shared by database and migration tests.
 
 They deliberately bypass db.get_connection so they work on legacy (version 0)
-and current (version 1) databases alike, and never trigger the version check.
+and current (version 2) databases alike, and never trigger the version check.
 """
 import hashlib
 import sqlite3
@@ -12,6 +12,7 @@ TABLE_ORDER = {
     "item_keywords": "item_id, keyword",
     "listings": "id",
     "listing_matches": "listing_id, item_id",
+    "ebay_listing_prices": "item_id, first_seen_at, ebay_listing_id",
 }
 
 
@@ -44,7 +45,8 @@ def dump_table(path, table):
 
 def dump_all(path):
     """Every table's full rows, ordered by primary key."""
-    return {t: dump_table(path, t) for t in TABLE_ORDER}
+    present = {r[0] for r in rows(path, "SELECT name FROM sqlite_master WHERE type = 'table'")}
+    return {t: dump_table(path, t) for t in TABLE_ORDER if t in present}
 
 
 def user_version(path):

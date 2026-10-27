@@ -60,9 +60,9 @@ def test_rc03a_c13_seed_writes_expected_rows(seeded_db):
     assert keyword_sets(seeded_db) == {
         "rick owens ramones": {
             "include": {"ramones", "ramon"},
-            "exclude": {"drkshdw", "canvas", "low"},
+            "exclude": {"drkshdw", "canvas", "low", "fake"},
         },
-        "pod shorts": {"include": {"pod short", "pod shorts"}, "exclude": {"pants"}},
+        "pod shorts": {"include": {"pod short", "pod shorts"}, "exclude": {"pants", "fake"}},
     }
 
 
@@ -336,7 +336,7 @@ def test_rc03a_c28_real_catalog_has_the_resolved_values():
     by_name = {e.name: e for e in db.validate_catalog(parsed)}
 
     assert by_name["pod shorts"].keywords == ("pod short", "ポッドショーツ", "pod shorts")
-    assert by_name["pod shorts"].exclude_keywords == ("pants",)
+    assert by_name["pod shorts"].exclude_keywords == ("pants", "fake")
     assert by_name["pod shorts"].search_query == "rick owens pod shorts"
     assert by_name["rick owens ramones"].search_query == "rick owens ramones"
 
@@ -349,7 +349,7 @@ def test_rc17_c15_seeded_database_has_three_pod_includes_and_existing_exclude(
 
     assert keyword_sets(temp_db)["pod shorts"] == {
         "include": {"pod short", "ポッドショーツ", "pod shorts"},
-        "exclude": {"pants"},
+        "exclude": {"pants", "fake"},
     }
 
 
@@ -363,7 +363,7 @@ def test_rc03a_c29_validate_catalog_returns_normalized_entries():
             search_query="rick owens ramones",
             manual_price_usd=800.0,
             keywords=("ramones", "ramon"),
-            exclude_keywords=("drkshdw", "canvas", "low"),
+            exclude_keywords=("drkshdw", "canvas", "low", "fake"),
         ),
         db.CatalogEntry(
             brand="Rick Owens",
@@ -371,7 +371,7 @@ def test_rc03a_c29_validate_catalog_returns_normalized_entries():
             search_query="pod shorts",
             manual_price_usd=300.0,
             keywords=("pod short", "pod shorts"),
-            exclude_keywords=("pants",),
+            exclude_keywords=("pants", "fake"),
         ),
     ]
 
@@ -406,9 +406,9 @@ def test_rc03a_c27_seeding_a_migrated_legacy_database_keeps_ids_and_prices(legac
     assert keyword_sets(legacy_db) == {
         "rick owens ramones": {
             "include": {"ramones", "ramon"},
-            "exclude": {"drkshdw", "canvas", "low"},
+            "exclude": {"drkshdw", "canvas", "low", "fake"},
         },
-        "pod shorts": {"include": {"pod short", "pod shorts"}, "exclude": {"pants"}},
+        "pod shorts": {"include": {"pod short", "pod shorts"}, "exclude": {"pants", "fake"}},
     }
     assert "high top" not in {r[0] for r in rows(legacy_db, "SELECT keyword FROM item_keywords")}
     assert dump_table(legacy_db, "listings") == legacy_before["listings"]

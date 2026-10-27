@@ -7,7 +7,7 @@ import pytest
 
 import db
 
-TABLES = ["brands", "items", "item_keywords", "listings", "listing_matches"]
+TABLES = ["brands", "items", "item_keywords", "listings", "listing_matches", "ebay_listing_prices"]
 
 
 def _count(conn, table):
@@ -18,7 +18,7 @@ def _brand_id(conn):
     return conn.execute("SELECT id FROM brands WHERE name = 'Rick Owens'").fetchone()["id"]
 
 
-def test_c22_init_db_twice_leaves_five_empty_tables(temp_db, db_conn):
+def test_rc06_c1_init_db_twice_leaves_empty_schema_tables(temp_db, db_conn):
     db.init_db()
     names = {r[0] for r in db_conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     for table in TABLES:
@@ -47,9 +47,9 @@ def test_c23_seed_inserts_brand_items_and_keywords(seeded_db, db_conn):
         kws.setdefault((r["n"], r["kind"]), set()).add(r["k"])
     assert kws == {
         ("rick owens ramones", "include"): {"ramones", "ramon"},
-        ("rick owens ramones", "exclude"): {"drkshdw", "canvas", "low"},
+        ("rick owens ramones", "exclude"): {"drkshdw", "canvas", "low", "fake"},
         ("pod shorts", "include"): {"pod short", "pod shorts"},
-        ("pod shorts", "exclude"): {"pants"},
+        ("pod shorts", "exclude"): {"pants", "fake"},
     }
 
 
@@ -58,11 +58,11 @@ def test_c24_seeding_twice_does_not_duplicate_rows(seeded_db, db_conn):
     db.seed_from_catalog()
     after = {t: _count(db_conn, t) for t in ("brands", "items", "item_keywords")}
     assert before == after
-    assert before == {"brands": 1, "items": 2, "item_keywords": 8}
+    assert before == {"brands": 1, "items": 2, "item_keywords": 10}
     kinds = dict(
         db_conn.execute("SELECT kind, COUNT(*) FROM item_keywords GROUP BY kind").fetchall()
     )
-    assert kinds == {"include": 4, "exclude": 4}
+    assert kinds == {"include": 4, "exclude": 6}
 
 
 def test_c25_insert_new_listing_returns_true_and_stores_utc_timestamps(seeded_db, db_conn):
@@ -170,7 +170,7 @@ def test_rc03a_c30_get_tracked_items_returns_full_configuration(seeded_db, db_co
             name="rick owens ramones",
             search_query="rick owens ramones",
             keywords=("ramon", "ramones"),
-            exclude_keywords=("canvas", "drkshdw", "low"),
+            exclude_keywords=("canvas", "drkshdw", "fake", "low"),
             manual_price_usd=800.0,
             market_price_usd=None,
         ),
@@ -181,7 +181,7 @@ def test_rc03a_c30_get_tracked_items_returns_full_configuration(seeded_db, db_co
             name="pod shorts",
             search_query="pod shorts",
             keywords=("pod short", "pod shorts"),
-            exclude_keywords=("pants",),
+            exclude_keywords=("fake", "pants"),
             manual_price_usd=300.0,
             market_price_usd=None,
         ),
