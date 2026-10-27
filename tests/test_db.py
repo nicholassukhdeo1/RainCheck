@@ -327,3 +327,42 @@ def test_rc03b_c46_insert_listing_with_unknown_brand_raises_and_leaks_no_connect
 
     leaks = [w for w in caught if issubclass(w.category, ResourceWarning)]
     assert leaks == []
+
+
+# ---- RC-15 get_known_listing_urls (criteria 35-38) -----------------------------------
+
+
+def test_rc15_c35_returns_only_the_stored_urls_for_lists_and_generators(seeded_db):
+    brand_id = db.get_tracked_items()[0].brand_id
+    db.insert_listing(brand_id, "https://x/1", "T1", 1000, None)
+    db.insert_listing(brand_id, "https://x/2", "T2", 2000, None)
+    assert db.get_known_listing_urls(["https://x/1", "https://x/3", "https://x/1"]) == {"https://x/1"}
+    gen = (u for u in ["https://x/1", "https://x/3", "https://x/1"])
+    assert db.get_known_listing_urls(gen) == {"https://x/1"}
+
+
+def test_rc15_c36_no_urls_returns_empty_set_without_opening_the_database(tmp_path):
+    path = tmp_path / "test.db"
+    assert not path.exists()
+    assert db.get_known_listing_urls([]) == set()
+    assert db.get_known_listing_urls(iter(())) == set()
+    assert not path.exists()
+
+
+def test_rc15_c37_lookup_writes_nothing_and_leaks_no_connection(seeded_db):
+    from dbhelpers import sha256
+
+    brand_id = db.get_tracked_items()[0].brand_id
+    db.insert_listing(brand_id, "https://x/1", "T1", 1000, None)
+    before = sha256(seeded_db)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert db.get_known_listing_urls(["https://x/1", "https://x/9"]) == {"https://x/1"}
+        gc.collect()
+    assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
+    assert sha256(seeded_db) == before
+
+
+def test_rc15_c38_legacy_database_raises_schema_version_error(legacy_db):
+    with pytest.raises(db.SchemaVersionError):
+        db.get_known_listing_urls(["https://x/1"])

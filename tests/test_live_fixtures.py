@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from bs4 import BeautifulSoup
@@ -114,3 +115,32 @@ def test_c53_live_yahoo_next_data_parses_and_has_no_seller_or_cookie_data(fixtur
         assert "prefectureCode" not in d
         if "setCookies" in d:
             assert not d["setCookies"]
+
+
+def test_rc15_c52_digest_from_live_page_round_trips_real_image_urls(fixtures_dir):
+    from datetime import date
+
+    import yahoo_scrape
+    from db import TrackedItem
+    from digest import build_digest
+
+    catalog_path = Path(__file__).resolve().parent.parent / "src" / "catalog.json"
+    entry = [e for e in json.loads(catalog_path.read_text(encoding="utf-8"))
+             if e["item name"] == "rick owens ramones"][0]
+    item = TrackedItem(
+        id=1, brand_id=1, brand=entry["brand"], name=entry["item name"],
+        search_query=entry["search_query"],
+        keywords=tuple(sorted(entry["keywords"])),
+        exclude_keywords=tuple(sorted(entry["exclude_keywords"])),
+        manual_price_usd=100000.0, market_price_usd=None,
+    )
+    listings = yahoo_scrape.parse_listings(_live_html(fixtures_dir))
+    sections = yahoo_scrape.build_sections([item], listings, set())
+    digest = build_digest(sections, date(2026, 10, 26))
+    assert digest is not None and digest.deals, "live fixture produced no deals (test would be vacuous)"
+    soup = BeautifulSoup(digest.html, "html.parser")
+    srcs = [img["src"] for img in soup.find_all("img")]
+    assert srcs == [d.image_url for d in digest.deals]
+    assert all("&" in s for s in srcs)
+    hrefs = [a["href"] for a in soup.find_all("a")]
+    assert hrefs and all(h.startswith("https://") for h in hrefs)

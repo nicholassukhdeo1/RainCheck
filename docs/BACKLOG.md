@@ -212,7 +212,7 @@ The project is locked to Region `us-east-2`.
 
 - **Size:** S
 - **Depends on:** RC-01
-- **Touches:** `src/sendemail.py`, `src/yahoo_scrape.py`
+- **Touches:** `src/sendemail.py`, `src/yahoo_scrape.py`, new `src/digest.py`, `src/db.py` (one read-only function), `tests/conftest.py`, `README.md`
 - **Why:** Today every item sends its own email, even when there are no deals, which produces the empty emails seen during testing.
 - **Scope:** Send one digest per run, skip sending when there are no new deals, and lay deals out as an HTML table with image, price, market price, and discount.
 - **Resume angle:** Designed a daily digest notification.
