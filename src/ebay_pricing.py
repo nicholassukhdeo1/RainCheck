@@ -1,6 +1,6 @@
-import os, base64, requests, statistics, sys, math
+import os, base64, requests, sys, math, re
 from dataclasses import dataclass
-from db import get_tracked_items, update_market_price, SchemaVersionError
+from db import get_tracked_items, record_ebay_listing_prices, SchemaVersionError
 from matching import title_matches
 
 from dotenv import load_dotenv
@@ -11,11 +11,10 @@ EBAY_TIMEOUT_SECONDS = 30
 
 
 @dataclass(frozen=True)
-class PriceEstimate:
-    price_usd: float | None
-    candidate_count: int
-    outlier_count: int
-    retained_count: int
+class ListingPrice:
+    """A matching listing's immutable first observed asking price."""
+    ebay_listing_id: str
+    price_usd: float
 
 
 def get_ebay_token():
@@ -47,37 +46,60 @@ def get_ebay_token():
 # verifying if my ebay token func worked.
 # print(get_ebay_token()[:40])
 
-def ebay_market_price(query, keywords, exclude_keywords, token):
+def _canonical_listing_id(item):
+    """Collapse REST variation IDs to their parent listing when possible."""
+    legacy = item.get("legacyItemId")
+    legacy_id = (
+        legacy if isinstance(legacy, str) and legacy.isascii() and legacy.isdecimal()
+        else None
+    )
+    rest = item.get("itemId")
+    rest_parts = re.fullmatch(r"v1\|(\d+)\|(\d+)", rest) if isinstance(rest, str) else None
+    if legacy_id and rest_parts and legacy_id != rest_parts.group(1):
+        return None
+    if legacy_id:
+        return f"legacy:{legacy_id}"
+    if rest_parts:
+        return f"legacy:{rest_parts.group(1)}"
+    if isinstance(rest, str) and rest.strip():
+        return f"rest:{rest}"
+    return None
 
-    # bearer means that we have already gotten the token
-    currListing = requests.get("https://api.ebay.com/buy/browse/v1/item_summary/search",headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"}
-                               ,params={"q": query,"limit": 50}, timeout=EBAY_TIMEOUT_SECONDS)
-    currListing.raise_for_status()
 
-    data = currListing.json()
+def ebay_listing_prices(query, keywords, exclude_keywords, token):
+    """Fetch the first page and return validated fixed-price listing observations."""
+    response = requests.get(
+        "https://api.ebay.com/buy/browse/v1/item_summary/search",
+        headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
+        params={"q": query, "limit": 50, "sort": "newlyListed"},
+        timeout=EBAY_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+
+    data = response.json()
     if not isinstance(data, dict):
         raise ValueError("eBay search response must be an object")
     items = data.get("itemSummaries", [])
     if not isinstance(items, list):
         raise ValueError("eBay itemSummaries must be a list")
 
-    prices = []
+    listings = []
     seen_ids = set()
+    fallback_count = 0
     for item in items:
         if not isinstance(item, dict):
             continue
-        item_id = item.get("itemId")
+        options = item.get("buyingOptions")
+        if not isinstance(options, list) or "FIXED_PRICE" not in options:
+            continue
         title = item.get("title")
         price = item.get("price")
+        listing_id = _canonical_listing_id(item)
         if (
-            not isinstance(item_id, str) or not item_id.strip()
-            or not isinstance(title, str)
-            or not isinstance(price, dict)
-            or price.get("currency") != "USD"
-            or item_id in seen_ids
+            listing_id is None or not isinstance(title, str)
+            or not isinstance(price, dict) or price.get("currency") != "USD"
         ):
             continue
-        # the shared matcher (also used by the Yahoo job) decides what counts as this item
         if not title_matches(title, keywords, exclude_keywords):
             continue
         value = price.get("value")
@@ -87,31 +109,16 @@ def ebay_market_price(query, keywords, exclude_keywords, token):
             amount = float(value)
         except (ValueError, OverflowError):
             continue
-        if not math.isfinite(amount) or amount <= 0:
+        if not math.isfinite(amount) or amount <= 0 or listing_id in seen_ids:
             continue
-        # Mark an ID seen only after validation, so a later valid copy can count.
-        seen_ids.add(item_id)
-        prices.append(amount)
-
-    if not prices:
-        return PriceEstimate(None, 0, 0, 0)
-
-    median = statistics.median(prices)
-    mad = statistics.median(abs(price - median) for price in prices)
-    if mad == 0:
-        retained = [price for price in prices if price == median]
-    else:
-        # Use the original median and MAD for one filtering pass.
-        cutoff = 3.5 * 1.4826 * mad
-        retained = [price for price in prices if abs(price - median) <= cutoff]
-
-    retained_count = len(retained)
-    return PriceEstimate(
-        statistics.median(retained) if retained_count >= 5 else None,
-        len(prices),
-        len(prices) - retained_count,
-        retained_count,
-    )
+        # Only a valid first row claims the canonical ID; malformed copies do not.
+        seen_ids.add(listing_id)
+        if listing_id.startswith("rest:"):
+            fallback_count += 1
+        listings.append(ListingPrice(listing_id, amount))
+    if fallback_count:
+        print(f"eBay search used {fallback_count} opaque listing ID fallback(s).")
+    return tuple(listings)
 
 def refresh_market_prices():
 
@@ -129,28 +136,25 @@ def refresh_market_prices():
         query = item.search_query or item.name
         print(f'Pricing {item.name} with eBay query "{query}"')
 
-        estimate = ebay_market_price(query, item.keywords, item.exclude_keywords, my_token)
+        listings = ebay_listing_prices(query, item.keywords, item.exclude_keywords, my_token)
+        result = record_ebay_listing_prices(item.id, listings)
         print(
-            f"{item.name}: {estimate.candidate_count} candidates, "
-            f"{estimate.outlier_count} outliers, {estimate.retained_count} retained."
+            f"{item.name}: {result.new_count} new, {result.duplicate_count} duplicate; "
+            f"{result.candidate_count} cumulative candidates, {result.outlier_count} outliers, "
+            f"{result.retained_count} retained."
         )
-        if estimate.price_usd is None:
-            if estimate.candidate_count == 0:
-                print(f"No valid matching eBay listings for {item.name}; insufficient sample, market price not updated.")
-            else:
-                print(f"Insufficient retained eBay listings for {item.name} (need 5); market price not updated.")
-            continue
-
-        # The database still owns the final usable-price check before writing.
-        try:
-            stored = update_market_price(item.id, estimate.price_usd)
-        except ValueError:
-            print(f"eBay estimate for {item.name} is not a usable price; market price not updated.")
-            continue
-        if stored:
-            print(f"Stored eBay estimate for {item.name}: {estimate.price_usd} USD.")
-        else:
+        if result.price_updated:
+            print(f"Stored all-time eBay arithmetic mean for {item.name}: {result.mean_usd} USD.")
+        elif result.new_count == 0 and result.candidate_count == 0:
+            print(f"No valid matching eBay listings for {item.name}; insufficient sample, market price preserved.")
+        elif result.new_count == 0:
+            print(f"No new eBay listing IDs for {item.name}; current market price preserved.")
+        elif result.mean_usd is None:
+            print(f"Insufficient retained eBay listings for {item.name} (need 5); market price preserved.")
+        elif not result.item_found:
             print(f"Item {item.name} no longer exists; market price not stored.")
+        else:
+            print(f"No retained-price update for {item.name}; current market price preserved.")
 
 
 def main():

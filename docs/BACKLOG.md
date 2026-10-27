@@ -92,14 +92,14 @@ These change the schema, so they run one at a time.
   The planner should investigate whether ended auctions and final prices can be detected reliably, and propose that as a separate item if not.
 - **Resume angle:** Tracked listing lifecycle over time with upserts.
 
-### RC-06: Market price history
+### RC-06: Distinct listing price pool
 
 - **Size:** M
 - **Depends on:** RC-03b
 - **Touches:** `src/schema.sql`, `src/db.py`, `src/ebay_pricing.py`
-- **Why:** Each pricing run overwrites the last one, so there is no record of how an item's market price moves.
-- **Scope:** Add a history table storing item, median price, sample size, and timestamp for every run, keeping `items.market_price_usd` as the latest value.
-- **Resume angle:** Time-series price history enabling trend analysis.
+- **Why:** Each pricing run previously overwrote the last estimate and repeatedly counted listings that remained active across days.
+- **Scope:** Store one immutable first-observed asking price per distinct eBay listing and item, then calculate the all-time MAD-filtered arithmetic mean from retained listing prices.
+- **Resume angle:** Persistent listing-level evidence for a stable, all-time market price estimate.
 
 ---
 

@@ -1,4 +1,4 @@
--- Schema version 1 (PRAGMA user_version = 1).
+-- Schema version 2 (PRAGMA user_version = 2).
 -- This file always describes the LATEST version, and it is only used to create
 -- a brand new database. An existing database is upgraded by MIGRATIONS in
 -- db.py instead, because CREATE TABLE IF NOT EXISTS cannot add a column to a
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS brands (
 -- items: one row per tracked item.
 -- Two prices on purpose, each with exactly one writer:
 --   manual_price_usd  = the fallback price typed in catalog.json (written only by seeding)
---   market_price_usd  = the latest eBay-derived price (written only by update_market_price)
+--   market_price_usd  = the eBay-derived price (written by the listing pool or compatibility setter)
 -- so re-seeding can never overwrite an eBay price.
 -- active = 0 means "removed from catalog.json"; we keep the row (instead of
 -- deleting it) because other tables point at items.id.
@@ -59,3 +59,15 @@ CREATE TABLE IF NOT EXISTS listing_matches (
 
 CREATE INDEX IF NOT EXISTS idx_listings_brand_seen ON listings (brand_id, first_seen_at);
 CREATE INDEX IF NOT EXISTS idx_matches_item        ON listing_matches (item_id);
+
+-- One immutable first-seen asking price per eBay listing and tracked item.
+CREATE TABLE IF NOT EXISTS ebay_listing_prices (
+    item_id         INTEGER NOT NULL REFERENCES items(id),
+    ebay_listing_id TEXT NOT NULL,
+    first_price_usd REAL NOT NULL CHECK (first_price_usd > 0),
+    first_seen_at   TEXT NOT NULL,
+    PRIMARY KEY (item_id, ebay_listing_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ebay_listing_prices_item_seen
+    ON ebay_listing_prices (item_id, first_seen_at, ebay_listing_id);

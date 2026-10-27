@@ -2,6 +2,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import statistics
 from typing import Iterable
 
 import argparse
@@ -21,7 +22,7 @@ CATALOG_PATH = SRC_DIR / "catalog.json"
 # the schema version this code expects. it lives inside the database file
 # itself (PRAGMA user_version), so every database knows which shape it has.
 # schema.sql always describes this version.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # how to upgrade an existing database, one step at a time.
 # the key is the version you END UP at, the value is the statements to get there.
@@ -37,6 +38,16 @@ MIGRATIONS = {
         "ALTER TABLE item_keywords ADD COLUMN kind TEXT NOT NULL DEFAULT 'include' CHECK (kind IN ('include', 'exclude'))",
         # it said 'manual' on every row, so it never carried any information
         "ALTER TABLE items DROP COLUMN market_price_source",
+    ),
+    2: (
+        "CREATE TABLE ebay_listing_prices ("
+        "item_id INTEGER NOT NULL REFERENCES items(id), "
+        "ebay_listing_id TEXT NOT NULL, "
+        "first_price_usd REAL NOT NULL CHECK (first_price_usd > 0), "
+        "first_seen_at TEXT NOT NULL, "
+        "PRIMARY KEY (item_id, ebay_listing_id))",
+        "CREATE INDEX idx_ebay_listing_prices_item_seen "
+        "ON ebay_listing_prices (item_id, first_seen_at, ebay_listing_id)",
     ),
 }
 
@@ -114,6 +125,26 @@ class SeedResult:
     added: tuple[tuple[str, str], ...]        # catalog order
     updated: tuple[tuple[str, str], ...]      # already in the db and still in the catalog
     deactivated: tuple[tuple[str, str], ...]  # no longer in the catalog, in id order
+
+
+@dataclass(frozen=True)
+class EbayListingPrice:
+    """One validated, canonical eBay listing ask in USD."""
+    ebay_listing_id: str
+    price_usd: float
+
+
+@dataclass(frozen=True)
+class PoolResult:
+    """Counts and price produced from one item's cumulative listing pool."""
+    item_found: bool
+    new_count: int
+    duplicate_count: int
+    candidate_count: int
+    outlier_count: int
+    retained_count: int
+    mean_usd: float | None
+    price_updated: bool
 
 
 def get_db_path():
@@ -290,7 +321,11 @@ def _migrate(conn, from_version):
             if conn.in_transaction:
                 conn.execute("ROLLBACK")
             raise
-        print(f"Migrated database at {get_db_path()} from schema version {target - 1} to {target}.")
+    if from_version < SCHEMA_VERSION:
+        print(
+            f"Migrated database at {get_db_path()} from schema version "
+            f"{from_version} to {SCHEMA_VERSION}."
+        )
 
 
 def init_db():
@@ -697,9 +732,110 @@ def update_last_seen_at(urls: Iterable[str], observed_at: datetime) -> int:
             raise
 
 
+def record_ebay_listing_prices(item_id, listings, observed_at=None) -> PoolResult:
+    """Keep first asks permanently and update the current price from the full pool."""
+    if isinstance(item_id, bool) or not isinstance(item_id, int) or item_id <= 0:
+        raise ValueError("item_id must be a positive integer")
+
+    if observed_at is None:
+        timestamp = datetime.now(timezone.utc).isoformat()
+    elif isinstance(observed_at, str):
+        try:
+            parsed = datetime.fromisoformat(observed_at)
+        except ValueError as exc:
+            raise ValueError("observed_at must be an ISO timestamp in UTC") from exc
+        if parsed.utcoffset() != timedelta(0):
+            raise ValueError("observed_at must include a UTC offset")
+        timestamp = parsed.isoformat()
+    else:
+        raise ValueError("observed_at must be an ISO timestamp in UTC")
+
+    validated = []
+    try:
+        for listing in listings:
+            listing_id = listing.ebay_listing_id
+            price = listing.price_usd
+            if (
+                not isinstance(listing_id, str)
+                or not listing_id.strip()
+                or listing_id != listing_id.strip()
+                or not (
+                    listing_id.startswith("legacy:") and bool(listing_id[7:])
+                    or listing_id.startswith("rest:") and bool(listing_id[5:])
+                )
+            ):
+                raise ValueError("listing ID must be a canonical eBay listing ID")
+            if isinstance(price, bool) or not isinstance(price, (int, float)):
+                raise ValueError("listing price must be a finite positive number")
+            price = float(price)
+            if not math.isfinite(price) or price <= 0:
+                raise ValueError("listing price must be a finite positive number")
+            validated.append((listing_id, price))
+    except (AttributeError, TypeError, OverflowError) as exc:
+        raise ValueError("listings must contain valid listing IDs and prices") from exc
+
+    with closing(get_connection()) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if conn.execute("SELECT 1 FROM items WHERE id = ?", (item_id,)).fetchone() is None:
+                conn.commit()
+                return PoolResult(False, 0, 0, 0, 0, 0, None, False)
+
+            new_count = 0
+            for listing_id, price in validated:
+                cursor = conn.execute(
+                    "INSERT INTO ebay_listing_prices "
+                    "(item_id, ebay_listing_id, first_price_usd, first_seen_at) "
+                    "VALUES (?, ?, ?, ?) ON CONFLICT(item_id, ebay_listing_id) DO NOTHING",
+                    (item_id, listing_id, price, timestamp),
+                )
+                new_count += cursor.rowcount
+
+            prices = [row[0] for row in conn.execute(
+                "SELECT first_price_usd FROM ebay_listing_prices WHERE item_id = ? "
+                "ORDER BY first_seen_at, ebay_listing_id",
+                (item_id,),
+            )]
+            candidate_count = len(prices)
+            if prices:
+                median = statistics.median(prices)
+                mad = statistics.median(abs(price - median) for price in prices)
+                if mad == 0:
+                    retained = [price for price in prices if price == median]
+                else:
+                    cutoff = 3.5 * 1.4826 * mad
+                    retained = [
+                        price for price in prices if abs(price - median) <= cutoff
+                    ]
+            else:
+                retained = []
+
+            retained_count = len(retained)
+            outlier_count = candidate_count - retained_count
+            mean_usd = statistics.mean(retained) if retained_count >= 5 else None
+            price_updated = False
+            # A repeated or empty search is read-only for the current price.
+            if new_count and mean_usd is not None:
+                cursor = conn.execute(
+                    "UPDATE items SET market_price_usd = ? WHERE id = ?",
+                    (mean_usd, item_id),
+                )
+                price_updated = cursor.rowcount == 1
+
+            conn.commit()
+            return PoolResult(
+                True, new_count, len(validated) - new_count, candidate_count,
+                outlier_count, retained_count, mean_usd, price_updated,
+            )
+        except BaseException:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
+
+
 def update_market_price(item_id, price):
     """
-    Stores the eBay-derived price. This is the only writer of market_price_usd.
+    Compatibility setter for direct callers; the eBay job uses the listing pool writer.
     Returns True if a row changed, False if no item has that id.
     """
     # checked before opening the database so a bad price never gets near it.
