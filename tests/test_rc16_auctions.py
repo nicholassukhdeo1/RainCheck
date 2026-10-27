@@ -3,6 +3,7 @@ import json
 import sqlite3
 from dataclasses import replace
 from datetime import date, datetime
+from pathlib import Path
 
 import pytest
 from bs4 import BeautifulSoup
@@ -68,6 +69,28 @@ def _record(auction_id="t9000000001", **overrides):
     return row
 
 
+def _read_legacy_v2_rows(path):
+    conn = sqlite3.connect(path)
+    try:
+        return {
+            "brands": conn.execute("SELECT * FROM brands ORDER BY id").fetchall(),
+            "items": conn.execute("SELECT * FROM items ORDER BY id").fetchall(),
+            "item_keywords": conn.execute("SELECT * FROM item_keywords ORDER BY item_id, keyword").fetchall(),
+            "listings": conn.execute(
+                "SELECT id, brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at, "
+                "ended_at, final_price_yen FROM listings ORDER BY id"
+            ).fetchall(),
+            "listing_matches": conn.execute(
+                "SELECT * FROM listing_matches ORDER BY listing_id, item_id"
+            ).fetchall(),
+            "ebay_listing_prices": conn.execute(
+                "SELECT * FROM ebay_listing_prices ORDER BY item_id, ebay_listing_id"
+            ).fetchall(),
+        }
+    finally:
+        conn.close()
+
+
 def _page(records):
     data = {
         "props": {"pageProps": {"initialState": {"search": {"items": {
@@ -77,21 +100,48 @@ def _page(records):
     return '<script id="__NEXT_DATA__">' + json.dumps(data) + "</script>"
 
 
-def _version2_listing(db_conn, item_id):
-    brand_id = db_conn.execute("SELECT id FROM brands LIMIT 1").fetchone()[0]
-    db_conn.execute(
-        "INSERT INTO listings (brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (brand_id, "https://auctions.yahoo.co.jp/jp/auction/legacy", "Legacy", 12345,
-         "https://img.test/old.jpg", "2020-01-01T00:00:00+00:00", "2020-01-02T00:00:00+00:00"),
-    )
-    listing_id = db_conn.execute("SELECT id FROM listings WHERE url LIKE '%legacy'").fetchone()[0]
-    db_conn.execute(
-        "INSERT INTO listing_matches (listing_id, item_id, matched_at) VALUES (?, ?, ?)",
-        (listing_id, item_id, "2020-01-01T00:00:00+00:00"),
-    )
-    db_conn.commit()
-    return listing_id
+@pytest.fixture
+def rc16_version2_db(tmp_path):
+    """Create an actual pre-RC-16 schema-v2 database with rows to preserve."""
+    path = tmp_path / "test.db"
+    assert db.get_db_path() == str(path)
+    conn = sqlite3.connect(path)
+    try:
+        schema_path = Path(__file__).resolve().parent / "fixtures" / "db" / "schema_v2.sql"
+        schema = schema_path.read_text(encoding="utf-8")
+        conn.executescript(schema)
+        conn.execute(
+            "INSERT INTO brands (id, name, yahoo_brand_id) VALUES (?, ?, ?)",
+            (1, "Rick Owens", "103538"),
+        )
+        conn.execute(
+            "INSERT INTO items (id, brand_id, name, manual_price_usd, active) VALUES (?, ?, ?, ?, ?)",
+            (1, 1, "rick owens ramones", 800.0, 1),
+        )
+        conn.execute(
+            "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
+            (1, "ramones", "include"),
+        )
+        conn.execute(
+            "INSERT INTO listings (id, brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (1, 1, "https://auctions.yahoo.co.jp/jp/auction/legacy", "Legacy", 12345,
+             "https://img.test/old.jpg", "2020-01-01T00:00:00+00:00", "2020-01-02T00:00:00+00:00"),
+        )
+        conn.execute(
+            "INSERT INTO listing_matches (listing_id, item_id, matched_at) VALUES (?, ?, ?)",
+            (1, 1, "2020-01-01T00:00:00+00:00"),
+        )
+        conn.execute(
+            "INSERT INTO ebay_listing_prices (item_id, ebay_listing_id, first_price_usd, first_seen_at) "
+            "VALUES (?, ?, ?, ?)",
+            (1, "ebay-legacy", 456.78, "2020-01-01T00:00:00+00:00"),
+        )
+        conn.execute("PRAGMA user_version = 2")
+        conn.commit()
+    finally:
+        conn.close()
+    return path
 
 
 def test_rc16_c1_fresh_schema_has_version_three_metadata_and_constraints(temp_db, db_conn):
@@ -129,50 +179,56 @@ def test_rc16_c1_fresh_schema_has_version_three_metadata_and_constraints(temp_db
         )
 
 
-def test_rc16_c2_c3_v2_migration_preserves_legacy_rows_and_is_idempotent(seeded_db, db_conn):
-    item_id = db_conn.execute("SELECT id FROM items ORDER BY id LIMIT 1").fetchone()[0]
-    _version2_listing(db_conn, item_id)
-    legacy_columns = (
-        "id, brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at, ended_at, final_price_yen"
-    )
-    before_listing = tuple(db_conn.execute(f"SELECT {legacy_columns} FROM listings").fetchone())
-    before_match = tuple(db_conn.execute("SELECT * FROM listing_matches").fetchone())
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 2
+def test_rc16_c2_c3_v2_migration_preserves_legacy_rows_and_is_idempotent(rc16_version2_db):
+    before = _read_legacy_v2_rows(rc16_version2_db)
+    conn = sqlite3.connect(rc16_version2_db)
+    try:
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    finally:
+        conn.close()
 
     db.init_db()
-    columns = "is_fixed_price, buy_now_price_yen, scheduled_end_at"
-    after = db_conn.execute(
-        f"SELECT {columns} FROM listings WHERE url LIKE '%legacy'"
-    ).fetchone()
-    assert tuple(after) == (None, None, None)
-    assert tuple(db_conn.execute(f"SELECT {legacy_columns} FROM listings").fetchone()) == before_listing
-    assert tuple(db_conn.execute("SELECT * FROM listing_matches").fetchone()) == before_match
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    conn = sqlite3.connect(rc16_version2_db)
+    try:
+        columns = "is_fixed_price, buy_now_price_yen, scheduled_end_at"
+        after_metadata = conn.execute(
+            f"SELECT {columns} FROM listings WHERE url = ?",
+            ("https://auctions.yahoo.co.jp/jp/auction/legacy",),
+        ).fetchone()
+        assert tuple(after_metadata) == (None, None, None)
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    finally:
+        conn.close()
+    assert _read_legacy_v2_rows(rc16_version2_db) == before
 
     db.init_db()
-    assert tuple(db_conn.execute(f"SELECT {legacy_columns} FROM listings").fetchone()) == before_listing
-    assert tuple(db_conn.execute("SELECT * FROM listing_matches").fetchone()) == before_match
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert _read_legacy_v2_rows(rc16_version2_db) == before
+    conn = sqlite3.connect(rc16_version2_db)
+    try:
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    finally:
+        conn.close()
 
 
-def test_rc16_c4_failed_migration_rolls_back_columns_and_version(seeded_db, db_conn, monkeypatch):
-    original = db.MIGRATIONS.get(3, ())
+def test_rc16_c4_failed_migration_rolls_back_columns_and_version(rc16_version2_db, monkeypatch):
+    migration = db.MIGRATIONS.get(3, ())
+    if not migration:
+        migration = ("ALTER TABLE listings ADD COLUMN migration_probe TEXT",)
     monkeypatch.setitem(
         db.MIGRATIONS,
         3,
-        (
-            "ALTER TABLE listings ADD COLUMN migration_probe TEXT",
-            "ALTER TABLE table_that_does_not_exist ADD COLUMN failure TEXT",
-        ),
+        migration + ("ALTER TABLE table_that_does_not_exist ADD COLUMN failure TEXT",),
     )
-    monkeypatch.setattr(db, "SCHEMA_VERSION", 3)
     with pytest.raises(sqlite3.OperationalError):
         db.init_db()
-    names = {row[1] for row in db_conn.execute("PRAGMA table_info(listings)")}
-    assert "migration_probe" not in names
-    assert "is_fixed_price" not in names
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 2
-    monkeypatch.setitem(db.MIGRATIONS, 3, original)
+    conn = sqlite3.connect(rc16_version2_db)
+    try:
+        names = {row[1] for row in conn.execute("PRAGMA table_info(listings)")}
+        assert "migration_probe" not in names
+        assert "is_fixed_price" not in names
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    finally:
+        conn.close()
 
 
 def test_rc16_c5_saved_live_fixture_exposes_valid_flags_prices_and_utc_ends(fixtures_dir):
