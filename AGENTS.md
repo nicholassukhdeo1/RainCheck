@@ -23,7 +23,8 @@ It is Python 3 with a SQLite database.
 - `src/sendemail.py` sends email over SMTP, or prints it when `RAINCHECK_DRY_RUN` is set.
 - `scripts/capture_fixtures.py` records live Yahoo and eBay fixtures; only a human runs it (it needs real credentials).
 - `docs/BACKLOG.md` is the prioritized feature list; `docs/specs/` holds one approved spec per feature.
-- `.claude/agents/` defines the planner, test-writer, implementer, reviewer, and verifier roles; use them as checklists.
+- `.codex/agents/` defines the Codex subagents `planner`, `test_writer`, `implementer`, `reviewer`, and `verifier`.
+  They are ported from `.claude/agents/` (the Claude Code versions); keep the two sets in sync when either changes.
 
 ## Setup and commands
 
@@ -54,18 +55,21 @@ It is Python 3 with a SQLite database.
 The user is learning and prioritizes quality, simplicity, robustness, and long-term maintainability over speed.
 Explain what each step does and why, suggest better alternatives, and flag tradeoffs.
 
-Every backlog item goes through these stages in order, and only advances when a stage actually passes:
+The main session is the orchestrator: it runs each stage by asking the matching subagent by name (for example "Have planner write the spec for RC-04"), checks the result itself, and only advances when a stage actually passes.
+Codex does not enforce the subagents' read-only rules or isolate them in separate worktrees, so the orchestrator checks `git status` after each stage and keeps the implementer on the feature branch.
 
-1. **Plan:** write `docs/specs/<ID>-<slug>.md` from `docs/specs/TEMPLATE.md`, with testable acceptance criteria and an explicit out-of-scope list.
+Every backlog item goes through these stages in order:
+
+1. **Plan** (`planner`): write `docs/specs/<ID>-<slug>.md` from `docs/specs/TEMPLATE.md`, with testable acceptance criteria and an explicit out-of-scope list.
    Read every file the feature touches first; confirm external API behavior from official docs.
    Put decisions that belong to the user under "Open questions" with a recommendation.
 2. **Approve:** the user reads and approves the spec; record their decisions in a "Resolved" note.
    Nothing is built from an unapproved spec.
-3. **Test:** write failing tests from the spec (not from an implementation), and confirm each fails for the right reason.
-4. **Implement:** make the tests pass on a feature branch without editing the tests.
-5. **Review:** review the full diff against the spec using `.claude/agents/reviewer.md` as the checklist.
+3. **Test** (`test_writer`): write failing tests from the spec (not from an implementation), and confirm each fails for the right reason.
+4. **Implement** (`implementer`): make the tests pass on a feature branch without editing the tests.
+5. **Review** (`reviewer`): review the full diff against the spec with fresh context.
    Fix findings, including small pre-existing issues you notice (lint, flaky tests, leaks); record spec changes as dated "Amendments".
-6. **Verify:** run the real entry points against a throwaway database with dry run on, as `.claude/agents/verifier.md` describes.
+6. **Verify** (`verifier`): run the real entry points against a throwaway database with dry run on.
    For anything visual (the digest email), render it at phone (375px) and desktop widths and fix layout flaws.
 7. **Merge:** push the branch and open a pull request; the user reviews and merges it.
 
