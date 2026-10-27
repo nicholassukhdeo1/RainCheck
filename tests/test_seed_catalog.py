@@ -195,7 +195,7 @@ def test_rc03a_c19_keywords_are_stripped_lowercased_and_deduplicated(temp_db, tm
 
 @pytest.mark.parametrize("mode", ["missing", "null"])
 def test_rc03a_c20_optional_fields_may_be_missing_or_null(temp_db, tmp_path, mode):
-    entry = {"brand": "Rick Owens", "item name": "bare item", "keywords": ["bare"]}
+    entry = {"brand": "Rick Owens", "yahoo_brand_id": "103538", "item name": "bare item", "keywords": ["bare"]}
     if mode == "null":
         entry.update({"market_price": None, "search_query": None})
 
@@ -304,18 +304,19 @@ def test_rc03a_c24_valid_entry_before_invalid_entry_writes_nothing(seeded_db, tm
     assert dump_all(seeded_db) == before
 
 
-def test_rc03a_c25_second_brand_is_rejected_and_rolled_back(seeded_db, tmp_path):
-    before = dump_all(seeded_db)
+def test_rc13_c5_seed_adds_a_second_brand_with_its_declared_yahoo_id(temp_db, tmp_path):
     data = base_catalog()
-    data[0]["market_price"] = 650
-    data.append({"brand": "Other Brand", "item name": "thing", "keywords": ["thing"]})
+    data.append({
+        "brand": "Other Brand", "yahoo_brand_id": "123456",
+        "item name": "thing", "keywords": ["thing"],
+    })
 
-    with pytest.raises(db.CatalogError) as exc:
-        db.seed_from_catalog(write_catalog(tmp_path, data))
+    db.seed_from_catalog(write_catalog(tmp_path, data))
 
-    assert "Other Brand" in str(exc.value)
-    assert "RC-13" in str(exc.value)
-    assert dump_all(seeded_db) == before
+    assert rows(temp_db, "SELECT name, yahoo_brand_id FROM brands ORDER BY id") == [
+        ("Rick Owens", "103538"), ("Other Brand", "123456")
+    ]
+    assert rows(temp_db, "SELECT name, active FROM items ORDER BY id")[-1] == ("thing", 1)
 
 
 def test_rc03a_c28_real_catalog_is_valid_and_pod_shorts_is_fixed():
@@ -359,6 +360,7 @@ def test_rc03a_c29_validate_catalog_returns_normalized_entries():
     assert entries == [
         db.CatalogEntry(
             brand="Rick Owens",
+            yahoo_brand_id="103538",
             name="rick owens ramones",
             search_query="rick owens ramones",
             manual_price_usd=800.0,
@@ -367,6 +369,7 @@ def test_rc03a_c29_validate_catalog_returns_normalized_entries():
         ),
         db.CatalogEntry(
             brand="Rick Owens",
+            yahoo_brand_id="103538",
             name="pod shorts",
             search_query="pod shorts",
             manual_price_usd=300.0,
