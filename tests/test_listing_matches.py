@@ -131,7 +131,7 @@ def test_rc04_required_item_id_none_raises_integrity_error_without_partial_write
     assert sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches") == []
 
 
-def test_rc04_c8_schema_v1_and_existing_listing_match_rows_are_preserved(seeded_db, db_conn):
+def test_rc04_c8_schema_v3_and_existing_listing_match_rows_are_preserved(seeded_db, db_conn):
     item_id = _ids(db_conn)["rick owens ramones"]
     brand_id = _brand_id(db_conn)
     db.insert_listing(brand_id, "https://x/existing", "Existing", 20000, None)
@@ -145,7 +145,7 @@ def test_rc04_c8_schema_v1_and_existing_listing_match_rows_are_preserved(seeded_
 
     assert db.record_listing_match(brand_id, "https://x/new", "New", 30000, None, item_id) is True
 
-    assert user_version(seeded_db) == 2
+    assert user_version(seeded_db) == 3
     assert [tuple(row) for row in db_conn.execute("SELECT url FROM listings ORDER BY url").fetchall()] == [
         ("https://x/existing",), ("https://x/new",),
     ]
