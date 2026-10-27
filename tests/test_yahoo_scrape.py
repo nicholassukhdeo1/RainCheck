@@ -826,7 +826,7 @@ def test_rc05_c5_and_c11_absent_listing_keeps_ended_fields_and_schema_stays_v1(
         "2020-02-01T00:00:00+00:00",
         12345,
     )
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 2
     assert tuple(db_conn.execute(
         "SELECT ended_at, final_price_yen FROM listings WHERE url = ?", (URL_4,)
     ).fetchone()) == (None, None)
@@ -1057,6 +1057,21 @@ def test_rc03b_c12_item_without_usable_price_is_skipped_with_a_line(
     assert "Skipping rick owens ramones: no usable market price." in capsys.readouterr().out
 
 
+def test_rc06_c24_yahoo_job_rejects_fake_titles_for_both_seeded_items(
+    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn
+):
+    fake_titles = [
+        inline_listing(81, "Rick Owens Fake Ramones High", yen=10000),
+        inline_listing(82, "Rick Owens Fake Pod Shorts", yen=10000),
+    ]
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: fake_titles)
+
+    yahoo_scrape.main()
+
+    assert sent_emails == []
+    assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 0
+
+
 # ---- Fetching and failure behavior (criteria 26-29) --------------------------------
 
 
@@ -1209,7 +1224,7 @@ def test_rc03b_c18_main_with_no_items_prints_one_line_and_returns(
 def test_rc03b_c19_main_on_newer_schema_version_is_a_clean_error(
     temp_db, fake_http, sent_emails, capsys
 ):
-    set_user_version(temp_db, 2)
+    set_user_version(temp_db, 3)
     before = sha256(temp_db)
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()

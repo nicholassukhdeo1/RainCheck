@@ -144,7 +144,7 @@ def test_rc04_c8_schema_v1_and_existing_listing_match_rows_are_preserved(seeded_
 
     assert db.record_listing_match(brand_id, "https://x/new", "New", 30000, None, item_id) is True
 
-    assert user_version(seeded_db) == 1
+    assert user_version(seeded_db) == 2
     assert [tuple(row) for row in db_conn.execute("SELECT url FROM listings ORDER BY url").fetchall()] == [
         ("https://x/existing",), ("https://x/new",),
     ]

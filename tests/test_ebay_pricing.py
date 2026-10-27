@@ -37,7 +37,11 @@ def ebay_http(fake_http, fixtures_dir):
 
 
 def _listing(item_id, title="Rick Owens Ramones High", value="100", currency="USD"):
-    return {"itemId": item_id, "title": title, "price": {"value": value, "currency": currency}}
+    return {
+        "itemId": item_id, "title": title,
+        "price": {"value": value, "currency": currency},
+        "buyingOptions": ["FIXED_PRICE"],
+    }
 
 
 def _summaries(*listings):
@@ -50,7 +54,7 @@ def _valid_prices(values, prefix="item"):
 
 def _price(ebay_pricing, fake_http, response, keywords=RAMONES_KEYWORDS, excludes=EXCLUDES):
     fake_http.add("GET", SEARCH_URL, json=response)
-    return ebay_pricing.ebay_market_price("rick owens ramones", keywords, excludes, "tok")
+    return ebay_pricing.ebay_listing_prices("rick owens ramones", keywords, excludes, "tok")
 
 
 def _stored(db_conn):
@@ -125,17 +129,17 @@ def test_c33_get_ebay_token_sends_basic_auth_and_returns_token(ebay_pricing, cre
     assert kwargs["timeout"] == 30
 
 
-def test_rc09_c12_search_keeps_one_page_request_shape_and_timeout(ebay_pricing, fake_http):
+def test_rc06_c20_search_keeps_one_page_request_shape_and_timeout(ebay_pricing, fake_http):
     result = _price(ebay_pricing, fake_http, _summaries(*_valid_prices([100, 110, 120, 130, 140])))
     calls = [call for call in fake_http.calls if call[0] == "GET"]
     assert len(calls) == 1
     _, url, kwargs = calls[0]
     assert url == SEARCH_URL
-    assert kwargs["params"] == {"q": "rick owens ramones", "limit": 50}
+    assert kwargs["params"] == {"q": "rick owens ramones", "limit": 50, "sort": "newlyListed"}
     assert kwargs["headers"]["Authorization"] == "Bearer tok"
     assert kwargs["headers"]["X-EBAY-C-MARKETPLACE-ID"] == "EBAY_US"
     assert kwargs["timeout"] == 30
-    assert result.price_usd == 120.0
+    assert len(result) == 5
 
 
 def test_c34_get_ebay_token_raises_http_error_on_401(ebay_pricing, creds, fake_http):
@@ -144,275 +148,145 @@ def test_c34_get_ebay_token_raises_http_error_on_401(ebay_pricing, creds, fake_h
         ebay_pricing.get_ebay_token()
 
 
-# --- Existing include/exclude and empty-search behavior --------------------
+# --- Raw listing validation and eBay search contract -----------------------
 
 
-def _fixture_price(ebay_pricing, fake_http, fixtures_dir, keywords, excludes=EXCLUDES, fixture="search_ramones.json"):
-    return _price(ebay_pricing, fake_http, _load(fixtures_dir, fixture), keywords, excludes)
-
-
-def test_c35_median_with_includes_and_excludes(ebay_pricing, ebay_http, fixtures_dir):
-    estimate = _fixture_price(ebay_pricing, ebay_http, fixtures_dir, ["ramones", "ramon"])
-    assert estimate.price_usd == 900.0
-    assert (estimate.candidate_count, estimate.outlier_count, estimate.retained_count) == (6, 0, 6)
-
-
-def test_c36_search_request_shape(ebay_pricing, ebay_http, fixtures_dir):
-    _fixture_price(ebay_pricing, ebay_http, fixtures_dir, ["ramones", "ramon"])
-    gets = [call for call in ebay_http.calls if call[0] == "GET"]
-    assert len(gets) == 1
-    assert gets[0][1] == SEARCH_URL
-    kwargs = gets[0][2]
-    assert kwargs["params"] == {"q": "rick owens ramones", "limit": 50}
-    assert kwargs["headers"]["Authorization"] == "Bearer tok"
-    assert kwargs["headers"]["X-EBAY-C-MARKETPLACE-ID"] == "EBAY_US"
-
-
-def test_c37_case_insensitive_title_matching(ebay_pricing, ebay_http, fixtures_dir):
-    estimate = _fixture_price(ebay_pricing, ebay_http, fixtures_dir, ["ramones"])
-    assert estimate.price_usd == 900.0
-    assert (estimate.candidate_count, estimate.outlier_count, estimate.retained_count) == (5, 0, 5)
-
-
-def test_c38_without_excludes_low_and_canvas_rows_are_candidates(ebay_pricing, ebay_http, fixtures_dir):
-    estimate = _fixture_price(ebay_pricing, ebay_http, fixtures_dir, ["ramones"], excludes=[])
-    assert estimate.price_usd == 900.0
-    assert (estimate.candidate_count, estimate.outlier_count, estimate.retained_count) == (7, 2, 5)
-
-    from matching import title_matches
-
-    titles = [summary["title"] for summary in _load(fixtures_dir, "search_ramones.json")["itemSummaries"]]
-    candidates = [title for title in titles if title_matches(title, ("ramones",), ())]
-    assert any("low" in title.lower() for title in candidates)
-    assert any("canvas" in title.lower() for title in candidates)
-
-
-def test_c39_listing_include_and_exclude_behavior_is_preserved(ebay_pricing, ebay_http, fixtures_dir):
-    estimate = _fixture_price(
-        ebay_pricing, ebay_http, fixtures_dir, ["ramones"], excludes=["low", "drkshdw"]
-    )
-    assert estimate.price_usd == 900.0
-    assert (estimate.candidate_count, estimate.outlier_count, estimate.retained_count) == (5, 0, 5)
-
-
-def test_c40_everything_excluded_returns_empty_estimate(ebay_pricing, ebay_http, fixtures_dir):
-    estimate = _fixture_price(ebay_pricing, ebay_http, fixtures_dir, ["geobasket"], excludes=["geobasket"])
-    assert estimate == ebay_pricing.PriceEstimate(None, 0, 0, 0)
-
-
-@pytest.mark.parametrize("fixture", ["search_empty.json"])
-def test_c41_missing_item_summaries_key_returns_empty_estimate(ebay_pricing, fake_http, fixtures_dir, fixture):
-    estimate = _fixture_price(ebay_pricing, fake_http, fixtures_dir, ["ramones"], fixture=fixture)
-    assert estimate == ebay_pricing.PriceEstimate(None, 0, 0, 0)
-
-
-def test_c42_empty_item_summaries_list_returns_empty_estimate(ebay_pricing, fake_http):
-    estimate = _price(ebay_pricing, fake_http, {"total": 0, "itemSummaries": []}, ["ramones"])
-    assert estimate == ebay_pricing.PriceEstimate(None, 0, 0, 0)
-
-
-# --- Estimation and summary validation -------------------------------------
-
-
-def test_rc09_c1_five_distinct_usd_candidates_return_frozen_median_estimate(
-    ebay_pricing, query_http
+def test_rc06_c14_and_c27_search_returns_observations_and_requests_first_page(
+    ebay_pricing, fake_http
 ):
     response = _summaries(*_valid_prices([100, 110, 120, 130, 140]))
-    query_http.add("rick owens ramones", response)
-    estimate = ebay_pricing.ebay_market_price("rick owens ramones", RAMONES_KEYWORDS, EXCLUDES, "tok")
-    assert estimate == ebay_pricing.PriceEstimate(120.0, 5, 0, 5)
-    with pytest.raises((AttributeError, TypeError)):
-        estimate.price_usd = 999.0
+    results = _price(ebay_pricing, fake_http, response)
+    assert [(r.ebay_listing_id, r.price_usd) for r in results] == [
+        (f"rest:item-{n}", p) for n, p in enumerate((100, 110, 120, 130, 140))
+    ]
+    call = next(call for call in fake_http.calls if call[0] == "GET")
+    assert call[2]["params"] == {
+        "q": "rick owens ramones", "limit": 50, "sort": "newlyListed"
+    }
+    assert call[2]["headers"]["X-EBAY-C-MARKETPLACE-ID"] == "EBAY_US"
+    assert call[2]["timeout"] == 30
 
 
-def test_rc09_c1_refresh_stores_five_candidate_median(
-    ebay_pricing, query_http, creds, seeded_db, db_conn
-):
-    query_http.add("rick owens ramones", _summaries(*_valid_prices([100, 110, 120, 130, 140])))
-    query_http.add("pod shorts", _five_pod_listings())
-    ebay_pricing.refresh_market_prices()
-    assert _stored(db_conn)["rick owens ramones"] == 120.0
-
-
-def test_rc09_c2_four_candidates_are_insufficient_and_do_not_update(
+def test_rc06_c14_legacy_item_id_canonicalizes_variations_and_rejects_disagreement(
     ebay_pricing, fake_http
 ):
-    estimate = _price(ebay_pricing, fake_http, _summaries(*_valid_prices([100, 110, 120, 130])))
-    assert estimate == ebay_pricing.PriceEstimate(None, 4, 0, 4)
+    first = _listing("v1|12345|0", value="100")
+    first["legacyItemId"] = "12345"
+    variation = _listing("v1|12345|987", value="999")
+    variation["legacyItemId"] = "12345"
+    disagree = _listing("v1|54321|0", value="500")
+    disagree["legacyItemId"] = "12345"
+    results = _price(ebay_pricing, fake_http, _summaries(first, variation, disagree))
+    assert [(r.ebay_listing_id, r.price_usd) for r in results] == [("legacy:12345", 100.0)]
 
 
-def test_rc09_c3_mad_filter_removes_extreme_outlier(ebay_pricing, fake_http):
-    estimate = _price(
-        ebay_pricing, fake_http,
-        _summaries(*_valid_prices([100, 105, 110, 115, 120, 1000])),
-    )
-    assert estimate == ebay_pricing.PriceEstimate(110.0, 6, 1, 5)
-
-
-def test_rc09_mad_boundary_value_is_retained(ebay_pricing, fake_http):
-    boundary = 100 + (3.5 * 1.4826 * 10)
-    just_above = math.nextafter(boundary, math.inf)
-    prices = [90, 90, 100, 100, 100, 110, boundary, just_above]
-    estimate = _price(ebay_pricing, fake_http, _summaries(*_valid_prices(prices)))
-    # nextafter creates the closest representable float above the boundary; no
-    # arbitrary epsilon is used, so exact-boundary equality is tested directly.
-    assert estimate == ebay_pricing.PriceEstimate(100.0, 8, 1, 7)
-
-
-def test_rc09_prices_accept_json_numbers_as_well_as_numeric_strings(ebay_pricing, fake_http):
-    response = _summaries(
-        _listing("number-1", value=100),
-        _listing("number-2", value="110"),
-        _listing("number-3", value=120),
-        _listing("number-4", value="130"),
-        _listing("number-5", value=140),
-    )
-    estimate = _price(ebay_pricing, fake_http, response)
-    assert estimate == ebay_pricing.PriceEstimate(120.0, 5, 0, 5)
-
-
-def test_rc09_c4_zero_mad_keeps_only_values_equal_to_median(
+def test_rc06_c14_legacy_fallback_uses_rest_listing_component_then_opaque_id(
     ebay_pricing, fake_http
 ):
-    response = _summaries(*_valid_prices([100, 100, 100, 100, 100, 1000]))
-    estimate = _price(ebay_pricing, fake_http, response)
-    assert estimate == ebay_pricing.PriceEstimate(100.0, 6, 1, 5)
+    valid_rest = _listing("v1|12345|987", value="100")
+    opaque = _listing("old-format-opaque", value="110")
+    results = _price(ebay_pricing, fake_http, _summaries(valid_rest, opaque))
+    assert [(r.ebay_listing_id, r.price_usd) for r in results] == [
+        ("legacy:12345", 100.0), ("rest:old-format-opaque", 110.0)
+    ]
 
 
-def test_rc09_c4_zero_mad_result_is_stored_from_five_retained_listings(
-    ebay_pricing, query_http, creds, seeded_db, db_conn
+def test_rc06_c14_missing_and_invalid_ids_are_skipped(ebay_pricing, fake_http):
+    no_rest_id = _listing("", value="100")
+    no_item_id = {"title": "Rick Owens Ramones High", "price": {"value": "100", "currency": "USD"},
+                  "buyingOptions": ["FIXED_PRICE"]}
+    invalid_legacy = _listing("v1|12345|0", value="110")
+    invalid_legacy["legacyItemId"] = "not-decimal"
+    results = _price(ebay_pricing, fake_http, _summaries(no_rest_id, no_item_id, invalid_legacy))
+    assert [(r.ebay_listing_id, r.price_usd) for r in results] == [("legacy:12345", 110.0)]
+
+
+def test_rc06_c14_first_valid_duplicate_wins_after_malformed_copy(ebay_pricing, fake_http):
+    malformed = _listing("v1|12345|0", value="bad")
+    valid = _listing("v1|12345|1", value="100")
+    repeated = _listing("v1|12345|2", value="999")
+    for row in (malformed, valid, repeated):
+        row["legacyItemId"] = "12345"
+    results = _price(ebay_pricing, fake_http, _summaries(malformed, valid, repeated))
+    assert [(r.ebay_listing_id, r.price_usd) for r in results] == [("legacy:12345", 100.0)]
+
+
+@pytest.mark.parametrize("buying_options", [None, [], ["AUCTION"], "FIXED_PRICE"])
+def test_rc06_c27_auction_only_or_missing_buying_options_are_skipped(
+    ebay_pricing, fake_http, buying_options
 ):
-    response = _summaries(*_valid_prices([100, 100, 100, 100, 100, 1000]))
-    query_http.add("rick owens ramones", response)
-    query_http.add("pod shorts", _five_pod_listings())
-    ebay_pricing.refresh_market_prices()
-    assert _stored(db_conn)["rick owens ramones"] == 100.0
-
-
-def test_rc09_c5_trimmed_sample_below_five_preserves_existing_price(
-    ebay_pricing, fake_http, creds, fixtures_dir, seeded_db, db_conn, capsys
-):
-    # The median/MAD pass retains only the five identical candidates, so this case
-    # also checks the stored result. Four candidates plus a single extreme is tested
-    # separately below through an estimate when no database refresh is needed.
-    response = _summaries(*_valid_prices([100, 100, 100, 100, 100, 1000]))
-    # Make one of the identical rows fail matching, leaving four retained rows.
-    response["itemSummaries"][0]["title"] = "Rick Owens Geobasket"
-    fake_http.add("POST", TOKEN_URL, json=_load(fixtures_dir, "token.json"))
-    fake_http.add("GET", SEARCH_URL, json=response)
-    db_conn.execute("UPDATE items SET market_price_usd = 765 WHERE name = 'rick owens ramones'")
-    db_conn.commit()
-    ebay_pricing.refresh_market_prices()
-    assert _stored(db_conn)["rick owens ramones"] == 765.0
-    output = capsys.readouterr().out
-    assert "insufficient" in output.lower()
-
-
-def test_rc09_c6_deduplicates_valid_ids_and_allows_valid_copy_after_malformed_copy(
-    ebay_pricing, fake_http
-):
-    estimate = _price(
-        ebay_pricing,
-        fake_http,
-        _summaries(
-            _listing("same", value="100"),
-            _listing("same", value="999"),
-            {"itemId": "later-valid", "title": None, "price": {"value": "50", "currency": "USD"}},
-            _listing("later-valid", value="110"),
-            _listing("item-3", value="120"),
-            _listing("item-4", value="130"),
-            _listing("item-5", value="140"),
-        ),
-    )
-    assert estimate == ebay_pricing.PriceEstimate(120.0, 5, 0, 5)
+    row = _listing("auction", value="100")
+    row["buyingOptions"] = buying_options
+    assert _price(ebay_pricing, fake_http, _summaries(row)) == ()
 
 
 @pytest.mark.parametrize(
-    "bad_row",
-    [
-        {"itemId": "x", "price": {"value": "100", "currency": "USD"}},
-        _listing("x", title=None),
-        _listing("x", title=7),
-        _listing("", title="Rick Owens Ramones"),
-        _listing("   ", title="Rick Owens Ramones"),
-        {"itemId": "x", "title": "Rick Owens Ramones", "price": None},
-        {"itemId": "x", "title": "Rick Owens Ramones", "price": []},
-        {"itemId": "x", "title": "Rick Owens Ramones"},
-        _listing("x", currency="JPY"),
-        {"itemId": "x", "title": "Rick Owens Ramones", "price": {"value": 100}},
-        {"itemId": "x", "title": "Rick Owens Ramones", "price": {"currency": "USD"}},
-        _listing("x", value="0"),
-        _listing("x", value="-1"),
-        _listing("x", value="not-a-price"),
-        _listing("x", value=True),
-        _listing("x", value="NaN"),
-        _listing("x", value="Infinity"),
-        _listing("x", value=None),
-        _listing("x", value=[]),
-        None,
-        [],
-    ],
+    "buying_options", [["FIXED_PRICE"], ["FIXED_PRICE", "BEST_OFFER"]]
 )
-def test_rc09_c7_invalid_summary_is_skipped_without_counting_or_raising(
-    ebay_pricing, fake_http, bad_row
+def test_rc06_c27_fixed_price_with_or_without_best_offer_is_eligible(
+    ebay_pricing, fake_http, buying_options
 ):
-    estimate = _price(ebay_pricing, fake_http, _summaries(bad_row))
-    assert estimate == ebay_pricing.PriceEstimate(None, 0, 0, 0)
+    row = _listing("fixed", value="100")
+    row["buyingOptions"] = buying_options
+    assert len(_price(ebay_pricing, fake_http, _summaries(row))) == 1
+
+
+@pytest.mark.parametrize("bad_row", [
+    {"price": {"value": "100", "currency": "USD"}, "title": "Rick Owens Ramones", "buyingOptions": ["FIXED_PRICE"]},
+    _listing("x", title=None), _listing("x", title=7), _listing("", title="Rick Owens Ramones"),
+    _listing("   ", title="Rick Owens Ramones"),
+    {"itemId": "x", "title": "Rick Owens Ramones", "price": None, "buyingOptions": ["FIXED_PRICE"]},
+    {"itemId": "x", "title": "Rick Owens Ramones", "price": [], "buyingOptions": ["FIXED_PRICE"]},
+    {"itemId": "x", "title": "Rick Owens Ramones", "price": {"value": "100"}, "buyingOptions": ["FIXED_PRICE"]},
+    _listing("x", currency="JPY"), _listing("x", value="0"), _listing("x", value="-1"),
+    _listing("x", value="bad"), _listing("x", value=True), _listing("x", value="NaN"),
+    _listing("x", value="Infinity"), _listing("x", value=None), _listing("x", value=[]),
+    None, [],
+])
+def test_rc06_c15_malformed_listing_summary_is_skipped(ebay_pricing, fake_http, bad_row):
+    assert _price(ebay_pricing, fake_http, _summaries(bad_row)) == ()
 
 
 @pytest.mark.parametrize("response", [{"itemSummaries": []}, {"total": 0}])
-def test_rc09_c8_empty_or_missing_summaries_returns_zero_counts_and_refresh_preserves_price(
+def test_rc06_empty_or_missing_search_results_return_no_observations(
     ebay_pricing, fake_http, response
 ):
-    estimate = _price(ebay_pricing, fake_http, response)
-    assert estimate == ebay_pricing.PriceEstimate(None, 0, 0, 0)
+    assert _price(ebay_pricing, fake_http, response) == ()
 
 
-@pytest.mark.parametrize("response", [None, [], "bad", {"itemSummaries": None}, {"itemSummaries": {}}])
-def test_rc09_c9_malformed_response_container_raises_value_error(
+@pytest.mark.parametrize(
+    "response", [None, [], "bad", {"itemSummaries": None}, {"itemSummaries": {}}]
+)
+def test_rc06_c15_malformed_response_container_raises_value_error(
     ebay_pricing, fake_http, response
 ):
     if response is None:
         fake_http.add("GET", SEARCH_URL, text="null")
         with pytest.raises(ValueError):
-            ebay_pricing.ebay_market_price("rick owens ramones", RAMONES_KEYWORDS, EXCLUDES, "tok")
-        return
-    with pytest.raises(ValueError):
-        _price(ebay_pricing, fake_http, response)
-
-
-def test_rc09_c9_refresh_malformed_container_does_not_update_or_search_later_items(
-    ebay_pricing, creds, query_http, seeded_db, db_conn
-):
-    query_http.add("rick owens ramones", [])
-    query_http.add("pod shorts", _five_pod_listings())
-    db_conn.execute("UPDATE items SET market_price_usd = 765 WHERE name = 'rick owens ramones'")
-    db_conn.commit()
-    with pytest.raises(ValueError):
-        ebay_pricing.refresh_market_prices()
-    assert _stored(db_conn)["rick owens ramones"] == 765.0
-    assert query_http.queries() == ["rick owens ramones"]
+            ebay_pricing.ebay_listing_prices(
+                "rick owens ramones", RAMONES_KEYWORDS, EXCLUDES, "tok"
+            )
+    else:
+        with pytest.raises(ValueError):
+            _price(ebay_pricing, fake_http, response)
 
 
 # --- Refresh behavior and database preservation ----------------------------
 
 
-def test_rc09_c2_refresh_skips_update_for_four_candidate_estimate(
-    ebay_pricing, creds, query_http, seeded_db, db_conn, capsys, monkeypatch
+def test_rc06_c7_refresh_stores_four_observations_but_preserves_prior_price(
+    ebay_pricing, creds, query_http, seeded_db, db_conn, capsys
 ):
-    calls = []
-    update = ebay_pricing.update_market_price
-
-    def recording_update(*args):
-        calls.append(args)
-        return update(*args)
-
-    monkeypatch.setattr(ebay_pricing, "update_market_price", recording_update)
+    db_conn.execute("UPDATE items SET market_price_usd = 765 WHERE name = 'rick owens ramones'")
+    db_conn.commit()
     query_http.add("rick owens ramones", _summaries(*_valid_prices([100, 110, 120, 130])))
     query_http.add("pod shorts", _five_pod_listings())
     ebay_pricing.refresh_market_prices()
-    assert _stored(db_conn) == {"rick owens ramones": None, "pod shorts": 300.0}
-    assert len(calls) == 1
+    assert _stored(db_conn) == {"rick owens ramones": 765.0, "pod shorts": 300.0}
+    assert db_conn.execute(
+        "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
+        (db.get_item_id("Rick Owens", "rick owens ramones"),),
+    ).fetchone()[0] == 4
     assert "insufficient" in capsys.readouterr().out.lower()
 
 
@@ -461,6 +335,17 @@ def test_rc09_c10_refresh_prints_counts_and_estimate_without_raw_listing_data(
     assert all(f"{price} - " not in output for price in (100, 110, 120, 130, 140))
 
 
+def test_rc06_c18_malformed_completed_search_writes_nothing_and_stops_later_items(
+    ebay_pricing, creds, query_http, seeded_db, db_conn
+):
+    query_http.add("rick owens ramones", [])
+    query_http.add("pod shorts", _five_pod_listings())
+    with pytest.raises(ValueError):
+        ebay_pricing.refresh_market_prices()
+    assert query_http.queries() == ["rick owens ramones"]
+    assert db_conn.execute("SELECT COUNT(*) FROM ebay_listing_prices").fetchone()[0] == 0
+
+
 def test_rc09_c11_insufficient_first_item_does_not_prevent_later_item_pricing(
     ebay_pricing, creds, query_http, seeded_db, db_conn
 ):
@@ -482,6 +367,14 @@ def test_rc09_c11_http_500_stops_before_later_item_and_preserves_failing_price(
         ebay_pricing.refresh_market_prices()
     assert _stored(db_conn) == {"rick owens ramones": 120.0, "pod shorts": 765.0}
     assert query_http.queries() == ["rick owens ramones", "pod shorts"]
+    assert db_conn.execute(
+        "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
+        (db.get_item_id("Rick Owens", "rick owens ramones"),),
+    ).fetchone()[0] == 5
+    assert db_conn.execute(
+        "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
+        (db.get_item_id("Rick Owens", "pod shorts"),),
+    ).fetchone()[0] == 0
     output = capsys.readouterr().out
     failing_item_output = output.split('Pricing pod shorts with eBay query "pod shorts"', 1)[1]
     assert not any(label in failing_item_output.lower() for label in ("candidate", "outlier", "retained"))
@@ -499,6 +392,14 @@ def test_rc09_c11_timeout_stops_run_before_later_item(
     assert _stored(db_conn)["rick owens ramones"] == 120.0
     assert _stored(db_conn)["pod shorts"] == 765.0
     assert query_http.queries() == ["rick owens ramones", "pod shorts"]
+    assert db_conn.execute(
+        "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
+        (db.get_item_id("Rick Owens", "rick owens ramones"),),
+    ).fetchone()[0] == 5
+    assert db_conn.execute(
+        "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
+        (db.get_item_id("Rick Owens", "pod shorts"),),
+    ).fetchone()[0] == 0
     output = capsys.readouterr().out
     failing_item_output = output.split('Pricing pod shorts with eBay query "pod shorts"', 1)[1]
     assert not any(label in failing_item_output.lower() for label in ("candidate", "outlier", "retained"))
@@ -529,19 +430,20 @@ def test_rc09_c13_skipped_updates_preserve_ebay_and_manual_prices_and_effective_
     assert tracked["pod shorts"].effective_price_usd == 333.0
 
 
-def test_rc09_c14_readme_describes_sample_threshold_trimming_and_counts():
+def test_rc06_c20_readme_describes_permanent_listing_pool_and_coverage_limit():
     from pathlib import Path
 
     text = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8").lower()
     assert "first 50" in text
     assert "five" in text or "5 " in text
     assert "distinct" in text
-    assert "retained" in text
+    assert "all-time" in text
+    assert "arithmetic mean" in text
     assert "median absolute deviation" in text or "mad" in text
     assert "3.5" in text
     assert "outlier" in text
     assert "count" in text
-    assert "not stored" in text or "aren't stored" in text
+    assert "listing history" in text
 
 
 # ---- Preserved RC-03b job/database regression coverage --------------------
@@ -563,7 +465,7 @@ def test_c13_refresh_works_from_unrelated_cwd(
     row = db_conn.execute(
         "SELECT market_price_usd FROM items WHERE name='rick owens ramones'"
     ).fetchone()
-    assert row["market_price_usd"] == 900.0
+    assert row["market_price_usd"] == pytest.approx(5300 / 6)
 
 
 def test_c43_refresh_one_token_searches_each_item_and_updates_supported_prices(
@@ -576,7 +478,7 @@ def test_c43_refresh_one_token_searches_each_item_and_updates_supported_prices(
         row["name"]: row["market_price_usd"]
         for row in db_conn.execute("SELECT name, market_price_usd FROM items")
     }
-    assert prices == {"rick owens ramones": 900.0, "pod shorts": None}
+    assert prices == {"rick owens ramones": pytest.approx(5300 / 6), "pod shorts": None}
     assert db.get_market_price("Rick Owens", "pod shorts") == 300.0
 
 
@@ -585,10 +487,10 @@ def test_c44_main_requests_exactly_one_token(ebay_pricing, creds, ebay_http, see
     assert len([call for call in ebay_http.calls if call[0] == "POST" and call[1] == TOKEN_URL]) == 1
 
 
-def test_rc03b_c22_ebay_market_price_keeps_four_argument_signature(ebay_pricing):
+def test_rc06_ebay_listing_prices_keeps_four_argument_signature(ebay_pricing):
     import inspect
 
-    assert list(inspect.signature(ebay_pricing.ebay_market_price).parameters) == [
+    assert list(inspect.signature(ebay_pricing.ebay_listing_prices).parameters) == [
         "query", "keywords", "exclude_keywords", "token",
     ]
 
@@ -600,6 +502,7 @@ def test_rc03b_c23_search_uses_each_items_search_query_in_order(
     assert [call[2]["params"]["q"] for call in ebay_http.calls if call[0] == "GET"] == [
         "rick owens ramones", "pod shorts",
     ]
+    assert all(call[2]["params"].get("sort") == "newlyListed" for call in ebay_http.calls if call[0] == "GET")
 
 
 def test_rc03b_c24_null_search_query_falls_back_to_item_name(
@@ -621,7 +524,24 @@ def test_rc03b_c25_database_excludes_apply_per_item(
 ):
     _ramones_and_pods(query_http, fixtures_dir)
     ebay_pricing.refresh_market_prices()
-    assert _stored(db_conn) == {"rick owens ramones": 900.0, "pod shorts": 300.0}
+    assert _stored(db_conn) == {"rick owens ramones": pytest.approx(5300 / 6), "pod shorts": 300.0}
+
+
+def test_rc06_c24_ebay_job_does_not_store_fake_titles_for_either_item(
+    ebay_pricing, creds, query_http, seeded_db, db_conn
+):
+    query_http.add(
+        "rick owens ramones",
+        _summaries(_listing("v1|8001|0", "Rick Owens Fake Ramones High", "100")),
+    )
+    query_http.add(
+        "pod shorts",
+        _summaries(_listing("v1|8002|0", "Rick Owens Fake Pod Shorts", "100")),
+    )
+
+    ebay_pricing.refresh_market_prices()
+
+    assert db_conn.execute("SELECT COUNT(*) FROM ebay_listing_prices").fetchone()[0] == 0
 
 
 def test_rc03b_c26_inactive_items_are_not_searched(
@@ -668,7 +588,7 @@ def test_rc03b_c29_http_error_stops_run_but_keeps_earlier_prices(
     _ramones_and_pods(query_http, fixtures_dir, pods={"errors": []}, pods_status=500)
     with pytest.raises(requests.HTTPError):
         ebay_pricing.refresh_market_prices()
-    assert _stored(db_conn) == {"rick owens ramones": 900.0, "pod shorts": None}
+    assert _stored(db_conn) == {"rick owens ramones": pytest.approx(5300 / 6), "pod shorts": None}
 
 
 def _assert_clean_schema_error(capsys, fake_http, exc, needle="python3 src/db.py"):
@@ -715,7 +635,7 @@ def test_rc03b_c33_refresh_does_not_read_catalog_json(
 ):
     monkeypatch.setattr(db, "CATALOG_PATH", tmp_path / "does_not_exist.json")
     ebay_pricing.refresh_market_prices()
-    assert _stored(db_conn)["rick owens ramones"] == 900.0
+    assert _stored(db_conn)["rick owens ramones"] == pytest.approx(5300 / 6)
     assert not hasattr(ebay_pricing, "load_catalog")
     assert not hasattr(ebay_pricing, "get_item_id")
 

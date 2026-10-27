@@ -145,13 +145,13 @@ def _real_entries():
 def test_rc03b_c44_real_catalog_ramones_keywords_in_catalog_order():
     ramones = _real_entries()["rick owens ramones"]
     assert ramones.keywords == ("ramones", "ramon", "ラモーンズ")
-    assert ramones.exclude_keywords == ("drkshdw", "canvas", "low", "ローカット")
+    assert ramones.exclude_keywords == ("drkshdw", "canvas", "low", "ローカット", "fake")
 
 
 def test_rc17_c13_real_catalog_pod_shorts_has_plural_keyword():
     pods = _real_entries()["pod shorts"]
     assert pods.keywords == ("pod short", "ポッドショーツ", "pod shorts")
-    assert pods.exclude_keywords == ("pants",)
+    assert pods.exclude_keywords == ("pants", "fake")
     assert pods.search_query == "rick owens pod shorts"
 
 
@@ -159,6 +159,28 @@ def test_rc17_c14_real_catalog_plural_keyword_matches_plural_title(title_matches
     pods = _real_entries()["pod shorts"]
     assert title_matches("Rick Owens Pod Shorts", pods.keywords, ("pants",)) is True
     assert title_matches("Rick Owens Pod Shorts", ("pod short",), ()) is False
+
+
+@pytest.mark.parametrize(
+    ("title", "includes"),
+    [
+        ("Rick Owens Fake Ramones", ("ramones", "ramon", "ラモーンズ")),
+        ("Rick Owens Fake Pod Shorts", ("pod short", "ポッドショーツ", "pod shorts")),
+    ],
+)
+def test_rc06_c23_catalog_fake_exclusion_is_whole_word(title_matches, title, includes):
+    assert title_matches(title, includes, ("fake",)) is False
+    assert title_matches(title.replace("Fake", "Fakeout"), includes, ("fake",)) is True
+
+
+def test_rc06_c22_sample_catalog_appends_only_fake_to_existing_excludes():
+    sample = json.loads((REPO_ROOT / "tests/fixtures/catalog.json").read_text(encoding="utf-8"))
+    assert [entry["keywords"] for entry in sample] == [
+        ["ramones", "ramon"], ["pod short", "pod shorts"]
+    ]
+    assert [entry["exclude_keywords"] for entry in sample] == [
+        ["drkshdw", "canvas", "low", "fake"], ["pants", "fake"]
+    ]
 
 
 def _old_substring_match(title, keywords, exclude_keywords):

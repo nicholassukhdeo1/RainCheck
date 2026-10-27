@@ -69,11 +69,13 @@ def test_rc02_c6_main_seed_produces_catalog_rows(fresh_path, test_catalog):
         "ORDER BY i.name, k.kind, k.keyword",
     )
     assert kws == [
+        ("pod shorts", "exclude", "fake"),
         ("pod shorts", "exclude", "pants"),
         ("pod shorts", "include", "pod short"),
         ("pod shorts", "include", "pod shorts"),
         ("rick owens ramones", "exclude", "canvas"),
         ("rick owens ramones", "exclude", "drkshdw"),
+        ("rick owens ramones", "exclude", "fake"),
         ("rick owens ramones", "exclude", "low"),
         ("rick owens ramones", "include", "ramon"),
         ("rick owens ramones", "include", "ramones"),
@@ -100,7 +102,7 @@ def test_rc02_c8_main_seed_twice_keeps_row_counts(fresh_path, test_catalog):
     db.main(["--seed"])
     second = {t: _count(fresh_path, t) for t in ("brands", "items", "item_keywords")}
 
-    assert first == {"brands": 1, "items": 2, "item_keywords": 8}
+    assert first == {"brands": 1, "items": 2, "item_keywords": 10}
     assert second == first
 
 
@@ -184,9 +186,9 @@ def test_rc03a_c38_main_migrates_a_legacy_database(legacy_db, capsys):
 
     db.main([])
 
-    assert user_version(legacy_db) == 1
+    assert user_version(legacy_db) == 2
     assert_legacy_data_preserved(legacy_db, before)
-    assert f"Migrated database at {legacy_db} from schema version 0 to 1." in capsys.readouterr().out
+    assert f"Migrated database at {legacy_db} from schema version 0 to 2." in capsys.readouterr().out
 
 
 def test_rc03a_c39_main_seed_with_invalid_catalog_exits_1_and_changes_no_items(
@@ -211,7 +213,7 @@ def test_rc03a_c39_main_seed_with_invalid_catalog_exits_1_and_changes_no_items(
 def test_rc03a_c40_main_on_a_newer_database_exits_1(temp_db, capsys):
     import db
 
-    set_user_version(temp_db, 2)
+    set_user_version(temp_db, 3)
     capsys.readouterr()
 
     with pytest.raises(SystemExit) as exc:

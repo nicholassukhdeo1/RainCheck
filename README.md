@@ -87,11 +87,14 @@ Both can be run from any directory.
 - Both jobs ignore listings whose title contains an exclude keyword.
 - Matching is case-insensitive substring matching, so `low` also matches `yellow` (until RC-17 makes it word-aware).
 - eBay is searched with the item's `search_query`, or with the item name when it has none.
-- eBay pricing counts distinct, valid USD title matches in those first 50 results.
-  It removes outliers using the median absolute deviation (MAD): a price more than 3.5 scaled MADs from the candidate median is excluded, and when MAD is zero only prices equal to the median remain.
-  The median of retained prices is stored only when at least five distinct listings remain.
-  Each run prints candidate, outlier, and retained counts; these counts are not stored.
-  When fewer than five listings remain, the existing eBay market price is kept.
+- eBay searches the newest-first first 50 results and stores each distinct fixed-price listing's first observed USD ask for that item.
+  Variations that share a legacy listing ID count once, and a later asking-price change never rewrites the first observation.
+  The table keeps these observations permanently, including prices that are currently outliers.
+  The current market price is the all-time arithmetic mean of prices retained after the median absolute deviation (MAD) filter: prices more than 3.5 scaled MADs from the pool median are excluded, and when MAD is zero only prices equal to the median remain.
+  RainCheck updates that price once at least five retained distinct listings have accumulated; otherwise it preserves the existing market price.
+  Each run prints new and duplicate counts plus cumulative candidate, outlier, and retained counts.
+  The first-page limit means listings beyond the newest 50 can be missed when more than 50 relevant new listings arrive between runs.
+  Listing history can be inspected with `SELECT ebay_listing_id, first_price_usd, first_seen_at FROM ebay_listing_prices WHERE item_id = ? ORDER BY first_seen_at, ebay_listing_id`.
 - If a job finds an outdated or missing database, it prints one `Error:` line naming the command that fixes it and stops before any network request.
 
 `src/setup.py` is the exception.
