@@ -1,6 +1,6 @@
 # RC-09: Statistically robust eBay pricing
 
-**Status:** Draft
+**Status:** Approved
 **Backlog item:** RC-09 in `docs/BACKLOG.md`
 
 ## Summary
@@ -142,6 +142,10 @@ It can run alongside features that edit those shared files, but another feature 
 3. **Should RC-09 fetch more than the first 50 eBay summaries when fewer than five survive?**
    Recommendation: keep one page for this PR and report the sample count.
    Pagination could rescue niche items, but it increases API calls, rate use, runtime, and failure modes; it can be a separate backlog item after real skip rates are known.
+
+## Resolved
+
+- 2026-10-27: The user approved the five-retained-listing threshold, median absolute deviation outlier rule, preservation of the prior stored price when data are insufficient, and the existing first-page limit of 50 eBay results.
 
 ## Rollback
 
