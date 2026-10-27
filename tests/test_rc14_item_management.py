@@ -178,6 +178,40 @@ def test_rc14_c7_update_manual_fallback_keeps_ebay_and_each_listing_price(seeded
     assert rows(temp_db, "SELECT price_yen FROM listings ORDER BY id") == [(12000,), (24000,)]
 
 
+@pytest.mark.parametrize(
+    ("change_args", "expected_search_query", "expected_manual_price"),
+    [
+        (("--manual-price", "250"), "legacy query", 250.0),
+        (("--search-query", "updated query"), "updated query", 125.0),
+    ],
+)
+def test_rc14_c7_update_unclaimed_legacy_item_without_keywords_preserves_empty_set(
+    tmp_path, monkeypatch, change_args, expected_search_query, expected_manual_price
+):
+    path = tmp_path / "legacy-no-keywords.db"
+    conn = sqlite3.connect(path)
+    conn.executescript((ROOT / "tests" / "fixtures" / "db" / "schema_v3.sql").read_text())
+    conn.execute("INSERT INTO brands (id,name,yahoo_brand_id) VALUES (1,'Rick Owens','103538')")
+    conn.execute(
+        "INSERT INTO items (id,brand_id,name,market_price_usd,search_query,manual_price_usd,active) "
+        "VALUES (7,1,'legacy item',400,'legacy query',125,1)"
+    )
+    conn.commit()
+    conn.close()
+    monkeypatch.setenv("RAINCHECK_DB_PATH", str(path))
+    db.init_db()
+    assert rows(path, "SELECT config_source FROM items WHERE id=7") == [("unclaimed",)]
+    assert rows(path, "SELECT keyword,kind FROM item_keywords WHERE item_id=7") == []
+
+    result = run_setup(path, "update", "7", *change_args, cwd=tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert rows(path, "SELECT search_query,manual_price_usd FROM items WHERE id=7") == [
+        (expected_search_query, expected_manual_price)
+    ]
+    assert rows(path, "SELECT keyword,kind FROM item_keywords WHERE item_id=7") == []
+
+
 def test_rc14_c8_repeated_keywords_replace_sets_and_clear_flags_are_supported(seeded_db, temp_db, tmp_path):
     item_id = db.get_item_id("Rick Owens", "pod shorts")
     result = run_setup(temp_db, "update", str(item_id), "--keyword", " POD ", "--keyword", "Pod", "--exclude-keyword", "fake", "--clear-search-query", "--clear-manual-price", cwd=tmp_path)
@@ -445,6 +479,26 @@ def test_rc14_c17_invalid_adoption_catalog_fails_without_changes(seeded_db, temp
     before = snapshot(temp_db)
     with pytest.raises((db.CatalogError, ValueError, json.JSONDecodeError)):
         db.adopt_catalog_item(item_id, catalog_path=invalid_catalog)
+    assert snapshot(temp_db) == before
+
+
+def test_rc14_c17_adopt_reports_invalid_multiline_catalog_as_one_error_line(
+    seeded_db, temp_db, tmp_path, monkeypatch, capsys
+):
+    import setup
+
+    item_id = db.get_item_id("Rick Owens", "pod shorts")
+    invalid_catalog = tmp_path / "invalid-adoption-catalog.json"
+    invalid_catalog.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(db, "CATALOG_PATH", invalid_catalog)
+    before = snapshot(temp_db)
+
+    status = setup.main(["adopt", str(item_id)])
+    captured = capsys.readouterr()
+
+    assert status == 1
+    assert captured.err.startswith("Error:")
+    assert len(captured.err.strip().splitlines()) == 1
     assert snapshot(temp_db) == before
 
 
