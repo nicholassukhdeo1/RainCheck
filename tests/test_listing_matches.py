@@ -6,6 +6,7 @@ import warnings
 import pytest
 
 import db
+from digest import Deal
 from dbhelpers import user_version
 
 
@@ -151,3 +152,55 @@ def test_rc04_c8_schema_v1_and_existing_listing_match_rows_are_preserved(seeded_
     assert db_conn.execute(
         "SELECT listing_id, item_id, matched_at FROM listing_matches WHERE listing_id = 1"
     ).fetchall() == before
+
+
+def _deal(item_id, brand_id, url, title="Deal", price_yen=10000, image_url=None):
+    return Deal(item_id, brand_id, url, title, price_yen, 50.0, 100.0, 50.0, image_url)
+
+
+def test_rc10_c23_batch_deduplicates_urls_and_associations_and_preserves_existing_metadata(
+    seeded_db, db_conn
+):
+    items = _ids(db_conn)
+    brand = _brand_id(db_conn)
+    original = _deal(items["rick owens ramones"], brand, "https://x/shared", "Original", 10000)
+    assert db.record_listing_matches([original]) == 1
+    added = db.record_listing_matches([
+        _deal(items["pod shorts"], brand, "https://x/shared", "Changed", 99000),
+        _deal(items["pod shorts"], brand, "https://x/shared", "Changed again", 98000),
+    ])
+    assert added == 0
+    row = db_conn.execute("SELECT title, price_yen FROM listings WHERE url = ?", ("https://x/shared",)).fetchone()
+    assert tuple(row) == ("Original", 10000)
+    assert [tuple(r) for r in db_conn.execute("SELECT item_id FROM listing_matches ORDER BY item_id")] == sorted(
+        [(items["rick owens ramones"],), (items["pod shorts"],)]
+    )
+
+
+def test_rc10_c21_batch_transaction_rolls_back_all_rows_on_later_insert_error(seeded_db, db_conn):
+    items = _ids(db_conn)
+    brand = _brand_id(db_conn)
+    deals = [
+        _deal(items["rick owens ramones"], brand, "https://x/first"),
+        _deal(999999, brand, "https://x/second"),
+    ]
+    with pytest.raises(sqlite3.IntegrityError):
+        db.record_listing_matches(deals)
+    assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 0
+    assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 0
+
+
+def test_rc10_c21_batch_error_closes_connection_without_resource_warning(seeded_db, db_conn):
+    import gc
+    import warnings
+
+    bad = _deal(999999, _brand_id(db_conn), "https://x/orphan")
+    def attempt():
+        with pytest.raises(sqlite3.IntegrityError):
+            db.record_listing_matches([bad])
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        attempt()
+        gc.collect()
+    assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []

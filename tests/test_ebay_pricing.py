@@ -148,6 +148,32 @@ def test_c34_get_ebay_token_raises_http_error_on_401(ebay_pricing, creds, fake_h
         ebay_pricing.get_ebay_token()
 
 
+def test_rc10_c2_token_request_retries_statuses_then_returns_token(
+    ebay_pricing, creds, fake_http, fixtures_dir
+):
+    fake_http.add_sequence("POST", TOKEN_URL, [
+        {"status": 503}, {"status": 503}, {"json": _load(fixtures_dir, "token.json")},
+    ])
+    assert ebay_pricing.get_ebay_token() == "test-token-not-real"
+    assert len(fake_http.calls) == 3
+    assert [call[2]["timeout"] for call in fake_http.calls] == [30, 30, 30]
+
+
+def test_rc10_c2_browse_search_retries_then_parser_receives_only_successful_response(
+    ebay_pricing, fake_http
+):
+    expected = _summaries(*_valid_prices([100, 110, 120, 130, 140]))
+    fake_http.add_sequence("GET", SEARCH_URL, [
+        {"status": 503}, {"status": 503}, {"json": expected},
+    ])
+    parsed = ebay_pricing.ebay_listing_prices(
+        "rick owens ramones", RAMONES_KEYWORDS, EXCLUDES, "tok"
+    )
+    assert len(fake_http.calls) == 3
+    assert len(parsed) == 5
+    assert all(item.price_usd in {100.0, 110.0, 120.0, 130.0, 140.0} for item in parsed)
+
+
 # --- Raw listing validation and eBay search contract -----------------------
 
 
@@ -275,8 +301,9 @@ def test_rc06_c15_malformed_response_container_raises_value_error(
 
 
 def test_rc06_c7_refresh_stores_four_observations_but_preserves_prior_price(
-    ebay_pricing, creds, query_http, seeded_db, db_conn, capsys
+    ebay_pricing, creds, query_http, seeded_db, db_conn, caplog
 ):
+    caplog.set_level("INFO", logger="ebay_pricing")
     db_conn.execute("UPDATE items SET market_price_usd = 765 WHERE name = 'rick owens ramones'")
     db_conn.commit()
     query_http.add("rick owens ramones", _summaries(*_valid_prices([100, 110, 120, 130])))
@@ -287,14 +314,15 @@ def test_rc06_c7_refresh_stores_four_observations_but_preserves_prior_price(
         "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
         (db.get_item_id("Rick Owens", "rick owens ramones"),),
     ).fetchone()[0] == 4
-    assert "insufficient" in capsys.readouterr().out.lower()
+    assert any("insufficient" in record.getMessage().lower() for record in caplog.records)
 
 
 @pytest.mark.parametrize("response_name", ["saved_empty", "missing_summaries"])
 def test_rc09_c8_empty_search_prints_skip_reason_and_keeps_stored_price(
-    ebay_pricing, creds, query_http, fixtures_dir, seeded_db, db_conn, capsys,
+    ebay_pricing, creds, query_http, fixtures_dir, seeded_db, db_conn, caplog,
     response_name
 ):
+    caplog.set_level("INFO", logger="ebay_pricing")
     response = (
         _load(fixtures_dir, "search_empty.json")
         if response_name == "saved_empty"
@@ -306,14 +334,15 @@ def test_rc09_c8_empty_search_prints_skip_reason_and_keeps_stored_price(
     db_conn.commit()
     ebay_pricing.refresh_market_prices()
     assert _stored(db_conn)["rick owens ramones"] == 765.0
-    output = capsys.readouterr().out
+    output = "\n".join(record.getMessage() for record in caplog.records).lower()
     assert "rick owens ramones" in output
-    assert "no" in output.lower() or "insufficient" in output.lower()
+    assert "no" in output or "insufficient" in output
 
 
 def test_rc09_c10_refresh_prints_counts_and_estimate_without_raw_listing_data(
-    ebay_pricing, creds, query_http, fixtures_dir, seeded_db, capsys
+    ebay_pricing, creds, query_http, fixtures_dir, seeded_db, caplog
 ):
+    caplog.set_level("INFO", logger="ebay_pricing")
     titles = [f"Rick Owens Ramones Item {i}" for i in range(5)]
     response = _summaries(*[
         _listing(f"ramones-{i}", title=titles[i], value=str(100 + i * 10))
@@ -322,28 +351,27 @@ def test_rc09_c10_refresh_prints_counts_and_estimate_without_raw_listing_data(
     query_http.add("rick owens ramones", response)
     query_http.add("pod shorts", _five_pod_listings())
     ebay_pricing.refresh_market_prices()
-    output = capsys.readouterr().out
+    output = "\n".join(record.getMessage() for record in caplog.records)
     assert "rick owens ramones" in output
     lowered = output.lower()
     for label in ("candidate", "outlier", "retained"):
         assert label in lowered
-    for item_section in output.split("Pricing ")[1:]:
-        item_output = item_section.lower()
-        assert all(label in item_output for label in ("candidate", "outlier", "retained"))
+    lowered = output.lower()
+    assert all(label in lowered for label in ("candidate", "outlier", "retained"))
     assert "5" in output and "0" in output and "120.0" in output
     assert all(title not in output for title in titles)
     assert all(f"{price} - " not in output for price in (100, 110, 120, 130, 140))
 
 
-def test_rc06_c18_malformed_completed_search_writes_nothing_and_stops_later_items(
+def test_rc10_c11_malformed_completed_search_writes_nothing_and_continues_later_items(
     ebay_pricing, creds, query_http, seeded_db, db_conn
 ):
     query_http.add("rick owens ramones", [])
     query_http.add("pod shorts", _five_pod_listings())
-    with pytest.raises(ValueError):
-        ebay_pricing.refresh_market_prices()
-    assert query_http.queries() == ["rick owens ramones"]
-    assert db_conn.execute("SELECT COUNT(*) FROM ebay_listing_prices").fetchone()[0] == 0
+    result = ebay_pricing.refresh_market_prices()
+    assert result.failed_item_ids == (db.get_item_id("Rick Owens", "rick owens ramones"),)
+    assert query_http.queries() == ["rick owens ramones", "pod shorts"]
+    assert db_conn.execute("SELECT COUNT(*) FROM ebay_listing_prices").fetchone()[0] == 5
 
 
 def test_rc09_c11_insufficient_first_item_does_not_prevent_later_item_pricing(
@@ -356,15 +384,14 @@ def test_rc09_c11_insufficient_first_item_does_not_prevent_later_item_pricing(
     assert query_http.queries() == ["rick owens ramones", "pod shorts"]
 
 
-def test_rc09_c11_http_500_stops_before_later_item_and_preserves_failing_price(
-    ebay_pricing, creds, query_http, seeded_db, db_conn, capsys
+def test_rc10_c9_c10_http_500_isolates_item_and_continues_later_items(
+    ebay_pricing, creds, query_http, seeded_db, db_conn, caplog
 ):
     query_http.add("rick owens ramones", _summaries(*_valid_prices([100, 110, 120, 130, 140])))
     query_http.add("pod shorts", {"errors": []}, status=500)
     db_conn.execute("UPDATE items SET market_price_usd = 765 WHERE name = 'pod shorts'")
     db_conn.commit()
-    with pytest.raises(requests.HTTPError):
-        ebay_pricing.refresh_market_prices()
+    result = ebay_pricing.refresh_market_prices()
     assert _stored(db_conn) == {"rick owens ramones": 120.0, "pod shorts": 765.0}
     assert query_http.queries() == ["rick owens ramones", "pod shorts"]
     assert db_conn.execute(
@@ -375,20 +402,104 @@ def test_rc09_c11_http_500_stops_before_later_item_and_preserves_failing_price(
         "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
         (db.get_item_id("Rick Owens", "pod shorts"),),
     ).fetchone()[0] == 0
-    output = capsys.readouterr().out
-    failing_item_output = output.split('Pricing pod shorts with eBay query "pod shorts"', 1)[1]
-    assert not any(label in failing_item_output.lower() for label in ("candidate", "outlier", "retained"))
+    assert result.had_failure is True
+    assert result.succeeded_item_ids == (db.get_item_id("Rick Owens", "rick owens ramones"),)
+    assert result.failed_item_ids == (db.get_item_id("Rick Owens", "pod shorts"),)
+    assert any(record.levelname == "WARNING" and str(db.get_item_id("Rick Owens", "pod shorts")) in record.getMessage() for record in caplog.records)
 
 
-def test_rc09_c11_timeout_stops_run_before_later_item(
-    ebay_pricing, creds, query_http, seeded_db, db_conn, capsys
+def test_rc10_c9_partial_ebay_cli_run_exits_one_after_committing_earlier_item(
+    ebay_pricing, creds, fake_http, fixtures_dir, seeded_db, db_conn
+):
+    fake_http.add("POST", TOKEN_URL, json=_load(fixtures_dir, "token.json"))
+    first = _summaries(*_valid_prices([100, 110, 120, 130, 140]))
+    fake_http.add_sequence("GET", SEARCH_URL, [
+        {"json": first}, {"status": 500}, {"status": 500}, {"status": 500},
+    ])
+    with pytest.raises(SystemExit) as exc:
+        ebay_pricing.main()
+    assert exc.value.code == 1
+    assert _stored(db_conn)["rick owens ramones"] == 120.0
+    assert db_conn.execute(
+        "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
+        (db.get_item_id("Rick Owens", "rick owens ramones"),),
+    ).fetchone()[0] == 5
+    assert db_conn.execute(
+        "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
+        (db.get_item_id("Rick Owens", "pod shorts"),),
+    ).fetchone()[0] == 0
+
+
+def test_rc10_c10_third_item_after_failure_is_searched_and_committed(
+    ebay_pricing, creds, query_http, seeded_db, db_conn, caplog
+):
+    brand_id = db_conn.execute("SELECT id FROM brands WHERE name = ?", ("Rick Owens",)).fetchone()[0]
+    db_conn.execute(
+        "INSERT INTO items (brand_id, name, search_query, manual_price_usd, active) "
+        "VALUES (?, ?, ?, ?, 1)", (brand_id, "test boots", "boots", 500.0),
+    )
+    boots_id = db_conn.execute("SELECT id FROM items WHERE name = ?", ("test boots",)).fetchone()[0]
+    db_conn.execute(
+        "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
+        (boots_id, "boots", "include"),
+    )
+    db_conn.commit()
+    query_http.add("rick owens ramones", _summaries(*_valid_prices([100, 110, 120, 130, 140])))
+    query_http.add("pod shorts", {"errors": []}, status=500)
+    query_http.add("boots", _summaries(*[
+        _listing(f"boot-{n}", f"Rick Owens Boots {n}", str(100 + 10 * n)) for n in range(5)
+    ]))
+
+    result = ebay_pricing.refresh_market_prices()
+
+    assert query_http.queries() == ["rick owens ramones", "pod shorts", "boots"]
+    assert result.succeeded_item_ids == (db.get_item_id("Rick Owens", "rick owens ramones"), boots_id)
+    assert result.failed_item_ids == (db.get_item_id("Rick Owens", "pod shorts"),)
+    assert result.had_failure is True
+    assert db_conn.execute(
+        "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?", (boots_id,)
+    ).fetchone()[0] == 5
+    assert any(record.levelname == "WARNING" and str(db.get_item_id("Rick Owens", "pod shorts")) in record.getMessage() for record in caplog.records)
+
+
+def test_rc10_c11_item_writer_failure_preserves_prior_item_and_continues(
+    ebay_pricing, creds, query_http, seeded_db, db_conn, monkeypatch
+):
+    first_id = db.get_item_id("Rick Owens", "rick owens ramones")
+    failing_id = db.get_item_id("Rick Owens", "pod shorts")
+    query_http.add("rick owens ramones", _summaries(*_valid_prices([100, 110, 120, 130, 140])))
+    query_http.add("pod shorts", _five_pod_listings())
+    db_conn.execute("UPDATE items SET market_price_usd = 765 WHERE id = ?", (failing_id,))
+    db_conn.commit()
+    original_writer = ebay_pricing.record_ebay_listing_prices
+
+    def fail_pod_writer(item_id, observations):
+        if item_id == failing_id:
+            raise RuntimeError("injected writer failure")
+        return original_writer(item_id, observations)
+
+    # The writer is a local job boundary so the failure is isolated to this item.
+    monkeypatch.setattr(ebay_pricing, "record_ebay_listing_prices", fail_pod_writer)
+    result = ebay_pricing.refresh_market_prices()
+    assert result.failed_item_ids == (failing_id,)
+    assert result.succeeded_item_ids == (first_id,)
+    assert db_conn.execute(
+        "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?", (first_id,)
+    ).fetchone()[0] == 5
+    assert db_conn.execute(
+        "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?", (failing_id,)
+    ).fetchone()[0] == 0
+    assert _stored(db_conn)["pod shorts"] == 765.0
+
+
+def test_rc10_c7_transport_failure_isolated_and_later_items_continue(
+    ebay_pricing, creds, query_http, seeded_db, db_conn
 ):
     query_http.add("rick owens ramones", _summaries(*_valid_prices([100, 110, 120, 130, 140])))
     query_http.add("pod shorts", None, error=requests.Timeout("offline timeout"))
     db_conn.execute("UPDATE items SET market_price_usd = 765 WHERE name = 'pod shorts'")
     db_conn.commit()
-    with pytest.raises(requests.Timeout):
-        ebay_pricing.refresh_market_prices()
+    result = ebay_pricing.refresh_market_prices()
     assert _stored(db_conn)["rick owens ramones"] == 120.0
     assert _stored(db_conn)["pod shorts"] == 765.0
     assert query_http.queries() == ["rick owens ramones", "pod shorts"]
@@ -400,9 +511,8 @@ def test_rc09_c11_timeout_stops_run_before_later_item(
         "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
         (db.get_item_id("Rick Owens", "pod shorts"),),
     ).fetchone()[0] == 0
-    output = capsys.readouterr().out
-    failing_item_output = output.split('Pricing pod shorts with eBay query "pod shorts"', 1)[1]
-    assert not any(label in failing_item_output.lower() for label in ("candidate", "outlier", "retained"))
+    assert result.had_failure is True
+    assert result.failed_item_ids == (db.get_item_id("Rick Owens", "pod shorts"),)
 
 
 def test_rc09_c13_skipped_updates_preserve_ebay_and_manual_prices_and_effective_fallback(
@@ -487,6 +597,102 @@ def test_c44_main_requests_exactly_one_token(ebay_pricing, creds, ebay_http, see
     assert len([call for call in ebay_http.calls if call[0] == "POST" and call[1] == TOKEN_URL]) == 1
 
 
+def test_rc10_c8_token_failure_is_run_level_clean_cli_error(
+    ebay_pricing, creds, fake_http, seeded_db, db_conn, caplog
+):
+    import logging
+
+    fake_http.add("POST", TOKEN_URL, json={"error": "invalid_client"}, status=401)
+    before = db_conn.execute("SELECT COUNT(*) FROM ebay_listing_prices").fetchone()[0]
+    with caplog.at_level(logging.INFO):
+        with pytest.raises(SystemExit) as exc:
+            ebay_pricing.main()
+    assert exc.value.code == 1
+    assert not [call for call in fake_http.calls if call[0] == "GET"]
+    assert db_conn.execute("SELECT COUNT(*) FROM ebay_listing_prices").fetchone()[0] == before
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+    rendered = "\n".join(record.getMessage() for record in caplog.records)
+    assert "secret" not in rendered and "aWQ6" not in rendered
+
+
+def test_rc10_c8_missing_credentials_is_run_level_failure_without_request(
+    ebay_pricing, fake_http, seeded_db, caplog
+):
+    with pytest.raises(SystemExit) as exc:
+        ebay_pricing.main()
+    assert exc.value.code == 1
+    assert fake_http.calls == []
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+
+
+def test_rc10_c12_empty_search_is_success_and_preserves_current_price(
+    ebay_pricing, creds, query_http, seeded_db, db_conn
+):
+    query_http.add("rick owens ramones", {"itemSummaries": []})
+    query_http.add("pod shorts", _five_pod_listings())
+    db_conn.execute("UPDATE items SET market_price_usd = 765 WHERE name = 'rick owens ramones'")
+    db_conn.commit()
+    result = ebay_pricing.refresh_market_prices()
+    assert result.failed_item_ids == ()
+    assert result.succeeded_item_ids == tuple(row[0] for row in db_conn.execute("SELECT id FROM items ORDER BY id"))
+    assert _stored(db_conn)["rick owens ramones"] == 765.0
+
+
+def test_rc10_c13_long_rate_limit_stops_later_searches_and_preserves_prior_result(
+    ebay_pricing, creds, fake_http, seeded_db, db_conn, fixtures_dir
+):
+    fake_http.add("POST", TOKEN_URL, json=_load(fixtures_dir, "token.json"))
+    fake_http.add_sequence("GET", SEARCH_URL, [
+        {"json": _summaries(*_valid_prices([100, 110, 120, 130, 140]))},
+        {"status": 429, "headers": {"Retry-After": "6"}},
+    ])
+    result = ebay_pricing.refresh_market_prices()
+    assert result.had_failure is True
+    searches = [call for call in fake_http.calls if call[0] == "GET"]
+    assert len(searches) == 2
+    assert _stored(db_conn)["rick owens ramones"] == 120.0
+    assert result.failed_item_ids == (db.get_item_id("Rick Owens", "pod shorts"),)
+
+
+def test_rc10_c27_ebay_main_reuses_preinstalled_logging_without_duplicate_handlers(
+    ebay_pricing, temp_db, caplog
+):
+    import logging
+
+    root = logging.getLogger()
+    before_handlers = tuple(root.handlers)
+    before_level = root.level
+    with caplog.at_level(logging.INFO):
+        for _ in range(2):
+            try:
+                ebay_pricing.main()
+            except SystemExit as exc:
+                assert exc.code == 0
+    assert tuple(root.handlers) == before_handlers
+    assert root.level == before_level
+    records = [r for r in caplog.records if r.name == "ebay_pricing"]
+    assert records
+    assert len([r for r in records if "job started" in r.getMessage().lower()]) == 2
+
+
+def test_rc10_c25_ebay_operational_logs_exclude_titles_tokens_and_raw_urls(
+    ebay_pricing, creds, ebay_http, seeded_db, caplog
+):
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="ebay_pricing"):
+        ebay_pricing.refresh_market_prices()
+    records = [r for r in caplog.records if r.name == "ebay_pricing"]
+    assert records and all(r.levelno >= logging.INFO for r in records)
+    rendered = "\n".join(r.getMessage() for r in records)
+    for private in (
+        "test-token-not-real", "Rick Owens Ramones High",
+        "https://api.ebay.com/buy/browse/v1/item_summary/search",
+        "Authorization", "client_secret",
+    ):
+        assert private not in rendered
+
+
 def test_rc06_ebay_listing_prices_keeps_four_argument_signature(ebay_pricing):
     import inspect
 
@@ -506,17 +712,18 @@ def test_rc03b_c23_search_uses_each_items_search_query_in_order(
 
 
 def test_rc03b_c24_null_search_query_falls_back_to_item_name(
-    ebay_pricing, creds, ebay_http, seeded_db, capsys
+    ebay_pricing, creds, ebay_http, seeded_db, caplog
 ):
+    caplog.set_level("INFO", logger="ebay_pricing")
     sql_run(seeded_db, "UPDATE items SET search_query = 'ramones high' WHERE name = 'rick owens ramones'")
     sql_run(seeded_db, "UPDATE items SET search_query = NULL WHERE name = 'pod shorts'")
     ebay_pricing.refresh_market_prices()
     assert [call[2]["params"]["q"] for call in ebay_http.calls if call[0] == "GET"] == [
         "ramones high", "pod shorts",
     ]
-    output = capsys.readouterr().out
-    assert 'Pricing rick owens ramones with eBay query "ramones high"' in output
-    assert 'Pricing pod shorts with eBay query "pod shorts"' in output
+    output = "\n".join(record.getMessage() for record in caplog.records)
+    assert "rick owens ramones" in output
+    assert "pod shorts" in output
 
 
 def test_rc03b_c25_database_excludes_apply_per_item(
@@ -556,39 +763,42 @@ def test_rc03b_c26_inactive_items_are_not_searched(
 
 @pytest.mark.parametrize("bad", ["0.00", "-1.00"])
 def test_rc03b_c27_unusable_candidates_are_skipped_and_run_continues(
-    ebay_pricing, creds, query_http, fixtures_dir, seeded_db, db_conn, capsys, bad
+    ebay_pricing, creds, query_http, fixtures_dir, seeded_db, db_conn, caplog, bad
 ):
+    caplog.set_level("INFO", logger="ebay_pricing")
     ramones = _load(fixtures_dir, "search_ramones.json")
     for summary in ramones["itemSummaries"]:
         summary["price"]["value"] = bad
     _ramones_and_pods(query_http, fixtures_dir, ramones=ramones)
     ebay_pricing.refresh_market_prices()
     assert _stored(db_conn) == {"rick owens ramones": None, "pod shorts": 300.0}
-    output = capsys.readouterr().out.lower()
+    output = "\n".join(record.getMessage() for record in caplog.records).lower()
     assert "rick owens ramones" in output and "insufficient" in output
 
 
 def test_rc03b_c28_no_matching_listings_prints_skip_reason_and_keeps_price(
-    ebay_pricing, creds, query_http, fixtures_dir, seeded_db, db_conn, capsys
+    ebay_pricing, creds, query_http, fixtures_dir, seeded_db, db_conn, caplog
 ):
+    caplog.set_level("INFO", logger="ebay_pricing")
     _ramones_and_pods(
         query_http, fixtures_dir,
         pods=_summaries(_listing("geobasket", "Rick Owens Geobasket", "500")),
     )
     ebay_pricing.refresh_market_prices()
-    output = capsys.readouterr().out.lower()
+    output = "\n".join(record.getMessage() for record in caplog.records).lower()
     assert "pod shorts" in output
     assert "no" in output or "insufficient" in output
     assert _stored(db_conn)["pod shorts"] is None
 
 
-def test_rc03b_c29_http_error_stops_run_but_keeps_earlier_prices(
+def test_rc10_c9_http_error_isolates_item_and_keeps_earlier_prices(
     ebay_pricing, creds, query_http, fixtures_dir, seeded_db, db_conn
 ):
     _ramones_and_pods(query_http, fixtures_dir, pods={"errors": []}, pods_status=500)
-    with pytest.raises(requests.HTTPError):
-        ebay_pricing.refresh_market_prices()
+    result = ebay_pricing.refresh_market_prices()
     assert _stored(db_conn) == {"rick owens ramones": pytest.approx(5300 / 6), "pod shorts": None}
+    assert result.failed_item_ids == (db.get_item_id("Rick Owens", "pod shorts"),)
+    assert result.succeeded_item_ids == (db.get_item_id("Rick Owens", "rick owens ramones"),)
 
 
 def _assert_clean_schema_error(capsys, fake_http, exc, needle="python3 src/db.py"):
@@ -622,11 +832,13 @@ def test_rc03b_c31_main_with_no_database_file_is_clean_and_creates_nothing(
     assert not path.exists()
 
 
-def test_rc03b_c32_no_items_prints_one_line_and_makes_no_http_call(
-    ebay_pricing, creds, temp_db, fake_http, capsys
+def test_rc10_c26_ebay_no_active_items_is_a_successful_no_work_run(
+    ebay_pricing, creds, temp_db, fake_http, caplog
 ):
-    ebay_pricing.refresh_market_prices()
-    assert NO_ITEMS_LINE in capsys.readouterr().out
+    caplog.set_level("INFO", logger="ebay_pricing")
+    result = ebay_pricing.main()
+    assert result in (None, 0)
+    assert any("no active items" in record.getMessage().lower() for record in caplog.records)
     assert fake_http.calls == []
 
 

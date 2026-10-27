@@ -191,15 +191,18 @@ def test_rc15_c31_real_path_sends_multipart_alternative_text_then_html(monkeypat
 
 
 @pytest.mark.parametrize("fail_in", ["init", "login", "sendmail"])
-def test_rc15_c32_smtp_failure_returns_false_prints_error_and_does_not_raise(
-    monkeypatch, capsys, fail_in
+def test_rc15_c32_smtp_failure_returns_false_and_logs_error(
+    monkeypatch, caplog, fail_in
 ):
+    import logging
+
     _recording_smtp(monkeypatch, fail_in=fail_in)
-    result = sendemail.send_email("Subj", "<p>x</p>", "x")
+    with caplog.at_level(logging.ERROR, logger="sendemail"):
+        result = sendemail.send_email("Subj", "<p>x</p>", "x")
     assert result is False
-    lines = capsys.readouterr().out.splitlines()
-    assert any(line.startswith("Error: unable to send email (") for line in lines)
-    assert "Email sent!" not in lines
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+    rendered = "\n".join(record.getMessage() for record in caplog.records)
+    assert "password" not in rendered and "<p>x</p>" not in rendered
 
 
 def test_rc15_c34_missing_credential_still_raises_keyerror(monkeypatch):
@@ -208,3 +211,39 @@ def test_rc15_c34_missing_credential_still_raises_keyerror(monkeypatch):
     monkeypatch.delenv("SENDER_PASSWORD", raising=False)
     with pytest.raises(KeyError):
         sendemail.send_email("Subj", "<p>x</p>", "x")
+
+
+def test_rc10_c25_real_smtp_logs_outcome_without_credentials_or_message(
+    monkeypatch, caplog
+):
+    import logging
+
+    monkeypatch.delenv("RAINCHECK_DRY_RUN", raising=False)
+    monkeypatch.setenv("SENDER_EMAIL", "sender-private@example.com")
+    monkeypatch.setenv("SENDER_PASSWORD", "password-private")
+    monkeypatch.setenv("RECEIVER_EMAIL", "receiver-private@example.com")
+
+    class FakeSMTP:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def starttls(self):
+            pass
+        def login(self, *args):
+            pass
+        def sendmail(self, *args):
+            return {}
+
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    with caplog.at_level(logging.INFO, logger="sendemail"):
+        assert sendemail.send_email("private subject", "private html", "private text") is True
+    assert any(record.levelname == "INFO" for record in caplog.records)
+    rendered = "\n".join(record.getMessage() for record in caplog.records)
+    for private in (
+        "sender-private@example.com", "receiver-private@example.com",
+        "password-private", "private subject", "private html", "private text",
+    ):
+        assert private not in rendered
