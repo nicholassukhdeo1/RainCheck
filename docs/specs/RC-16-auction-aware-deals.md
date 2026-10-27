@@ -14,7 +14,7 @@ Compare only an immediately purchasable price with the eBay market price, and st
 `src/yahoo_scrape.py:253-265` compares that field with the market price for every listing.
 For a running auction, `price` is only the current bid or starting price, so an auction beginning at ¥1 can appear to be an exceptional deal even though nobody can buy it for ¥1.
 `src/schema.sql:40-51` has no columns for sale format, buy-now price, or scheduled end time.
-`src/db.py:619-650` stores the emailed deal's price without these facts.
+`src/db.py:690-721` stores the emailed digest's displayed price in one batch without these facts.
 
 Yahoo's [product page guide](https://support.yahoo-net.jp/PccAuctions/s/article/H000005375) distinguishes the current price from the seller's buy-now price and says that the current price can be the opening price when nobody has bid.
 Yahoo's [buy-now explanation](https://support.yahoo-net.jp/SccAuctions/s/article/H000008828) says a buyer can win immediately at the buy-now price while bidding may continue below it.
