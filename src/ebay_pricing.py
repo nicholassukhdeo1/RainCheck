@@ -1,4 +1,5 @@
-import os, base64, requests, statistics, sys
+import os, base64, requests, statistics, sys, math
+from dataclasses import dataclass
 from db import get_tracked_items, update_market_price, SchemaVersionError
 from matching import title_matches
 
@@ -7,6 +8,14 @@ load_dotenv()
 
 # timeout so a hung connection can't stall the run forever
 EBAY_TIMEOUT_SECONDS = 30
+
+
+@dataclass(frozen=True)
+class PriceEstimate:
+    price_usd: float | None
+    candidate_count: int
+    outlier_count: int
+    retained_count: int
 
 
 def get_ebay_token():
@@ -45,26 +54,64 @@ def ebay_market_price(query, keywords, exclude_keywords, token):
                                ,params={"q": query,"limit": 50}, timeout=EBAY_TIMEOUT_SECONDS)
     currListing.raise_for_status()
 
-    price = []
+    data = currListing.json()
+    if not isinstance(data, dict):
+        raise ValueError("eBay search response must be an object")
+    items = data.get("itemSummaries", [])
+    if not isinstance(items, list):
+        raise ValueError("eBay itemSummaries must be a list")
 
-    items = currListing.json().get("itemSummaries",[])
-
+    prices = []
+    seen_ids = set()
     for item in items:
+        if not isinstance(item, dict):
+            continue
+        item_id = item.get("itemId")
+        title = item.get("title")
+        price = item.get("price")
+        if (
+            not isinstance(item_id, str) or not item_id.strip()
+            or not isinstance(title, str)
+            or not isinstance(price, dict)
+            or price.get("currency") != "USD"
+            or item_id in seen_ids
+        ):
+            continue
         # the shared matcher (also used by the Yahoo job) decides what counts as this item
-        if title_matches(item["title"], keywords, exclude_keywords):
-            price.append(float(item["price"]["value"]))
+        if not title_matches(title, keywords, exclude_keywords):
+            continue
+        value = price.get("value")
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+            continue
+        try:
+            amount = float(value)
+        except (ValueError, OverflowError):
+            continue
+        if not math.isfinite(amount) or amount <= 0:
+            continue
+        # Mark an ID seen only after validation, so a later valid copy can count.
+        seen_ids.add(item_id)
+        prices.append(amount)
 
-    # always look at the format of the json or api before trying to access it because how else would u know
-    # how to work with it.
+    if not prices:
+        return PriceEstimate(None, 0, 0, 0)
 
-    # print(json.dumps(currListing.json().get("itemSummaries", [])[0], indent=2))
+    median = statistics.median(prices)
+    mad = statistics.median(abs(price - median) for price in prices)
+    if mad == 0:
+        retained = [price for price in prices if price == median]
+    else:
+        # Use the original median and MAD for one filtering pass.
+        cutoff = 3.5 * 1.4826 * mad
+        retained = [price for price in prices if abs(price - median) <= cutoff]
 
-    for item in sorted(items, key=lambda i: float(i["price"]["value"])):
-        print(item["price"]["value"], "-", item["title"][:70])
-
-    if not price:
-        return None
-    return statistics.median(price)
+    retained_count = len(retained)
+    return PriceEstimate(
+        statistics.median(retained) if retained_count >= 5 else None,
+        len(prices),
+        len(prices) - retained_count,
+        retained_count,
+    )
 
 def refresh_market_prices():
 
@@ -82,19 +129,27 @@ def refresh_market_prices():
         query = item.search_query or item.name
         print(f'Pricing {item.name} with eBay query "{query}"')
 
-        price = ebay_market_price(query, item.keywords, item.exclude_keywords, my_token)
-        if price is None:
-            print(f"No matching eBay listings for {item.name}; market price not updated.")
+        estimate = ebay_market_price(query, item.keywords, item.exclude_keywords, my_token)
+        print(
+            f"{item.name}: {estimate.candidate_count} candidates, "
+            f"{estimate.outlier_count} outliers, {estimate.retained_count} retained."
+        )
+        if estimate.price_usd is None:
+            if estimate.candidate_count == 0:
+                print(f"No valid matching eBay listings for {item.name}; insufficient sample, market price not updated.")
+            else:
+                print(f"Insufficient retained eBay listings for {item.name} (need 5); market price not updated.")
             continue
 
-        # update_market_price owns the "usable price" rule, so we just catch its ValueError
-        # instead of copying the rule here; one bad median must not stop the other items
+        # The database still owns the final usable-price check before writing.
         try:
-            stored = update_market_price(item.id, price)
+            stored = update_market_price(item.id, estimate.price_usd)
         except ValueError:
-            print(f"eBay median for {item.name} is not a usable price ({price}); market price not updated.")
+            print(f"eBay estimate for {item.name} is not a usable price; market price not updated.")
             continue
-        if not stored:
+        if stored:
+            print(f"Stored eBay estimate for {item.name}: {estimate.price_usd} USD.")
+        else:
             print(f"Item {item.name} no longer exists; market price not stored.")
 
 
