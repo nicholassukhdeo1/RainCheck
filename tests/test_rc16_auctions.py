@@ -350,6 +350,19 @@ def test_rc16_c13_c14_end_time_is_utc_for_storage_and_jst_in_digest():
     assert "Scheduled end unavailable" in unavailable.html
 
 
+def test_rc16_c13_end_time_out_of_jst_range_is_unavailable_through_digest():
+    parsed = yahoo_scrape.parse_listings(
+        _page([_record(endTime="9999-12-31T23:00:00+00:00")])
+    )[0]
+    deal = yahoo_scrape.find_item_deals(_item(), [parsed], set(), RATE)[0]
+    email = digest.build_digest(
+        [digest.ItemDeals("Ramones", MARKET, (deal,))], RUN_DATE
+    )
+
+    assert "Scheduled end unavailable" in email.html
+    assert "Scheduled end unavailable" in email.text
+
+
 def test_rc16_c15_fleamarket_url_prefix_does_not_replace_explicit_sale_format():
     record = _record("z9000000001", isFleamarketItem=True, isFixedPrice=None, buyNowPrice=50000)
     parsed = yahoo_scrape.parse_listings(_page([record]))[0]

@@ -5,6 +5,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -411,6 +412,88 @@ def _spec_python_script_after(marker):
 
 def _targeted_update_script():
     return _spec_python_script_after("5. Add only the `fake` exclude")
+
+
+def _rc16_online_backup_script():
+    spec = Path(__file__).resolve().parents[1] / "docs/specs/RC-16-auction-aware-deals.md"
+    text = spec.read_text(encoding="utf-8")
+    marker = "For the version 3 step, this command creates and verifies the required version 2 online backup"
+    section = text[text.index(marker):]
+    match = re.search(r"```sh\s*\n(.*?)\n\s*```", section, re.DOTALL)
+    assert match, "approved RC-16 spec must retain its online-backup command"
+    command = match.group(1)
+    start = command.index("<<'PY'\n") + len("<<'PY'\n")
+    end = command.rfind("\nPY")
+    assert end > start, "RC-16 online-backup heredoc must close"
+    return textwrap.dedent(command[start:end])
+
+
+def test_rc16_c2_online_backup_includes_committed_uncheckpointed_wal_row(tmp_path):
+    source_root = Path(__file__).resolve().parents[1]
+    db_path = tmp_path / "wal-v2.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.executescript(
+            (source_root / "tests/fixtures/db/schema_v2.sql").read_text(encoding="utf-8")
+        )
+        conn.execute("PRAGMA user_version = 2")
+        conn.execute("INSERT INTO brands (id, name, yahoo_brand_id) VALUES (1, 'Rick Owens', ?)",
+                     (db.DEFAULT_YAHOO_BRAND_ID,))
+        conn.execute(
+            "INSERT INTO items (id, brand_id, name, manual_price_usd) VALUES (1, 1, ?, 800)",
+            ("rick owens ramones",),
+        )
+        conn.execute(
+            "INSERT INTO items (id, brand_id, name, manual_price_usd) VALUES (2, 1, ?, 300)",
+            ("pod shorts",),
+        )
+        conn.executemany(
+            "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, 'fake', 'exclude')",
+            [(1,), (2,)],
+        )
+        conn.commit()
+        assert conn.execute("PRAGMA journal_mode = WAL").fetchone()[0].lower() == "wal"
+        conn.execute("PRAGMA wal_autocheckpoint = 0")
+        conn.execute(
+            "INSERT INTO listings (id, brand_id, url, title, price_yen, first_seen_at, last_seen_at) "
+            "VALUES (1, 1, ?, ?, 50000, '2026-10-27T00:00:00+00:00', '2026-10-27T00:00:00+00:00')",
+            ("https://auctions.yahoo.co.jp/jp/auction/waltest", "WAL listing"),
+        )
+        conn.execute(
+            "INSERT INTO listing_matches (listing_id, item_id, matched_at) "
+            "VALUES (1, 1, '2026-10-27T00:00:00+00:00')"
+        )
+        conn.commit()
+        wal_path = Path(str(db_path) + "-wal")
+        assert wal_path.is_file() and wal_path.stat().st_size > 0
+
+        raw_copy = tmp_path / "raw-file-copy.db"
+        shutil.copy2(db_path, raw_copy)
+        raw = sqlite3.connect(raw_copy)
+        try:
+            assert raw.execute("SELECT COUNT(*) FROM listings").fetchone() == (0,)
+        finally:
+            raw.close()
+
+        home = tmp_path / "home"
+        home.mkdir()
+        env = os.environ.copy()
+        env["HOME"] = str(home)
+        env["RC_UPGRADE_DB_PATH"] = str(db_path)
+        result = subprocess.run(
+            [sys.executable, "-c", _rc16_online_backup_script()],
+            cwd=tmp_path, env=env, capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        backup_path = Path(result.stdout.strip().removeprefix("Verified RC-16 backup: "))
+        assert rows(backup_path, "PRAGMA user_version") == [(2,)]
+        assert rows(backup_path, "PRAGMA quick_check") == [("ok",)]
+        assert rows(backup_path, "SELECT url FROM listings") == [
+            ("https://auctions.yahoo.co.jp/jp/auction/waltest",)
+        ]
+        assert rows(backup_path, "SELECT listing_id, item_id FROM listing_matches") == [(1, 1)]
+    finally:
+        conn.close()
 
 
 def _prepare_update_repo(tmp_path, monkeypatch):
