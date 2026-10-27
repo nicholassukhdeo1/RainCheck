@@ -107,7 +107,7 @@ def _html_row(deal, show_buy_now_label=False):
     if is_safe_http_url(deal.image_url):
         img = (
             f'<img src="{_e(deal.image_url)}" alt="{_e(title)}" width="100" height="100" '
-            f'style="display:block;border:0;width:100px;">'
+            f'style="display:block;border:0;width:100px;height:100px;">'
         )
         image_cell = f'<a href="{_e(deal.url)}">{img}</a>' if safe_url else img
     else:
@@ -162,6 +162,7 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
 
     all_deals = tuple(deal for s in sections for deal in s.deals)
     has_watch = any(deal.kind == "auction_watch" for deal in all_deals)
+    has_auction = any(deal.kind != "fixed_price" for deal in all_deals)
     # the subject holds only a count and a date, never seller text, so header injection can't happen
     if has_watch:
         count = f"{len(all_deals)} listing" if len(all_deals) == 1 else f"{len(all_deals)} listings"
@@ -176,7 +177,10 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
         f'<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{safe_subject}</title></head>',
         '<body style="margin:0;padding:16px;font-family:Arial,Helvetica,sans-serif;color:#222222;">',
         # 600px is the conventional email width: fits Gmail's reading pane and phones
-        '<div style="max-width:600px;margin:0 auto;line-height:1.4;overflow-wrap:anywhere;word-break:break-word;">',
+        (
+            '<div style="max-width:600px;margin:0 auto;line-height:1.4;overflow-wrap:anywhere;word-break:break-word;">'
+            if has_auction else '<div style="max-width:600px;margin:0 auto;line-height:1.4;">'
+        ),
         # 18px so the longest realistic subject fits a 375px phone without breaking the date at a hyphen
         f'<h1 style="font-size:18px;">{safe_subject}</h1>',
     ]
@@ -189,9 +193,15 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
             f'<span style="font-weight:normal;color:#666;">({market})</span></h2>'
         )
         # margin-bottom keeps the not-shown line and the next heading from touching the table
+        table_style = "border-collapse:collapse;width:100%;margin-bottom:16px;"
+        price_width = ""
+        if has_auction:
+            # The fixed columns keep a long auction warning from pushing Price off a phone.
+            table_style = "border-collapse:collapse;table-layout:fixed;width:100%;margin-bottom:16px;"
+            price_width = "width:80px;"
         html_parts.append(
             '<table width="100%" cellpadding="8" cellspacing="0" '
-            'style="border-collapse:collapse;table-layout:fixed;width:100%;margin-bottom:16px;">'
+            f'style="{table_style}">'
         )
         # borders go on the th cells because many clients ignore them on tr; a second border on
         # the tr would only add bytes (it repeats per section) for clients that already draw this one
@@ -202,7 +212,7 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
             # attribute); right alignment is the one that matters, so Price keeps both forms to be safe
             f'<th align="left" style="width:100px;{th_border}">Image</th>'
             f'<th align="left" style="{th_border}">Listing</th>'
-            f'<th align="right" style="width:80px;text-align:right;{th_border}">Price</th>'
+            f'<th align="right" style="{price_width}text-align:right;{th_border}">Price</th>'
             "</tr>"
         )
         text_lines.append(f"{section.item_name} (market price {_usd(section.market_price_usd)})")
