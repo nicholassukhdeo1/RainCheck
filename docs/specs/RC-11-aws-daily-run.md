@@ -56,6 +56,7 @@ An unattended run needs a persistent database, a scheduled entry point, and expl
 | `src/matching.py` | Reuse the shared title matcher; no planned edit. |
 | `requirements.txt` | Pin `boto3` and its compatible SDK dependencies in the deployment bundle. |
 | `template.yaml` (new) | AWS SAM definition in `us-east-2` for the function, storage, schedule, roles, and logs. |
+| `Makefile` (new) | Build an explicit Lambda artifact allowlist from `src/` and the pinned `requirements.txt`, leaving local data and tests outside the package. |
 | `tests/test_lambda_handler.py` (new) | Offline orchestration, state, error, and credential tests. |
 | `tests/test_sam_template.py` (new) | Offline template assertions and SAM validation where the CLI is available. |
 | `README.md` | Human CloudShell gate, initial upload, parameter setup, deploy, dry-run, schedule enablement, and rollback instructions. |
@@ -119,6 +120,11 @@ Use S3 versioning for recovery and expire noncurrent database versions after 30 
 - Use a Python runtime supported by AWS SAM, a zip deployment with pinned dependencies including `boto3`, no VPC attachment, default 512 MB `/tmp` unless measured database size requires more, and a timeout below Lambda's 15-minute limit.
   Without a VPC, the function has public internet access without a NAT Gateway; actual Yahoo and SMTP reachability still need live verification.
   The handler should not rely on the runtime's incidental `boto3` version.
+- Use `AWS::Serverless::Function` with a root `CodeUri`, `Metadata: {BuildMethod: makefile}`, and a root `Makefile` target named for the function's logical ID.
+  The target copies only the runtime Python modules and `src/schema.sql` into `ARTIFACTS_DIR`, then installs the pinned production requirements there.
+  Keep the package allowlist testable with an overridable dependency-install command so an offline test can build the source-only artifact and inspect its exact contents.
+  Do not rely on a `.samignore` file to exclude secrets or local data from a root `CodeUri` build.
+  This follows [AWS SAM's documented Python Makefile build method](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/building-custom-runtimes.html).
 - Run the daily Scheduler at 09:00 `Asia/Tokyo`, with flexible window disabled.
   Keep the schedule disabled until the CloudShell gate, parameter setup, backup-first upload, and a dry-run invocation have passed.
 
@@ -153,6 +159,7 @@ AWS recommends bundling `boto3` with its dependencies for a stable Python Lambda
 20. The schedule is disabled by default, runs daily at 09:00 `Asia/Tokyo` with flexible window off, and has explicit bounded delivery retry attempts and maximum event age; Lambda function-error retries are zero.
 21. Reserved concurrency is one, there is no public Lambda URL or API endpoint, and the function is not placed in a VPC.
 22. The deployment package contains the handler, application modules, and pinned third-party dependencies, including `boto3`; it contains no `.env`, database, test fixture, or secret.
+    An offline Makefile build with dependency installation disabled produces only the allowlisted source files, and the normal SAM build installs dependencies into the artifact directory.
 23. The documented preflight checks the CloudShell result for every intended brand, selected Region, parameter presence without exposing values, database backup and integrity, and S3 object version before the schedule is enabled.
 24. A dry-run invocation uses separately configured throwaway storage containing only synthetic listings and `RAINCHECK_DRY_RUN=1`, sends no email, and cannot modify the production S3 object.
     The handler captures or suppresses the full printed digest before CloudWatch logging, and captured logs contain no digest HTML, listing title, or recipient address.
@@ -228,6 +235,9 @@ The RC-11a result was confirmed with the full production-shape validity check, a
 The stale `src/db.py` and `LISTING_PATH` line references were corrected.
 On 2026-10-27, RC-11b test planning clarified the handler's nonsecret environment-variable contract and the fake-client patch point above.
 This clarification does not change the approved storage, credential, Region, or deployment policy.
+On 2026-10-27, RC-11c test planning clarified the SAM packaging method: an explicit Makefile build allowlist keeps the root-source package free of local database files, `.env`, and tests.
+The corresponding offline test runs that target without dependency installation and checks the artifact contents.
+This does not change the approved deployment resources or package-exclusion policy.
 
 ## CloudShell probe for future brands
 
