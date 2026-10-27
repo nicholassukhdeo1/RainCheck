@@ -86,10 +86,26 @@ def inline_item(item_id=1, name="rick owens ramones", keywords=("ramones", "ramo
 
 
 def inline_listing(n, title=None, yen=10000, image=None):
-    return yahoo_scrape.YahooListing(
+    listing = yahoo_scrape.YahooListing(
         auction_id=f"t{n}", url=f"{AUCTION}t{n}", title=title or f"Rick Owens Ramones {n}",
         price_yen=yen, image_url=image,
     )
+    # Existing pure tests exercise price ranking and matching with fixed-price examples.
+    # State that format explicitly once YahooListing exposes the RC-16 metadata fields.
+    if "is_fixed_price" in {field.name for field in dataclasses.fields(listing)}:
+        listing = dataclasses.replace(
+            listing, is_fixed_price=True, buy_now_price_yen=yen, scheduled_end_at=None,
+        )
+    return listing
+
+
+def _fixed_listing(auction_id, url, title, price_yen, image_url=None):
+    listing = yahoo_scrape.YahooListing(auction_id, url, title, price_yen, image_url)
+    if "is_fixed_price" in {field.name for field in dataclasses.fields(listing)}:
+        listing = dataclasses.replace(
+            listing, is_fixed_price=True, buy_now_price_yen=price_yen, scheduled_end_at=None,
+        )
+    return listing
 
 
 def seven_ramones_listings():
@@ -126,10 +142,13 @@ def test_rc15_c1_find_item_deals_returns_both_deals_best_first_with_full_fields(
     assert first.item_id == ramones_item.id
     assert first.brand_id == ramones_item.brand_id
     assert first.title == "Rick Owens Ramones High Top 42"
-    assert first.price_yen == 50000
-    assert first.price_usd == pytest.approx(310.0)
+    assert first.price_yen == 90000
+    assert first.price_usd == pytest.approx(558.0)
     assert first.market_price_usd == 800.0
-    assert first.discount_pct == pytest.approx(61.25)
+    assert first.discount_pct == pytest.approx(30.25)
+    assert first.kind == "auction_buy_now"
+    assert first.current_price_yen == 50000
+    assert first.potential_discount_pct == pytest.approx(61.25)
     assert first.image_url == "https://auc-pctr.c.yimg.jp/i/test/1.jpg"
     assert second.discount_pct == pytest.approx(22.5)
 
@@ -150,6 +169,7 @@ def test_rc15_c4_effective_price_drives_the_deal_math(ramones_item, minimal_list
     deals = yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062)
     assert [d.url for d in deals] == [URL_1]
     assert deals[0].discount_pct == pytest.approx(22.5)
+    assert deals[0].kind == "auction_watch"
     assert deals[0].market_price_usd == 400.0
 
 
@@ -488,7 +508,10 @@ def test_rc08_c6_provider_http_failure_warns_but_digest_and_records_still_happen
     assert len(warnings) == 1
     assert "0.0062" in warnings[0].getMessage()
     assert len(sent_emails) == 1
-    assert "$310.00" in sent_emails[0][1]
+    # The buy-now price is the payable deal price; the lower current bid remains
+    # visible as a provisional yen amount on the same auction row.
+    assert "$558.00" in sent_emails[0][1]
+    assert "¥50,000" in sent_emails[0][1]
     assert [row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")] == [
         URL_1, URL_4
     ]
@@ -538,7 +561,7 @@ def test_c46_one_email_sorted_by_discount_with_percentages(yahoo_http, seeded_db
     assert re.fullmatch(r"RainCheck: 2 new deals - \d{4}-\d{2}-\d{2}", subject)
     assert _row_urls(html) == [URL_1, URL_4]
     rows = [tr for tr in _soup(html).find_all("tr") if tr.find("td")]
-    assert [r.find_all("td")[2].find("strong").get_text() for r in rows] == ["61.3% off", "22.5% off"]
+    assert [r.find_all("td")[2].find("strong").get_text() for r in rows] == ["30.2% off", "22.5% off"]
     assert "cheaper than market" not in html and "cheaper than market" not in text
     assert text.index(URL_1) < text.index(URL_4)
 
@@ -569,18 +592,20 @@ def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
     assert rows[X3]["image_url"] is None
     assert len(sent_emails) == 1
     html = sent_emails[0][1]
-    assert _row_urls(html) == [X3, X1, Z2]
+    # The fixed-price flea-market row and the auction's buy-now price are
+    # immediately purchasable; the bid-only auction is shown after them as a watch.
+    assert _row_urls(html) == [Z2, X1, X3]
     soup = _soup(html)
     assert len(soup.find_all("img")) == 2
     first_cells = [tr.find_all("td")[0] for tr in soup.find_all("tr") if tr.find("td")]
-    assert first_cells[0].get_text(strip=True) == "No image"
-    assert first_cells[0].find("img") is None
-    assert first_cells[1].find("img") is not None and first_cells[2].find("img") is not None
-    discounts = [
-        tr.find_all("td")[2].find("strong").get_text() for tr in soup.find_all("tr") if tr.find("td")
-    ]
-    # 76.75 is exact in binary, and format() rounds the tie to even, so this is always 76.8
-    assert discounts == ["84.5% off", "76.8% off", "69.0% off"]
+    assert first_cells[0].find("img") is not None and first_cells[1].find("img") is not None
+    assert first_cells[2].get_text(strip=True) == "No image"
+    assert first_cells[2].find("img") is None
+    rendered = soup.get_text(" ", strip=True)
+    assert "69.0% off" in rendered and "65.1% off" in rendered
+    assert "76.8% (not guaranteed; bids may rise)" in rendered
+    assert "84.5% (not guaranteed; bids may rise)" in rendered
+    assert "Auction watch - current price (provisional)" in rendered
     assert len([call for call in fake_http.calls if call[1] == FRANKFURTER_URL]) == 1
 
 
@@ -819,7 +844,7 @@ def test_rc05_c4_failed_send_refreshes_known_rows_but_leaves_new_deals_for_retry
     assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 2
 
 
-def test_rc05_c5_and_c11_absent_listing_keeps_ended_fields_and_schema_stays_v1(
+def test_rc05_c5_and_c11_absent_listing_keeps_ended_fields_and_schema_stays_v3(
     yahoo_http, seeded_db, db_conn, monkeypatch, sent_emails
 ):
     brand_id = _item("rick owens ramones").brand_id
@@ -844,7 +869,7 @@ def test_rc05_c5_and_c11_absent_listing_keeps_ended_fields_and_schema_stays_v1(
         "2020-02-01T00:00:00+00:00",
         12345,
     )
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 3
     assert tuple(db_conn.execute(
         "SELECT ended_at, final_price_yen FROM listings WHERE url = ?", (URL_4,)
     ).fetchone()) == (None, None)
@@ -1053,6 +1078,7 @@ def test_rc03b_c11_effective_price_of_the_item_drives_the_deal_math(
     deals = yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062)
     assert [d.url for d in deals] == [URL_1]
     assert deals[0].discount_pct == pytest.approx(22.5)
+    assert deals[0].kind == "auction_watch"
 
 
 def test_rc03b_c12_item_without_usable_price_is_skipped_with_a_line(
@@ -1242,7 +1268,7 @@ def test_rc10_c26_yahoo_no_active_items_is_a_successful_no_work_run(
 def test_rc03b_c19_main_on_newer_schema_version_is_a_clean_error(
     temp_db, fake_http, sent_emails, capsys
 ):
-    set_user_version(temp_db, 3)
+    set_user_version(temp_db, 4)
     before = sha256(temp_db)
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
@@ -1278,7 +1304,8 @@ def _surrogate_page(bad_title=None, bad_image=None):
     import json
 
     good = {"auctionId": "t1000000001", "title": "Rick Owens Ramones High Top 42",
-            "price": 50000, "imageUrl": "https://auc-pctr.c.yimg.jp/i/test/1.jpg"}
+            "price": 50000, "isFixedPrice": True, "buyNowPrice": 50000,
+            "imageUrl": "https://auc-pctr.c.yimg.jp/i/test/1.jpg"}
     bad = {"auctionId": "t1000000002", "title": bad_title or "Rick Owens Ramones Bad 44",
            "price": 20000, "imageUrl": bad_image or "https://auc-pctr.c.yimg.jp/i/test/2.jpg"}
     data = {"props": {"pageProps": {"initialState": {"search": {"items": {"listing": {
@@ -1343,11 +1370,13 @@ def test_rc10_c21_c22_batch_failure_rolls_back_then_next_run_resends_all_deals(
     real_record_matches = db.record_listing_matches
     calls = []
 
-    def fail_first_batch(deals):
+    def fail_first_batch(deals, *, sources_by_url=None):
         calls.append(tuple(deals))
         if len(calls) == 1:
             raise RuntimeError("database is locked")
-        return real_record_matches(deals)
+        if sources_by_url is None:
+            return real_record_matches(deals)
+        return real_record_matches(deals, sources_by_url=sources_by_url)
 
     monkeypatch.setattr(db, "record_listing_matches", fail_first_batch)
     with pytest.raises(SystemExit) as exc:
@@ -1507,10 +1536,10 @@ def test_rc10_c18_c19_item_calculation_error_does_not_claim_url_and_keeps_one_di
     db_conn.commit()
 
     monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: [
-        yahoo_scrape.YahooListing("ramones", "https://auctions.yahoo.co.jp/jp/auction/ramones",
-                                  "Rick Owens Ramones High", 50000, None),
-        yahoo_scrape.YahooListing("boots", "https://auctions.yahoo.co.jp/jp/auction/boots",
-                                  "Rick Owens Black Boots", 40000, None),
+        _fixed_listing("ramones", "https://auctions.yahoo.co.jp/jp/auction/ramones",
+                       "Rick Owens Ramones High", 50000),
+        _fixed_listing("boots", "https://auctions.yahoo.co.jp/jp/auction/boots",
+                       "Rick Owens Black Boots", 40000),
     ])
     original = yahoo_scrape.find_item_deals
 
@@ -1543,9 +1572,7 @@ def test_rc10_c19_failed_earlier_item_does_not_claim_listing_from_later_healthy_
 ):
     shared_url = "https://auctions.yahoo.co.jp/jp/auction/shared"
     monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: [
-        yahoo_scrape.YahooListing(
-            "shared", shared_url, "Rick Owens Ramones Pod Shorts", 10000, None
-        ),
+        _fixed_listing("shared", shared_url, "Rick Owens Ramones Pod Shorts", 10000),
     ])
     original = yahoo_scrape.find_item_deals
 
@@ -1585,7 +1612,7 @@ def test_rc10_c21_atomic_batch_failure_rolls_back_every_displayed_deal(
 ):
     calls = []
 
-    def fail_batch(deals):
+    def fail_batch(deals, *, sources_by_url=None):
         calls.append(tuple(deals))
         raise RuntimeError("forced batch failure")
 
@@ -1605,11 +1632,13 @@ def test_rc10_c22_failed_batch_can_be_offered_again_on_next_run(
     real_batch = getattr(db, "record_listing_matches", None)
     attempts = []
 
-    def fail_once(deals):
+    def fail_once(deals, *, sources_by_url=None):
         attempts.append(tuple(deals))
         if len(attempts) == 1:
             raise RuntimeError("forced batch failure")
-        return real_batch(deals)
+        if sources_by_url is None:
+            return real_batch(deals)
+        return real_batch(deals, sources_by_url=sources_by_url)
 
     monkeypatch.setattr(db, "record_listing_matches", fail_once, raising=False)
     with pytest.raises(SystemExit):

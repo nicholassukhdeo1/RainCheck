@@ -1,4 +1,4 @@
--- Schema version 2 (PRAGMA user_version = 2).
+-- Schema version 3 (PRAGMA user_version = 3).
 -- This file always describes the LATEST version, and it is only used to create
 -- a brand new database. An existing database is upgraded by MIGRATIONS in
 -- db.py instead, because CREATE TABLE IF NOT EXISTS cannot add a column to a
@@ -47,7 +47,10 @@ CREATE TABLE IF NOT EXISTS listings (
     first_seen_at    TEXT NOT NULL,
     last_seen_at     TEXT NOT NULL,
     ended_at         TEXT,
-    final_price_yen  INTEGER
+    final_price_yen  INTEGER,
+    is_fixed_price   INTEGER CHECK (is_fixed_price IN (0, 1)),
+    buy_now_price_yen INTEGER CHECK (buy_now_price_yen IS NULL OR buy_now_price_yen > 0),
+    scheduled_end_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS listing_matches (

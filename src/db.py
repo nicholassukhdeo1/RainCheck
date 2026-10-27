@@ -22,7 +22,7 @@ CATALOG_PATH = SRC_DIR / "catalog.json"
 # the schema version this code expects. it lives inside the database file
 # itself (PRAGMA user_version), so every database knows which shape it has.
 # schema.sql always describes this version.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # how to upgrade an existing database, one step at a time.
 # the key is the version you END UP at, the value is the statements to get there.
@@ -48,6 +48,13 @@ MIGRATIONS = {
         "PRIMARY KEY (item_id, ebay_listing_id))",
         "CREATE INDEX idx_ebay_listing_prices_item_seen "
         "ON ebay_listing_prices (item_id, first_seen_at)",
+    ),
+    3: (
+        "ALTER TABLE listings ADD COLUMN is_fixed_price INTEGER "
+        "CHECK (is_fixed_price IN (0, 1))",
+        "ALTER TABLE listings ADD COLUMN buy_now_price_yen INTEGER "
+        "CHECK (buy_now_price_yen IS NULL OR buy_now_price_yen > 0)",
+        "ALTER TABLE listings ADD COLUMN scheduled_end_at TEXT",
     ),
 }
 
@@ -687,21 +694,56 @@ def record_listing_match(brand_id, url, title, price_yen, image_url, item_id) ->
             raise
 
 
-def record_listing_matches(deals) -> int:
+def record_listing_matches(deals, *, sources_by_url=None) -> int:
     """Record a displayed digest's listings and matches in one transaction."""
+    deals = tuple(deals)
+    sources = {}
+    if sources_by_url is not None:
+        # Check the entire batch before opening a connection or writing any row.
+        for deal in deals:
+            try:
+                source = sources_by_url[deal.url]
+                source_url = source.url
+                current_price = source.price_yen
+                fixed = source.is_fixed_price
+                buy_now = source.buy_now_price_yen
+                end = source.scheduled_end_at
+            except (KeyError, TypeError, AttributeError) as exc:
+                raise ValueError("every displayed deal needs its parsed Yahoo source") from exc
+            if source_url != deal.url:
+                raise ValueError("Yahoo source URL does not match displayed deal")
+            if isinstance(current_price, bool) or not isinstance(current_price, int) or current_price <= 0:
+                raise ValueError("Yahoo current price must be a positive integer")
+            if fixed is not None and type(fixed) is not bool:
+                raise ValueError("Yahoo sale format must be a boolean or None")
+            if buy_now is not None and (
+                isinstance(buy_now, bool) or not isinstance(buy_now, int) or buy_now <= 0
+            ):
+                raise ValueError("Yahoo buy-now price must be a positive integer or None")
+            if end is not None and (
+                not isinstance(end, datetime) or end.utcoffset() != timedelta(0)
+            ):
+                raise ValueError("Yahoo scheduled end must be a UTC datetime or None")
+            sources[deal.url] = (current_price, fixed, buy_now, end.isoformat() if end else None)
+
     timestamp = datetime.now(timezone.utc).isoformat()
     with closing(get_connection()) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
             inserted_count = 0
             for deal in deals:
+                current_price, fixed, buy_now, end = sources.get(
+                    deal.url, (deal.price_yen, None, None, None)
+                )
                 inserted = conn.execute(
                     "INSERT INTO listings "
-                    "(brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at) "
-                    "VALUES (?,?,?,?,?,?,?) ON CONFLICT(url) DO NOTHING",
+                    "(brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at, "
+                    "is_fixed_price, buy_now_price_yen, scheduled_end_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(url) DO NOTHING",
                     (
-                        deal.brand_id, deal.url, deal.title, deal.price_yen,
+                        deal.brand_id, deal.url, deal.title, current_price,
                         deal.image_url, timestamp, timestamp,
+                        fixed, buy_now, end,
                     ),
                 )
                 inserted_count += inserted.rowcount
