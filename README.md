@@ -33,7 +33,7 @@ src/
 ├── matching.py      # the keyword matcher both jobs share (include and exclude keywords)
 ├── digest.py        # builds the digest email (subject, HTML, plain text) from the deals
 ├── sendemail.py     # sends the digest email (text + HTML)
-├── setup.py         # interactive: build your watchlist, saved to catalog.json
+├── setup.py         # manage tracked items in the SQLite database
 ├── catalog.json     # the watchlist of items being tracked
 └── raincheck.db     # the SQLite database (local to each machine, not committed)
 tests/               # offline test suite
@@ -104,18 +104,24 @@ Both can be run from any directory.
 - Yahoo sends at most one digest per run and records all displayed deals together only after a successful send.
   If SMTP accepts a message and the later database transaction fails, the deals can be emailed again on a later run.
 
-`src/setup.py` is the exception.
-It reads and writes `catalog.json` relative to the current directory, so run it from inside `src/`:
+From the repository root, use the item CLI to manage one tracked product at a time:
 
 ```bash
-cd src
-python3 setup.py         # build your watchlist
+python3 src/setup.py add --name "Pod Shorts Custom" --keyword "pod shorts" --search-query "rick owens pod shorts" --manual-price 250
+python3 src/setup.py list
+python3 src/setup.py update 3 --manual-price 275 --exclude-keyword fake
+python3 src/setup.py remove 3
+python3 src/setup.py list --all
+python3 src/setup.py add --name "Pod Shorts Custom" --keyword "pod shorts"
+python3 src/setup.py adopt 3
 ```
 
-After adding items with it, run `python3 src/db.py --seed` so the new items reach the database.
-But first fix the entries `setup.py` wrote in `catalog.json`.
-Its `keywords` are placeholders that need fixing, and its `search_query` uses `+` between words, which seeding rejects, so rewrite it with spaces (or remove it).
-(RC-14 replaces `setup.py`.)
+Use the ID printed by `list` in place of `3`.
+`add` reuses an inactive item's ID when its brand and name match.
+The CLI edits the manual fallback USD price for a tracked item; each Yahoo auction keeps its own yen price and the eBay estimate takes priority when available.
+`adopt` requires an exact brand and name match in `src/catalog.json` and copies that entry's configuration to the item.
+The commands work from any directory and honor `RAINCHECK_DB_PATH`.
+They require an initialized, current-version database.
 
 ## Database
 
@@ -126,9 +132,12 @@ Its `keywords` are placeholders that need fixing, and its `search_query` uses `+
 - Rebuilding from scratch loses two things.
   The record of listings already seen is gone, so current deals are emailed again on the next run.
   The eBay-derived market prices are gone too, so items fall back to `market_price` from `catalog.json` until `ebay_pricing.py` runs again.
-- Seeding (`python3 src/db.py --seed`) syncs `catalog.json` into the database.
-  Edits to an item (price, search query, keywords, exclude keywords) propagate, and an item you remove from the catalog is deactivated, not deleted, so its history is kept.
-  Adding it back reactivates the same row.
+- Seeding (`python3 src/db.py --seed`) syncs `catalog.json` into catalog-managed rows in the database.
+  CLI-managed and unclaimed rows remain unchanged, including when the catalog has a matching name or omits them.
+  A new catalog row is marked `catalog`; new CLI rows are marked `cli`.
+  Existing rows migrated from an older database are `unclaimed` because their ownership cannot be inferred safely.
+  Use `python3 src/setup.py adopt ID` to let later seeds update or deactivate an individual item.
+  Seeding keeps listing matches and eBay price history.
 - `market_price` in `catalog.json` is only a fallback.
   It is stored as `manual_price_usd`, and it never overwrites the eBay-derived `market_price_usd`.
   Deal math uses the eBay price when there is one and the catalog price otherwise.
@@ -137,6 +146,11 @@ Its `keywords` are placeholders that need fixing, and its `search_query` uses `+
 - The database has a schema version.
   After you update RainCheck, back up the database and run `python3 src/db.py` to upgrade it in place without losing listings or eBay prices.
   The jobs refuse to run on an outdated database and tell you to do this, so nothing is changed behind your back.
+- For the version 4 upgrade, stop scheduled jobs and make a timestamped SQLite `.backup` outside the repository before running `python3 src/db.py` without `--seed`.
+  Check `PRAGMA integrity_check` on the backup first.
+  After upgrading, confirm `PRAGMA user_version` is 4, `PRAGMA integrity_check` returns `ok`, `PRAGMA foreign_key_check` is empty, and row counts for `items`, `item_keywords`, `listings`, `listing_matches`, and `ebay_listing_prices` are unchanged.
+  All preexisting items should have `config_source = 'unclaimed'`; inspect `python3 src/setup.py list --all` before adopting any row.
+  Keep the backup until the CLI and jobs work normally.
 - To back it up safely, run `sqlite3 src/raincheck.db ".backup '<destination>'"`.
   This makes a consistent copy even if another process is writing, so store it outside the repository.
 - Warning: checking out a commit from before this change (before the RC-02 merge) replaces your local database with the old committed copy without asking.
