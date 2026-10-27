@@ -2,7 +2,7 @@ Capture date: 2026-10-27
 Source URL: https://auctions.yahoo.co.jp/jp/auction/c1143076331
 Page role: Public ended item page with seller-authored description
 Reader crawl age: about three months before study date. HTTP status was not surfaced.
-Confidence: low; seller description conflicts with the visible bid count.
+Confidence: low; seller description may refer to an earlier auction cycle.
 
 Visible fields:
 - Ended marker: このオークションは終了しています
@@ -12,4 +12,5 @@ Visible fields:
 - Seller-authored description: ※落札されませんでしたので再出品になります
 
 Rejected as proof of a no-bid relisting.
-The seller-authored claim conflicts with the visible one-bid count, and the page exposes no preceding cycle key.
+The visible one-bid count describes the current page, while the seller-authored claim may describe an earlier cycle.
+The earlier cycle's ID, bid count, and outcome cannot be verified from this page, and no preceding cycle key is exposed.

@@ -35,8 +35,8 @@ If a later feature derives a market value from completed Yahoo Auctions Japan sa
   It does not explicitly state that no buyer exists, and the amount may be a fixed-price amount, so it is not accepted as proof of an ended-without-sale result.
   The reader identified its page snapshot as crawled about four months before this study, and did not expose an HTTP status.
 - A public ended item page, [ID `c1143076331`](https://auctions.yahoo.co.jp/jp/auction/c1143076331), has a seller description saying it was not sold and is being relisted.
-  The same page displays one bid, so it is contradictory and is rejected as a no-bid relisting example.
-  This also shows why seller prose or bid count alone is not an authoritative completion outcome.
+  The page displays one bid for the visible auction, but the description could refer to an earlier cycle.
+  The earlier cycle's ID and outcome cannot be verified, so this is rejected as proof of a no-bid relisting.
 - Yahoo's public [active Rick Owens brand results](https://auctions.yahoo.co.jp/brand/3538/) exposed currently active rows with remaining time and bid counts.
   The results page snapshot was crawled the day before this study.
   Following representative item URLs `https://auctions.yahoo.co.jp/jp/auction/b1249690167` and `https://auctions.yahoo.co.jp/jp/auction/q1248425007` returned web-reader cache misses, not HTTP responses, so no exact-ID active item detail response was captured.
@@ -114,7 +114,7 @@ Never include a private account page as a fixture.
 6. Each evidence shape can be captured as a sanitized fixture and checked offline against expected identity, status, time, and price.
 
 **No-go outcome now:** the sold example passes only part of the gate.
-The ended zero-bid page is ambiguous, the seller-described relist has a contradictory bid count, active item detail requests were not inspectable, and no stable public cycle discriminator has been established.
+The ended zero-bid page is ambiguous, the seller-described relist lacks verifiable earlier-cycle identity, active item detail requests were not inspectable, and no stable public cycle discriminator has been established.
 The sold page also omits a timezone label.
 Do not implement a writer for `ended_at` or `final_price_yen` from the current evidence.
 If further public discovery cannot satisfy the gate, close RC-18 with this limitation documented and leave the nullable columns untouched.
@@ -174,7 +174,8 @@ Any future RC-18 implementation touching `src/db.py` or `src/schema.sql` cannot 
 - The public page for auction `f1234271025` is ended and has zero bids, but it does not unambiguously say no buyer exists.
   Its reader snapshot was about four months old, and it is excluded as proof of an unsold completion.
 - Auction `c1143076331` has seller prose stating it was not sold and is being relisted, while its page displays one bid.
-  This contradiction makes it unsuitable as proof of a no-bid relisting or completion state.
+  The prose may refer to an earlier cycle, while the bid count describes the visible one.
+  Without the earlier cycle's ID or a cycle key, this page cannot prove a no-bid relisting or completion state.
 - Yahoo's official no-bid relisting guidance confirms that the auction ID and URL can be reused.
   The study found no public cycle key that can distinguish repeated no-bid cycles.
 - Public active result rows were observed, but the available reader could not inspect representative item-detail URLs due cache misses.
