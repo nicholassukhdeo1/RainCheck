@@ -363,7 +363,7 @@ def main():
         if digest is None:
             logger.info(NO_DEALS_LINE)
             if failed_item_count:
-                logger.info("Yahoo deals job finished: 0 deals, %d item failures", failed_item_count)
+                logger.error("Yahoo deals job failed: 0 deals, %d item failures", failed_item_count)
                 raise SystemExit(1)
             logger.info("Yahoo deals job finished: 0 deals, 0 item failures")
             return 0
@@ -380,8 +380,8 @@ def main():
             raise SystemExit(1)
         logger.info("Yahoo digest sent and %d displayed deals recorded", len(digest.deals))
         if failed_item_count:
-            logger.info(
-                "Yahoo deals job finished: %d deals, %d item failures",
+            logger.error(
+                "Yahoo deals job failed: %d deals sent, %d item failures",
                 len(digest.deals), failed_item_count,
             )
             raise SystemExit(1)

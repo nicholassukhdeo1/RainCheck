@@ -205,6 +205,10 @@ def main():
         # refresh_market_prices fetches its own token, so we do not fetch one here too
         result = refresh_market_prices()
         if result.had_failure:
+            logger.error(
+                "eBay pricing job failed: %d succeeded, %d failed",
+                len(result.succeeded_item_ids), len(result.failed_item_ids),
+            )
             raise SystemExit(1)
         return 0
     except SchemaVersionError as exc:

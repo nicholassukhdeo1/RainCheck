@@ -20,21 +20,23 @@ def _retry_after_seconds(response, now):
     value = headers.get("Retry-After")
     if not isinstance(value, str):
         return None
+    if value.isascii() and value.isdigit():
+        # We only need to distinguish delays through the five-second cap.
+        # Avoid converting an arbitrarily large valid integer to float.
+        normalized = value.lstrip("0") or "0"
+        if len(normalized) > 1 or normalized > "5":
+            return MAX_RETRY_AFTER_SECONDS + 1
+        return float(int(normalized))
     try:
-        if not value.isdecimal():
-            raise ValueError
-        delay = float(int(value))
-    except ValueError:
-        try:
-            retry_at = parsedate_to_datetime(value)
-            if retry_at.tzinfo is None:
-                retry_at = retry_at.replace(tzinfo=timezone.utc)
-            current = now()
-            if current.tzinfo is None:
-                current = current.replace(tzinfo=timezone.utc)
-            delay = (retry_at - current).total_seconds()
-        except (TypeError, ValueError, OverflowError):
-            return None
+        retry_at = parsedate_to_datetime(value)
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        current = now()
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        delay = (retry_at - current).total_seconds()
+    except (TypeError, ValueError, OverflowError):
+        return None
     if delay < 0:
         return None
     return delay
