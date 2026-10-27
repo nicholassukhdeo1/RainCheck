@@ -86,18 +86,166 @@ Add three nullable columns to `listings` in both the fresh schema and `MIGRATION
 The migration only adds nullable columns, so old listing IDs, URLs, prices, timestamps, and match rows remain unchanged, with `NULL` auction metadata.
 Do not infer old format or backfill from the title, URL, or current price.
 Migration 3 runs inside the existing transaction and increments `PRAGMA user_version` only after all three additions succeed.
-The existing `init_db` path can migrate a recognized version 1 database through versions 2 and 3, but the user should complete RC-06's separate data-upgrade instructions before deploying RC-16.
+The existing `init_db` path could migrate a recognized version 1 database directly through versions 2 and 3 in one invocation.
+The user upgrade must instead pause at version 2 to run RC-06's separate targeted `fake` keyword update, whose documented checks explicitly require version 2.
 
 **Backup-first upgrade for the user after merge:**
 
-1. Stop scheduled RainCheck jobs and identify the database path that `RAINCHECK_DB_PATH` selects; if unset, the project default is `src/raincheck.db`.
-2. Complete the RC-06 post-merge procedure in `docs/specs/RC-06-market-price-history.md` and confirm `PRAGMA user_version` is 2 before starting RC-16.
-3. Make a timestamped, byte-for-byte copy of that database into `~/RainCheck-backups`, and verify the copy exists and has a nonzero size.
-4. With the same database path explicitly set in `RAINCHECK_DB_PATH`, run `python3 src/db.py` once; do not pass `--seed` because this schema upgrade does not change catalog rows.
-5. Check `PRAGMA user_version = 3`, `PRAGMA quick_check = ok`, the three new columns in `PRAGMA table_info(listings)`, and unchanged counts in `listings` and `listing_matches` before restarting jobs.
+Only the user runs this procedure against the real database after merging and pulling the relevant code; agents rehearse with temporary databases only.
+Stop all scheduled RainCheck jobs and keep them stopped until every check passes.
+Choose the actual database path explicitly, using the default only if that is where the user's database really resides:
 
-The user performs this on their machine; agents use temporary databases only.
-If any check fails, stop jobs, restore the verified backup, and run the previous code until the failure is investigated.
+```sh
+export RC_UPGRADE_DB_PATH="$(pwd)/src/raincheck.db"
+export RC_UPGRADE_PYTHON="$(pwd)/.venv/bin/python"
+test -x "$RC_UPGRADE_PYTHON"
+```
+
+For a nondefault database, replace the right-hand side with that database's absolute path.
+If the `test -x` check fails, create the project virtual environment using the setup instructions before proceeding; no database command should run without a known Python interpreter.
+Do not assume that `RAINCHECK_DB_PATH` in a shell or `.env` makes the RC-06 snippets use a nondefault path: their `Path("src/raincheck.db")` assignments are hardcoded.
+The user must point every RC-06 snippet and every CLI invocation at the same verified path before running it.
+Never use `--seed` during these upgrades, because seeding replaces complete keyword sets and could erase database-only keywords.
+
+**If the database is still version 1:**
+
+1. Use the merged version 2 code from before RC-16, not the version 3 code, for the RC-06 phase.
+   The pinned merged version 2 commit is `adf0ba8eea27fbaa1e41528ee0eca1868ef6412c`.
+   If version 3 code is already installed, create a separate detached checkout of that commit and run the RC-06 phase there without changing the version 3 checkout or the real database location.
+   From the version 3 repository root, the isolated checkout can be created with:
+
+   ```sh
+   export RC_UPGRADE_V3_ROOT="$(pwd)"
+   export RC_UPGRADE_V2_PARENT="$(mktemp -d /private/tmp/raincheck-v2-upgrade.XXXXXX)"
+   git worktree add --detach "$RC_UPGRADE_V2_PARENT/checkout" adf0ba8eea27fbaa1e41528ee0eca1868ef6412c
+   cd "$RC_UPGRADE_V2_PARENT/checkout"
+   ```
+
+   Keep `RC_UPGRADE_DB_PATH` set to the absolute real database path while in this checkout.
+   Return to the version 3 checkout with `cd "$RC_UPGRADE_V3_ROOT"` only after the version 2 verification and targeted update succeed.
+2. Run RC-06's [existing database upgrade steps 1 through 5](RC-06-market-price-history.md#existing-database-upgrade-after-merge) in order: confirm version 1, make its SQLite online backup, migrate only to version 2 with `RAINCHECK_DB_PATH="$RC_UPGRADE_DB_PATH" "$RC_UPGRADE_PYTHON" src/db.py` from the version 2 checkout, verify exact version 2, then run its separate targeted `fake` update.
+3. If the RC-06 snippets are run from a detached checkout or the database path is nondefault, replace every `Path("src/raincheck.db").resolve(strict=True)` in those copied snippets with `Path(os.environ["RC_UPGRADE_DB_PATH"]).expanduser().resolve(strict=True)`; add `import os` to RC-06 step 4's verification snippet, which does not already import it.
+   Run all copied snippets from the version 2 checkout so the `matching` import in step 5 also uses version 2 code.
+4. Confirm that RC-06 step 4 reports version 2 and unchanged prior table counts, and that step 5 verifies an exact `fake` exclude for each of the two target items.
+   Stop here if either check fails; do not let version 3 code open or migrate the database yet.
+
+**If the database is already version 2:**
+
+1. Skip RC-06 steps 1 through 4, which require a version 1 starting database.
+2. While using the same merged version 2 code and explicit database path, run RC-06 step 5 to add or verify only the two targeted `fake` excludes.
+   That step makes another SQLite online backup and is safe to rerun when both exact rows already exist.
+   If version 3 code is already installed, create the pinned version 2 detached checkout with the commands in the version 1 path above and run step 5 there.
+   Apply the same path substitution above if the database is nondefault or the version 2 code lives in a detached checkout.
+
+**For either version 2 path, after the RC-06 `fake` step succeeds:**
+
+1. Return to the version 3 RC-16 checkout and take a new, timestamped SQLite online backup of the version 2 database into `~/RainCheck-backups`.
+   Use Python's `sqlite3.Connection.backup`, as in RC-06 step 2, rather than copying only the `.db` file; a file copy can omit uncheckpointed write-ahead-log data.
+   [SQLite's backup documentation](https://www.sqlite.org/backup.html) describes the resulting consistent snapshot.
+2. Verify that this new backup has `PRAGMA user_version = 2`, `PRAGMA quick_check = ok`, both exact `fake` excludes, and the same row counts as the live version 2 database before proceeding.
+3. With the same explicit path, run `RAINCHECK_DB_PATH="$RC_UPGRADE_DB_PATH" "$RC_UPGRADE_PYTHON" src/db.py` once from the version 3 checkout.
+   This applies only migration 3 and does not seed catalog data.
+4. Open the backup and upgraded database read-only and check `PRAGMA user_version = 2` in the backup, `PRAGMA user_version = 3` in the live database, `PRAGMA integrity_check = ok`, and an empty `PRAGMA foreign_key_check` result.
+   Confirm `is_fixed_price`, `buy_now_price_yen`, and `scheduled_end_at` in `PRAGMA table_info(listings)`.
+   Compare row counts and all preexisting column values across `brands`, `items`, `item_keywords`, `listings`, `listing_matches`, and `ebay_listing_prices` against the backup; new auction columns on old listing rows must be `NULL`.
+5. Restart jobs only after those checks succeed.
+   If migration or verification fails, keep jobs stopped and use the verified version 2 backup with version 2 code while investigating; do not run version 2 code against a version 3 database.
+
+For the version 3 step, this command creates and verifies the required version 2 online backup using the explicit database path:
+
+```sh
+"$RC_UPGRADE_PYTHON" - <<'PY'
+from contextlib import closing
+from datetime import datetime, timezone
+from pathlib import Path
+import os
+import sqlite3
+
+source = Path(os.environ["RC_UPGRADE_DB_PATH"]).expanduser().resolve(strict=True)
+backup_dir = Path.home() / "RainCheck-backups"
+backup_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+target = backup_dir / f"raincheck-before-rc16-{stamp}.db"
+tables = ("brands", "items", "item_keywords", "listings", "listing_matches", "ebay_listing_prices")
+targets = (("Rick Owens", "rick owens ramones"), ("Rick Owens", "pod shorts"))
+fake_sql = (
+    "SELECT COUNT(*) FROM item_keywords k "
+    "JOIN items i ON i.id = k.item_id "
+    "JOIN brands b ON b.id = i.brand_id "
+    "WHERE b.name = ? AND i.name = ? AND k.keyword = 'fake' AND k.kind = 'exclude'"
+)
+
+with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as live:
+    if live.execute("PRAGMA user_version").fetchone()[0] != 2:
+        raise RuntimeError("Expected schema version 2; backup not started")
+    if live.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+        raise RuntimeError("Source database failed quick_check")
+    if live.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise RuntimeError("Source database has broken foreign keys")
+    if any(live.execute(fake_sql, pair).fetchone()[0] != 1 for pair in targets):
+        raise RuntimeError("Both exact fake excludes must exist before RC-16")
+    counts = tuple(live.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables)
+    fd = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    os.close(fd)
+    with closing(sqlite3.connect(target)) as backup:
+        live.backup(backup)
+        if backup.execute("PRAGMA user_version").fetchone()[0] != 2:
+            raise RuntimeError("Backup version differs from source")
+        if backup.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            raise RuntimeError("Backup failed quick_check")
+        backed_up_counts = tuple(
+            backup.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables
+        )
+        if backed_up_counts != counts:
+            raise RuntimeError("Backup row counts differ from source")
+        if any(backup.execute(fake_sql, pair).fetchone()[0] != 1 for pair in targets):
+            raise RuntimeError("Backup is missing a fake exclude")
+print(f"Verified RC-16 backup: {target}")
+PY
+```
+
+After running the version 3 `src/db.py` command, paste that printed backup path into this read-only verification command:
+
+```sh
+"$RC_UPGRADE_PYTHON" - <<'PY'
+from contextlib import closing
+from pathlib import Path
+import os
+import sqlite3
+
+source = Path(os.environ["RC_UPGRADE_DB_PATH"]).expanduser().resolve(strict=True)
+backup_path = Path(input("Paste verified RC-16 backup path: ").strip()).expanduser().resolve(strict=True)
+tables = ("brands", "items", "item_keywords", "listings", "listing_matches", "ebay_listing_prices")
+new_columns = {"is_fixed_price", "buy_now_price_yen", "scheduled_end_at"}
+
+with closing(sqlite3.connect(backup_path.as_uri() + "?mode=ro", uri=True)) as before:
+    with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as after:
+        if before.execute("PRAGMA user_version").fetchone()[0] != 2:
+            raise RuntimeError("Backup is not schema version 2")
+        if after.execute("PRAGMA user_version").fetchone()[0] != 3:
+            raise RuntimeError("Live database is not schema version 3")
+        if after.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise RuntimeError("Live database failed integrity_check")
+        if after.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise RuntimeError("Live database has broken foreign keys")
+        columns = {row[1] for row in after.execute("PRAGMA table_info(listings)")}
+        if not new_columns <= columns:
+            raise RuntimeError("Live listings table lacks RC-16 columns")
+        for table in tables:
+            old_columns = [row[1] for row in before.execute(f"PRAGMA table_info({table})")]
+            selected = ", ".join('"' + name.replace('"', '""') + '"' for name in old_columns)
+            old_rows = before.execute(f"SELECT {selected} FROM {table} ORDER BY rowid").fetchall()
+            new_rows = after.execute(f"SELECT {selected} FROM {table} ORDER BY rowid").fetchall()
+            if old_rows != new_rows:
+                raise RuntimeError(f"Preexisting rows changed in {table}")
+        if after.execute(
+            "SELECT COUNT(*) FROM listings WHERE is_fixed_price IS NOT NULL "
+            "OR buy_now_price_yen IS NOT NULL OR scheduled_end_at IS NOT NULL"
+        ).fetchone()[0] != 0:
+            raise RuntimeError("Migrated listing rows should have null auction metadata")
+print("Schema version 3, integrity, foreign keys, and all preexisting rows verified")
+PY
+```
 
 ### Interfaces
 
@@ -230,6 +378,8 @@ Because this job reads only the newest page, it cannot promise to notice every l
 - In `tests/test_digest.py`, check HTML and plain text labels, the two distinctly labeled percentages in one auction-with-buy-now row, JST scheduled end and missing-end text, scraped-text escaping, and responsive table attributes.
 - During verification, render a realistic mixed digest with a long Japanese title at 375px phone and desktop widths and confirm the price column and warning remain visible.
 - In `tests/test_db.py`, start from a version 2 database with listing and match rows, and check version 3 migration preservation, fresh-schema parity, idempotence, rollback on injected migration failure, and constraints.
+- Rehearse the operator sequence with throwaway version 1 and version 2 databases: version 1 to 2 under pinned version 2 code, idempotent targeted `fake` excludes, online backup, then version 2 to 3 under RC-16 code with all prior rows intact.
+- Include a throwaway version 2 database in WAL mode with an uncheckpointed committed row and verify that the online backup contains it; never substitute a raw `.db` file copy in the procedure.
 - In `tests/test_listing_matches.py`, check source mapping validation before database access, stored current price versus displayed buy-now price, duplicate URL behavior, legacy caller compatibility, URL conflicts, a second-deal SQL failure rolling back the whole batch, and connection closure.
 - Update RC-10 Yahoo test doubles that intercept `record_listing_matches` to accept the new keyword argument without changing their failure behavior.
 - Add a two-run case showing that a previously emailed watch is not resent when its buy-now price changes, plus a case where an initially above-market listing later qualifies and is emailed.
@@ -261,6 +411,9 @@ None.
 - 2026-10-27: Clarified singular and plural grammar for digest subjects containing auction watches.
   One displayed row uses `1 listing to review`; two or more use `N listings to review`.
   This changes no alert policy.
+- 2026-10-27: Staged the backup-first upgrade so a version 1 database completes RC-06's version 2 migration and targeted `fake` update before RC-16 migration 3, and a version 2 database completes the targeted update before migration 3.
+  Added a pinned version 2 checkout fallback, explicit path handling, SQLite online backup, and full preexisting-row, integrity, and foreign-key checks.
+  This changes no auction alert policy.
 
 ## Rollback
 
