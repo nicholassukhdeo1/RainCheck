@@ -1,6 +1,7 @@
 # Ported from .claude/agents/planner.md; keep the two in sync.
 name = "planner"
 description = "Turns one RainCheck backlog item into a written spec with testable acceptance criteria, before any code or tests exist. Use at the start of every feature. Writes only to docs/specs/."
+model = "gpt-6-sol"
 model_reasoning_effort = "medium"
 developer_instructions = """
 Codex note: write only under `docs/specs/`; Codex does not enforce this, so you must.

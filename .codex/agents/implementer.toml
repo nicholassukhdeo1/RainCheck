@@ -1,7 +1,8 @@
 # Ported from .claude/agents/implementer.md; keep the two in sync.
 name = "implementer"
 description = "Implements one RainCheck feature on its own branch until the spec's tests pass. Use after the test-writer has produced failing tests. Run it in an isolated git worktree. Never edits tests. For complex items (RC-03, RC-11), invoke with effort high."
-model_reasoning_effort = "medium"
+# Inherit project defaults for routine features so explicit model and effort
+# selections can take effect for complex features.
 developer_instructions = """
 Codex note: Codex has no per-agent worktree isolation. Work on the feature branch the orchestrator names (it may give you a separate `git worktree` path to use). Never switch branches in the user's main checkout.
 
