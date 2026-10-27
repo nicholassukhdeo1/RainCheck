@@ -1,6 +1,6 @@
 {
   "href": "https://api.ebay.com/buy/browse/v1/item_summary/search?q=rick+owens+ramones&limit=50",
-  "total": 6,
+  "total": 9,
   "limit": 50,
   "offset": 0,
   "itemSummaries": [
@@ -75,6 +75,27 @@
         "FIXED_PRICE"
       ],
       "itemWebUrl": "https://www.ebay.com/itm/110000000006"
+    },
+    {
+      "itemId": "v1|110000000007|0",
+      "title": "Rick Owens Ramones Black High Sneakers",
+      "price": {"value": "850.00", "currency": "USD"},
+      "buyingOptions": ["FIXED_PRICE"],
+      "itemWebUrl": "https://www.ebay.com/itm/110000000007"
+    },
+    {
+      "itemId": "v1|110000000008|0",
+      "title": "Rick Owens RAMONES Leather Shoes",
+      "price": {"value": "900.00", "currency": "USD"},
+      "buyingOptions": ["FIXED_PRICE"],
+      "itemWebUrl": "https://www.ebay.com/itm/110000000008"
+    },
+    {
+      "itemId": "v1|110000000009|0",
+      "title": "Rick Owens Ramones High Top Sneakers",
+      "price": {"value": "950.00", "currency": "USD"},
+      "buyingOptions": ["FIXED_PRICE"],
+      "itemWebUrl": "https://www.ebay.com/itm/110000000009"
     }
   ]
 }
