@@ -14,7 +14,7 @@ Use on-demand Lambda Event Functions for the once-daily Python batch job, with S
 ## Motivation
 
 Today pricing runs only when `src/ebay_pricing.py:202` is started manually, and deals run only when `src/yahoo_scrape.py:394` is started manually.
-Both jobs obtain their configuration from SQLite through `src/db.py:158`, while the current default database path points into `src/`.
+Both jobs obtain their configuration from SQLite through `src/db.py:172`, while the current default database path points into `src/`.
 `src/sendemail.py:26` and `src/ebay_pricing.py:43` expect credentials in process environment variables.
 An unattended run needs a persistent database, a scheduled entry point, and explicit handling of partial failure.
 
@@ -22,7 +22,7 @@ An unattended run needs a persistent database, a scheduled entry point, and expl
 
 **In scope:**
 
-- **RC-11a, feasibility gate:** From AWS CloudShell in `us-east-2`, fetch each active Yahoo brand results URL built by `src/yahoo_scrape.py:44` and verify that each page contains parseable `__NEXT_DATA__` listings at `LISTING_PATH` in `src/yahoo_scrape.py:29`.
+- **RC-11a, feasibility gate:** From AWS CloudShell in `us-east-2`, fetch each active Yahoo brand results URL built by `src/yahoo_scrape.py:44` and verify that each page contains parseable `__NEXT_DATA__` listings at `LISTING_PATH` in `src/yahoo_scrape.py:30`.
   Record only the selected Region, brand ID, HTTP status, whether the expected path exists, and the count of valid records per brand.
   If AWS egress is blocked or Yahoo serves a different layout, stop before RC-11b or RC-11c is built.
 - **RC-11b, runner and local tests:** Add a Lambda handler that downloads the single SQLite object into a fresh invocation-specific path under `/tmp`, verifies it, reads the needed SecureString parameters, runs eBay pricing followed by Yahoo deals, and conditionally uploads a complete SQLite snapshot back to the same S3 key.
@@ -103,6 +103,9 @@ Use S3 versioning for recovery and expire noncurrent database versions after 30 
   If SMTP succeeds but S3 upload later fails, a later run may resend the digest.
   The handler logs a clear warning about this specific state and raises rather than claiming success.
   The spec does not promise exactly-once email.
+- `sendemail.py` prints the complete text and HTML digest when `RAINCHECK_DRY_RUN=1`.
+  For a Lambda dry-run, use only synthetic throwaway listings and capture or suppress that printed body before Lambda stdout reaches CloudWatch.
+  Log a short dry-run status without recipient addresses, listing text, or digest HTML.
 - Configure function reserved concurrency to one, but retain the S3 conditional write because manual writers and stale sequential invocations can still conflict.
   Set Lambda asynchronous function-error retry attempts to zero, and set both the Scheduler target-delivery retry count and maximum event age explicitly.
   Lambda can still retry throttling or internal errors before handler execution, and asynchronous delivery can duplicate events, so idempotency cannot be assumed.
@@ -118,7 +121,8 @@ AWS recommends bundling `boto3` with its dependencies for a stable Python Lambda
 
 ## Acceptance criteria
 
-1. The CloudShell gate records the selected Region and, for each active Yahoo brand ID, the HTTP status, presence of the expected `__NEXT_DATA__` listing path, and number of valid records without printing titles, credentials, or page HTML.
+1. The CloudShell gate records the selected Region and, for each active Yahoo brand ID, the HTTP status, presence of the expected `__NEXT_DATA__` listing path, and number of production-shape-valid records without printing titles, credentials, or page HTML.
+   Validity checks the auction ID, title, price, optional buy-now price, and UTF-8 encodability of title and image URL as in `yahoo_scrape._parse_record`.
 2. Any intended brand's CloudShell 403, 429, timeout, missing expected path, or zero valid records is a no-go; RC-11b and RC-11c do not proceed until the cause is resolved or the user approves a revised architecture.
 3. An empty or malformed handler event cannot redirect storage, parameters, or Region; only configured names are used.
 4. Missing S3 object, a schema version different from `db.SCHEMA_VERSION`, failed `PRAGMA integrity_check`, failed `PRAGMA foreign_key_check`, or size beyond configured `/tmp` capacity stops before eBay, Yahoo, or SMTP and leaves the S3 object unchanged.
@@ -143,7 +147,8 @@ AWS recommends bundling `boto3` with its dependencies for a stable Python Lambda
 21. Reserved concurrency is one, there is no public Lambda URL or API endpoint, and the function is not placed in a VPC.
 22. The deployment package contains the handler, application modules, and pinned third-party dependencies, including `boto3`; it contains no `.env`, database, test fixture, or secret.
 23. The documented preflight checks the CloudShell result for every intended brand, selected Region, parameter presence without exposing values, database backup and integrity, and S3 object version before the schedule is enabled.
-24. A dry-run invocation uses separately configured throwaway storage and `RAINCHECK_DRY_RUN=1`, sends no email, and cannot modify the production S3 object.
+24. A dry-run invocation uses separately configured throwaway storage containing only synthetic listings and `RAINCHECK_DRY_RUN=1`, sends no email, and cannot modify the production S3 object.
+    The handler captures or suppresses the full printed digest before CloudWatch logging, and captured logs contain no digest HTML, listing title, or recipient address.
 25. The full existing test suite and new offline handler/template tests pass with no warnings and no real AWS, network, SMTP, or production database access.
 
 ## Edge cases
@@ -170,7 +175,8 @@ AWS recommends bundling `boto3` with its dependencies for a stable Python Lambda
 - Fake eBay, Frankfurter, per-brand Yahoo pages, and SMTP behavior for success, partial eBay failure, token failure, malformed or failed second brand, failed send, and post-send upload failure.
 - Static SAM assertions for Region guard, private versioned bucket, exact IAM resource scopes, disabled ScheduleV2, retry settings, log retention, and package exclusions.
 - Verify the real handler locally with fake AWS clients and a throwaway database in dry-run mode; do not run against the user's real database.
-- After approved deployment, perform one explicitly authorized AWS dry-run with separate stack configuration and a throwaway S3 object before enabling the production schedule.
+- After approved deployment, perform one explicitly authorized AWS dry-run with separate stack configuration, a synthetic throwaway S3 object, and suppressed digest stdout before enabling the production schedule.
+  Inspect captured logs and assert that the synthetic listing title, digest HTML, and recipient address are absent.
 
 ## Shared-file conflicts
 
@@ -198,12 +204,21 @@ It does not authorize AWS resource creation, a production database upload, or en
 
 The orchestrator observed the probe in the user's existing AWS CloudShell browser tab with `us-east-2` selected.
 The public Yahoo results URL for Rick Owens brand ID `103538` returned HTTP 200.
-The expected `__NEXT_DATA__` listing path was present as a list, and 100 records passed the approved validity check.
+The expected `__NEXT_DATA__` listing path was present as a list, and 100 records passed a production-shape validity check equivalent to `yahoo_scrape._parse_record`.
+That check covered an ASCII alphanumeric auction ID, nonblank title, positive integer price excluding booleans, optional positive integer buy-now price excluding booleans, and UTF-8 encodable title and image URL.
+The probe reported no failure.
 No listing titles, credentials, or page HTML were recorded.
 The user confirmed that Rick Owens is the only active Yahoo brand in the real database.
 The current `src/catalog.json` also names only Rick Owens, although it is seed input rather than proof of database state.
 RC-11a is **PASSED for the current configuration**.
 Any additional Yahoo brand must pass the same CloudShell gate before that brand is included in an AWS run.
+
+## Amendments
+
+On 2026-10-27, independent review identified two small corrections to the approved deployment plan.
+The Lambda dry-run must suppress the existing `sendemail.py` body printout before CloudWatch captures stdout, and its throwaway database must contain only synthetic listings.
+The RC-11a result was confirmed with the full production-shape validity check, and future brand probes now use that same check.
+The stale `src/db.py` and `LISTING_PATH` line references were corrected.
 
 ## CloudShell probe for future brands
 
@@ -232,6 +247,24 @@ The command reads public Yahoo HTML into CloudShell memory, parses only counts, 
    if not ids or any(not part or not part.isascii() or not part.isdecimal() for part in ids):
        raise SystemExit('BRAND_IDS must contain comma-separated ASCII digits')
    print('Selected Region:', os.getenv('AWS_REGION') or os.getenv('AWS_DEFAULT_REGION') or 'unknown')
+   def valid_record(item):
+       if not isinstance(item, dict): return False
+       auction_id = item.get('auctionId')
+       title = item.get('title')
+       price = item.get('price')
+       buy_now = item.get('buyNowPrice')
+       image = item.get('imageUrl')
+       if not (isinstance(auction_id, str) and auction_id.isascii() and auction_id.isalnum()): return False
+       if not isinstance(title, str) or not title.strip(): return False
+       if type(price) is not int or price <= 0: return False
+       if buy_now is not None and (type(buy_now) is not int or buy_now <= 0): return False
+       if not isinstance(image, str) or not image: image = None
+       try:
+           title.encode('utf-8')
+           if image is not None: image.encode('utf-8')
+       except UnicodeEncodeError:
+           return False
+       return True
    for brand_id in dict.fromkeys(ids):
        status = None
        path_ok = False
@@ -245,18 +278,7 @@ The command reads public Yahoo HTML into CloudShell memory, parses only counts, 
            node = json.loads(''.join(parser.parts))
            for key in PATH: node = node[key]
            path_ok = isinstance(node, list)
-           valid = sum(
-               isinstance(item, dict)
-               and isinstance(item.get('auctionId'), str)
-               and item['auctionId'].isascii()
-               and item['auctionId'].isalnum()
-               and isinstance(item.get('title'), str)
-               and bool(item['title'].strip())
-               and isinstance(item.get('price'), int)
-               and not isinstance(item['price'], bool)
-               and item['price'] > 0
-               for item in node
-           ) if path_ok else 0
+           valid = sum(valid_record(item) for item in node) if path_ok else 0
        except urllib.error.HTTPError as exc:
            status = exc.code
            failure = type(exc).__name__
