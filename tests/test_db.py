@@ -1,7 +1,7 @@
 import gc
 import sqlite3
 import warnings
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -366,3 +366,184 @@ def test_rc15_c37_lookup_writes_nothing_and_leaks_no_connection(seeded_db):
 def test_rc15_c38_legacy_database_raises_schema_version_error(legacy_db):
     with pytest.raises(db.SchemaVersionError):
         db.get_known_listing_urls(["https://x/1"])
+
+
+# ---- RC-05 existing listing observation timestamps (criteria 6-8, 10) ---------------
+
+
+def test_rc05_c6_refreshes_distinct_existing_urls_from_one_shot_iterable(
+    seeded_db, db_conn, monkeypatch
+):
+    brand_id = _brand_id(db_conn)
+    db.insert_listing(brand_id, "https://x/1", "One", 1000, "https://img/1")
+    db.insert_listing(brand_id, "https://x/2", "Two", 2000, "https://img/2")
+    db_conn.execute(
+        "UPDATE listings SET last_seen_at = ? WHERE url IN (?, ?)",
+        ("2020-01-01T00:00:00+00:00", "https://x/1", "https://x/2"),
+    )
+    db_conn.commit()
+    before = {
+        row[0]: tuple(row)
+        for row in db_conn.execute(
+            "SELECT url, first_seen_at, last_seen_at, title, price_yen, image_url "
+            "FROM listings ORDER BY url"
+        )
+    }
+
+    consumed = []
+
+    def urls():
+        for url in (
+            "https://x/1",
+            "https://x/1",
+            "https://x/2",
+            "https://x/unknown",
+        ):
+            consumed.append(url)
+            yield url
+
+    real_connect = db.get_connection
+    opened = []
+
+    class TrackedConnection:
+        def __init__(self):
+            self.connection = real_connect()
+            self.closed = False
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+        def close(self):
+            self.closed = True
+            self.connection.close()
+
+    def tracked_connection():
+        connection = TrackedConnection()
+        opened.append(connection)
+        return connection
+
+    monkeypatch.setattr(db, "get_connection", tracked_connection)
+    observed_at = datetime(2035, 4, 5, 6, 7, 8, tzinfo=timezone.utc)
+    changed = db.update_last_seen_at(urls(), observed_at)
+
+    assert len(opened) == 1
+    assert opened[0].closed is True
+    assert consumed == ["https://x/1", "https://x/1", "https://x/2", "https://x/unknown"]
+    assert changed == 2
+    rows = db_conn.execute(
+        "SELECT url, first_seen_at, last_seen_at, title, price_yen, image_url "
+        "FROM listings ORDER BY url"
+    ).fetchall()
+    for row in rows:
+        previous = before[row["url"]]
+        assert row["first_seen_at"] == previous[1]
+        assert row["last_seen_at"] == observed_at.isoformat()
+        assert tuple(row)[3:] == previous[3:]
+    assert _count(db_conn, "listings") == 2
+
+
+def test_rc05_c7_empty_urls_return_zero_without_opening_connection(
+    monkeypatch, tmp_path
+):
+    path = tmp_path / "must-not-be-created.db"
+
+    def unexpected_connection():
+        raise AssertionError("empty input must not open a database connection")
+
+    monkeypatch.setattr(db, "get_connection", unexpected_connection)
+
+    assert db.update_last_seen_at(iter(()), datetime(2035, 1, 1, tzinfo=timezone.utc)) == 0
+    assert not path.exists()
+
+
+@pytest.mark.parametrize(
+    "bad_observation",
+    [
+        datetime(2035, 1, 1),
+        datetime(2035, 1, 1, tzinfo=timezone(timedelta(hours=2))),
+    ],
+    ids=["naive", "non-utc"],
+)
+def test_rc05_c8_rejects_naive_or_non_utc_time_before_connecting(
+    monkeypatch, bad_observation
+):
+    def unexpected_connection():
+        raise AssertionError("invalid observation time must be rejected before connecting")
+
+    monkeypatch.setattr(db, "get_connection", unexpected_connection)
+
+    with pytest.raises(ValueError):
+        db.update_last_seen_at(["https://x/1"], bad_observation)
+
+
+def test_rc05_c8_equal_or_older_observation_does_not_move_timestamp_back(
+    seeded_db, db_conn
+):
+    brand_id = _brand_id(db_conn)
+    db.insert_listing(brand_id, "https://x/1", "One", 1000, None)
+    stored = "2035-04-05T06:07:08+00:00"
+    db_conn.execute(
+        "UPDATE listings SET last_seen_at = ? WHERE url = ?", (stored, "https://x/1")
+    )
+    db_conn.commit()
+
+    assert db.update_last_seen_at(
+        ["https://x/1"], datetime.fromisoformat(stored)
+    ) == 0
+    assert db.update_last_seen_at(
+        ["https://x/1"], datetime(2035, 4, 5, 6, 7, 7, tzinfo=timezone.utc)
+    ) == 0
+    assert db_conn.execute(
+        "SELECT last_seen_at FROM listings WHERE url = ?", ("https://x/1",)
+    ).fetchone()[0] == stored
+
+
+def test_rc05_c10_batch_failure_rolls_back_all_rows_and_closes_connection(
+    seeded_db, db_conn, monkeypatch
+):
+    brand_id = _brand_id(db_conn)
+    db.insert_listing(brand_id, "https://x/1", "One", 1000, None)
+    db.insert_listing(brand_id, "https://x/2", "Two", 2000, None)
+    old = "2020-01-01T00:00:00+00:00"
+    db_conn.execute(
+        "UPDATE listings SET last_seen_at = ? WHERE url IN (?, ?)",
+        (old, "https://x/1", "https://x/2"),
+    )
+    db_conn.execute(
+        "CREATE TRIGGER reject_second_lifecycle_update "
+        "BEFORE UPDATE OF last_seen_at ON listings "
+        "WHEN OLD.url = 'https://x/2' "
+        "BEGIN SELECT RAISE(ABORT, 'injected lifecycle failure'); END"
+    )
+    db_conn.commit()
+
+    real_connect = db.get_connection
+    observed = {}
+
+    class TrackedConnection:
+        def __init__(self):
+            self.connection = real_connect()
+            self.closed = False
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+        def close(self):
+            self.closed = True
+            self.connection.close()
+
+    def tracked_connection():
+        connection = TrackedConnection()
+        observed["connection"] = connection
+        return connection
+
+    monkeypatch.setattr(db, "get_connection", tracked_connection)
+    with pytest.raises(sqlite3.IntegrityError, match="injected lifecycle failure"):
+        db.update_last_seen_at(
+            ["https://x/1", "https://x/2"],
+            datetime(2035, 4, 5, tzinfo=timezone.utc),
+        )
+
+    assert observed["connection"].closed is True
+    rows = db_conn.execute("SELECT last_seen_at FROM listings ORDER BY url").fetchall()
+    assert [row[0] for row in rows] == [old, old]

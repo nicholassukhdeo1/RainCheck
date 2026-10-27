@@ -237,3 +237,15 @@ The project is locked to Region `us-east-2`.
 - **Scope:** Normalize titles and keywords with Unicode NFKC before lowercasing, and match Latin keywords on word boundaries while keeping substring matching for Japanese text, which has no spaces.
   Test against the live Yahoo and eBay fixtures to measure how many matches change.
 - **Resume angle:** Improved precision of text matching across English and Japanese listing titles.
+
+### RC-18: Auction completion and final-price capture
+
+- **Size:** M, subject to source discovery
+- **Depends on:** RC-05, RC-16
+- **Touches:** `src/db.py`, `src/yahoo_scrape.py`; any schema change depends on the approved spec
+- **Why:** RC-05 refreshes `last_seen_at` but deliberately leaves `ended_at` and `final_price_yen` empty.
+  A listing missing from the newest active results may still be live, so absence cannot establish completion or its final price.
+- **Scope:** First establish a reliable way to identify a stored auction in Yahoo's completed results, including auctions that end without a sale.
+  If that is possible, record verified completion times and final prices.
+  If it is not, document the limitation and do not infer completion from disappearance.
+- **Resume angle:** Reconciled active and completed auction records without treating missing search results as evidence of a sale.
