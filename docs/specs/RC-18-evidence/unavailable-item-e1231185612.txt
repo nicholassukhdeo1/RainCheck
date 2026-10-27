@@ -1,0 +1,7 @@
+Capture date: 2026-10-27
+Requested URL: https://auctions.yahoo.co.jp/jp/auction/e1231185612
+Reader result: HTTP 404 Not Found
+Confidence: high that this lookup was unavailable to the reader; no confidence about the auction outcome.
+
+No auction-page fields were visible.
+This does not establish whether the auction sold, ended without a sale, was removed early, or expired.

@@ -1,0 +1,16 @@
+Capture date: 2026-10-27
+Source URL: https://auctions.yahoo.co.jp/closedsearch/closedsearch/2084199087
+Page role: Yahoo completed/sold search results, Rick Owens category
+Reader crawl age: five days before study date. HTTP status was not surfaced.
+Confidence: high for one visible sold-search observation; not by itself a parse contract.
+
+Visible row fields:
+- Result title: Rick Owens 09aw CRUST ELEPHANT BOOTS, size 41
+- Outcome label: 落札 (sold)
+- Displayed sale price: 89,000 yen
+- Bid count: 42
+- Displayed end: 10/10 23:00
+- Linked item ID in URL: f1247065602
+
+This is one observed Yahoo Japan auction sale price.
+It is not a Yahoo Japan market-value estimate.
