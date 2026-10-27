@@ -357,6 +357,44 @@ def test_rc15_c42_deals_are_recorded_only_after_the_send(yahoo_http, seeded_db, 
     assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")] == [URL_1, URL_4]
 
 
+def test_rc04_c1_successful_digest_records_each_displayed_deals_item_association(
+    yahoo_http, seeded_db, sent_emails
+):
+    yahoo_scrape.main()
+    item_id = _item("rick owens ramones").id
+    matches = sql_rows(
+        seeded_db,
+        "SELECT l.url, m.item_id FROM listing_matches m "
+        "JOIN listings l ON l.id = m.listing_id ORDER BY l.url",
+    )
+    assert matches == [(URL_1, item_id), (URL_4, item_id)]
+    assert len(sent_emails) == 1
+
+
+def test_rc04_c5_and_c6_non_deal_is_not_stored_and_later_deal_is_sent(
+    yahoo_http, seeded_db, sent_emails, db_conn
+):
+    db_conn.execute(
+        "UPDATE items SET market_price_usd = 100.0 WHERE name = ?",
+        ("rick owens ramones",),
+    )
+    db_conn.commit()
+    yahoo_scrape.main()
+    assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+    assert sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches") == []
+    assert sent_emails == []
+
+    db_conn.execute(
+        "UPDATE items SET market_price_usd = 800.0 WHERE name = ?",
+        ("rick owens ramones",),
+    )
+    db_conn.commit()
+    yahoo_scrape.main()
+    assert len(sent_emails) == 1
+    assert {row[0] for row in sql_rows(seeded_db, "SELECT url FROM listings")} == {URL_1, URL_4}
+    assert len(sql_rows(seeded_db, "SELECT listing_id FROM listing_matches")) == 2
+
+
 def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
     yahoo_http, seeded_db, monkeypatch, capsys
 ):
@@ -376,6 +414,7 @@ def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
         "will be offered again next run (2 deals).\n"
     )
     assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+    assert sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches") == []
 
     delivered = []
 
@@ -388,6 +427,7 @@ def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
     assert len(delivered) == 1
     assert _row_urls(delivered[0][1]) == [URL_1, URL_4]
     assert len(sql_rows(seeded_db, "SELECT url FROM listings")) == 2
+    assert len(sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches")) == 2
 
 
 def test_rc15_c43_failed_send_message_uses_singular_for_one_deal(
