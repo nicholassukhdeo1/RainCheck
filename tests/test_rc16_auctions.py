@@ -418,7 +418,7 @@ def test_rc16_c19_watch_only_digest_sends_once_and_records_the_watch(fake_http, 
     )
     assert yahoo_scrape.main() == 0
     assert len(sent_emails) == 1
-    assert sent_emails[0][0].startswith("RainCheck: 1 listings to review - ")
+    assert sent_emails[0][0].startswith("RainCheck: 1 listing to review - ")
     assert "Auction watch" in sent_emails[0][1]
     assert "Scheduled end 2026-11-05 21:00 JST (may change)" in sent_emails[0][1]
     conn = sqlite3.connect(seeded_db)
