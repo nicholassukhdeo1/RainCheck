@@ -1,4 +1,4 @@
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,7 +22,7 @@ CATALOG_PATH = SRC_DIR / "catalog.json"
 # the schema version this code expects. it lives inside the database file
 # itself (PRAGMA user_version), so every database knows which shape it has.
 # schema.sql always describes this version.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # how to upgrade an existing database, one step at a time.
 # the key is the version you END UP at, the value is the statements to get there.
@@ -55,6 +55,11 @@ MIGRATIONS = {
         "ALTER TABLE listings ADD COLUMN buy_now_price_yen INTEGER "
         "CHECK (buy_now_price_yen IS NULL OR buy_now_price_yen > 0)",
         "ALTER TABLE listings ADD COLUMN scheduled_end_at TEXT",
+    ),
+    4: (
+        # Older databases did not record provenance, so keep every row protected.
+        "ALTER TABLE items ADD COLUMN config_source TEXT NOT NULL DEFAULT 'unclaimed' "
+        "CHECK (config_source IN ('unclaimed', 'catalog', 'cli'))",
     ),
 }
 
@@ -141,6 +146,7 @@ class SeedResult:
     added: tuple[tuple[str, str], ...]        # catalog order
     updated: tuple[tuple[str, str], ...]      # already in the db and still in the catalog
     deactivated: tuple[tuple[str, str], ...]  # no longer in the catalog, in id order
+    skipped: tuple[tuple[str, str], ...] = ()  # protected by CLI or legacy ownership
 
 
 @dataclass(frozen=True)
@@ -401,6 +407,46 @@ def _check_keywords(label, key, value, problems):
     return tuple(out)
 
 
+def _validate_search_query(value):
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("search_query must be a non-blank string")
+    value = value.strip()
+    if len(value) > 100:
+        raise ValueError("search_query must be at most 100 characters")
+    if "+" in value or "*" in value:
+        raise ValueError("search_query must be plain text with spaces, without + or *")
+    return value
+
+
+def _validate_manual_price(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError("manual price must be a number greater than 0")
+    try:
+        price = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("manual price must be a number greater than 0") from exc
+    if not math.isfinite(price) or price <= 0:
+        raise ValueError("manual price must be a number greater than 0")
+    return price
+
+
+def _validate_keyword_sets(keywords, exclude_keywords):
+    problems = []
+    includes = _check_keywords("item", "keywords", list(keywords), problems)
+    excludes = _check_keywords("item", "exclude_keywords", list(exclude_keywords), problems)
+    if not includes:
+        problems.append("at least one keyword is required")
+    if set(includes) & set(excludes):
+        problems.append("a keyword cannot be in both include and exclude sets")
+    if problems:
+        raise ValueError("; ".join(problems))
+    return includes, excludes
+
+
 def validate_catalog(entries):
     """
     Checks a parsed catalog.json and returns a list of CatalogEntry.
@@ -470,33 +516,20 @@ def validate_catalog(entries):
         manual_price = None
         price = entry.get("market_price")
         if price is not None:
-            ok = isinstance(price, (int, float)) and not isinstance(price, bool)
-            if ok:
-                try:
-                    manual_price = float(price)
-                except OverflowError:  # a JSON integer too big for a float
-                    ok = False
-                else:
-                    # json.load happily accepts NaN and Infinity, so check for those too
-                    ok = math.isfinite(manual_price) and manual_price > 0
-            if not ok:
-                manual_price = None
+            try:
+                if not isinstance(price, (int, float)):
+                    raise ValueError("invalid catalog price type")
+                manual_price = _validate_manual_price(price)
+            except ValueError:
                 entry_problems.append(f"{label}: market_price must be a number greater than 0")
 
         # search_query is plain text for eBay: spaces mean AND, so + and * are rejected
         search_query = entry.get("search_query")
-        if search_query is not None:
-            if not isinstance(search_query, str) or not search_query.strip():
-                entry_problems.append(f"{label}: search_query must be a non-blank string")
-                search_query = None
-            else:
-                search_query = search_query.strip()
-                if len(search_query) > 100:  # eBay truncates longer queries
-                    entry_problems.append(f"{label}: search_query must be at most 100 characters")
-                if "+" in search_query or "*" in search_query:
-                    entry_problems.append(
-                        f"{label}: search_query must be plain text with spaces, without + or *"
-                    )
+        try:
+            search_query = _validate_search_query(search_query)
+        except ValueError as exc:
+            entry_problems.append(f"{label}: {exc}")
+            search_query = None
 
         if brand_ok and name_ok:
             key = (brand.strip(), name.strip())
@@ -555,7 +588,7 @@ def seed_from_catalog(catalog_path=None):
         # one transaction for the whole seed: any error rolls everything back.
         # IMMEDIATE takes the write lock up front.
         conn.execute("BEGIN IMMEDIATE")
-        added, updated, seen_ids = [], [], []
+        added, updated, skipped, seen_ids = [], [], [], []
 
         for entry in entries:
             # the question marks are placeholder values for those columns.
@@ -584,26 +617,30 @@ def seed_from_catalog(catalog_path=None):
                 brand_id = brand_row["id"]
 
             existing = conn.execute(
-                "SELECT id FROM items WHERE brand_id = ? AND name = ?",
+                "SELECT id, config_source FROM items WHERE brand_id = ? AND name = ?",
                 (brand_id, entry.name),
             ).fetchone()
-            # upsert: new items are inserted, existing ones get the catalog's values.
-            # market_price_usd is left out on purpose so an eBay price survives.
-            conn.execute(
-                "INSERT INTO items (brand_id, name, manual_price_usd, search_query, active) "
-                "VALUES (?,?,?,?,1) "
-                "ON CONFLICT (brand_id, name) DO UPDATE SET "
-                "manual_price_usd = excluded.manual_price_usd, "
-                "search_query = excluded.search_query, "
-                "active = 1",
-                (brand_id, entry.name, entry.manual_price_usd, entry.search_query),
-            )
-            item_id = conn.execute(
-                "SELECT id FROM items WHERE brand_id = ? AND name = ?",
-                (brand_id, entry.name),
-            ).fetchone()["id"]
+            if existing is not None and existing["config_source"] != "catalog":
+                skipped.append((entry.brand, entry.name))
+                continue
+            if existing is None:
+                cursor = conn.execute(
+                    "INSERT INTO items (brand_id, name, manual_price_usd, search_query, active, config_source) "
+                    "VALUES (?,?,?,?,1,'catalog')",
+                    (brand_id, entry.name, entry.manual_price_usd, entry.search_query),
+                )
+                item_id = cursor.lastrowid
+                added.append((entry.brand, entry.name))
+            else:
+                item_id = existing["id"]
+                # The eBay-derived price belongs to the pricing job.
+                conn.execute(
+                    "UPDATE items SET manual_price_usd = ?, search_query = ?, active = 1 "
+                    "WHERE id = ?",
+                    (entry.manual_price_usd, entry.search_query, item_id),
+                )
+                updated.append((entry.brand, entry.name))
             seen_ids.append(item_id)
-            (added if existing is None else updated).append((entry.brand, entry.name))
 
             # replace the keyword set so removed keywords really disappear
             conn.execute("DELETE FROM item_keywords WHERE item_id = ?", (item_id,))
@@ -620,21 +657,23 @@ def seed_from_catalog(catalog_path=None):
 
         # anything still active that this run did not touch is gone from the catalog.
         # deactivate (not delete) so listing matches and price history stay valid.
-        # the IN list is only "?" placeholders, the ids themselves are passed as values
-        placeholders = ",".join("?" for _ in seen_ids)
+        # Only catalog-owned rows can disappear on a catalog seed.
+        # Membership is checked in Python so SQL stays fixed and parameterized.
+        seen_set = set(seen_ids)
         gone = conn.execute(
             "SELECT items.id, brands.name AS brand, items.name AS name "
             "FROM items JOIN brands ON brands.id = items.brand_id "
-            f"WHERE items.active = 1 AND items.id NOT IN ({placeholders}) "
+            "WHERE items.active = 1 AND items.config_source = 'catalog' "
             "ORDER BY items.id",
-            seen_ids,
         ).fetchall()
+        gone = [row for row in gone if row["id"] not in seen_set]
         for row in gone:
             conn.execute("UPDATE items SET active = 0 WHERE id = ?", (row["id"],))
 
         conn.commit()
     except BaseException:
-        conn.rollback()
+        if conn.in_transaction:
+            conn.rollback()
         raise
     finally:
         conn.close()
@@ -643,7 +682,172 @@ def seed_from_catalog(catalog_path=None):
     deactivated = tuple((row["brand"], row["name"]) for row in gone)
     for brand, name in deactivated:
         print(f"Deactivated item no longer in catalog.json: {brand} / {name}")
-    return SeedResult(added=tuple(added), updated=tuple(updated), deactivated=deactivated)
+    return SeedResult(
+        added=tuple(added), updated=tuple(updated), deactivated=deactivated,
+        skipped=tuple(skipped),
+    )
+
+
+_OMITTED = object()
+
+
+@contextmanager
+def _item_transaction():
+    """Keep a complete item edit under one write lock and close on every path."""
+    with closing(get_connection()) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield conn
+            conn.commit()
+        except BaseException:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
+
+
+def _replace_keywords(conn, item_id, keywords, exclude_keywords):
+    conn.execute("DELETE FROM item_keywords WHERE item_id = ?", (item_id,))
+    for keyword in keywords:
+        conn.execute(
+            "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, 'include')",
+            (item_id, keyword),
+        )
+    for keyword in exclude_keywords:
+        conn.execute(
+            "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, 'exclude')",
+            (item_id, keyword),
+        )
+
+
+def _item_keywords(conn, item_id):
+    rows = conn.execute(
+        "SELECT keyword, kind FROM item_keywords WHERE item_id = ? ORDER BY keyword",
+        (item_id,),
+    ).fetchall()
+    return (
+        tuple(row["keyword"] for row in rows if row["kind"] == "include"),
+        tuple(row["keyword"] for row in rows if row["kind"] == "exclude"),
+    )
+
+
+def list_items(include_inactive=False):
+    """Return item configurations in stable ID order for the management CLI."""
+    with closing(get_connection()) as conn:
+        rows = conn.execute(
+            "SELECT items.id, brands.name AS brand, items.name, items.active, "
+            "items.config_source, items.search_query, items.manual_price_usd "
+            "FROM items JOIN brands ON brands.id = items.brand_id "
+            "WHERE items.active = 1 OR ? = 1 ORDER BY items.id",
+            (int(include_inactive),),
+        ).fetchall()
+        return tuple({**dict(row), "keywords": _item_keywords(conn, row["id"])[0],
+                      "exclude_keywords": _item_keywords(conn, row["id"])[1]} for row in rows)
+
+
+def add_item(name, keywords, *, brand="Rick Owens", exclude_keywords=(),
+             search_query=None, manual_price_usd=None):
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("item name must be a non-blank string")
+    if not isinstance(brand, str) or not brand.strip():
+        raise ValueError("brand must be a non-blank string")
+    name, brand = name.strip(), brand.strip()
+    includes, excludes = _validate_keyword_sets(keywords, exclude_keywords)
+    query = _validate_search_query(search_query)
+    price = _validate_manual_price(manual_price_usd)
+    with _item_transaction() as conn:
+        brand_row = conn.execute("SELECT id FROM brands WHERE name = ?", (brand,)).fetchone()
+        if brand_row is None:
+            raise ValueError(f"Unknown brand: {brand}")
+        brand_id = brand_row["id"]
+        existing = conn.execute(
+            "SELECT id, active FROM items WHERE brand_id = ? AND name = ?",
+            (brand_id, name),
+        ).fetchone()
+        if existing is None:
+            cursor = conn.execute(
+                "INSERT INTO items (brand_id, name, search_query, manual_price_usd, config_source) "
+                "VALUES (?, ?, ?, ?, 'cli')",
+                (brand_id, name, query, price),
+            )
+            item_id = cursor.lastrowid
+        else:
+            if existing["active"]:
+                raise ValueError(f"Item already active: {brand} / {name}")
+            item_id = existing["id"]
+            # Reactivation keeps the ID that history tables already reference.
+            conn.execute(
+                "UPDATE items SET active = 1, search_query = ?, manual_price_usd = ?, "
+                "config_source = 'cli' WHERE id = ?",
+                (query, price, item_id),
+            )
+        _replace_keywords(conn, item_id, includes, excludes)
+        return item_id
+
+
+def update_item(item_id, *, keywords=_OMITTED, exclude_keywords=_OMITTED,
+                search_query=_OMITTED, manual_price_usd=_OMITTED):
+    if all(value is _OMITTED for value in
+           (keywords, exclude_keywords, search_query, manual_price_usd)):
+        raise ValueError("At least one change is required")
+    # Validate named scalar fields before taking the write lock.
+    query = (_validate_search_query(search_query) if search_query is not _OMITTED else _OMITTED)
+    price = (_validate_manual_price(manual_price_usd) if manual_price_usd is not _OMITTED else _OMITTED)
+    with _item_transaction() as conn:
+        row = conn.execute("SELECT id FROM items WHERE id = ?", (item_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"Unknown item ID: {item_id}")
+        # A legacy item may have no keyword rows; price or query edits keep that state.
+        if keywords is not _OMITTED or exclude_keywords is not _OMITTED:
+            old_includes, old_excludes = _item_keywords(conn, item_id)
+            includes, excludes = _validate_keyword_sets(
+                old_includes if keywords is _OMITTED else keywords,
+                old_excludes if exclude_keywords is _OMITTED else exclude_keywords,
+            )
+        if query is not _OMITTED:
+            conn.execute("UPDATE items SET search_query = ? WHERE id = ?", (query, item_id))
+        if price is not _OMITTED:
+            conn.execute("UPDATE items SET manual_price_usd = ? WHERE id = ?", (price, item_id))
+        if keywords is not _OMITTED or exclude_keywords is not _OMITTED:
+            _replace_keywords(conn, item_id, includes, excludes)
+        conn.execute("UPDATE items SET config_source = 'cli' WHERE id = ?", (item_id,))
+    return item_id
+
+
+def deactivate_item(item_id):
+    with _item_transaction() as conn:
+        row = conn.execute("SELECT active FROM items WHERE id = ?", (item_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"Unknown item ID: {item_id}")
+        if not row["active"]:
+            return False
+        conn.execute(
+            "UPDATE items SET active = 0, config_source = 'cli' WHERE id = ?",
+            (item_id,),
+        )
+    return True
+
+
+def adopt_catalog_item(item_id, catalog_path=None):
+    entries = validate_catalog(load_catalog(catalog_path))
+    with _item_transaction() as conn:
+        row = conn.execute(
+            "SELECT items.id, items.name, brands.name AS brand "
+            "FROM items JOIN brands ON brands.id = items.brand_id WHERE items.id = ?",
+            (item_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Unknown item ID: {item_id}")
+        entry = next((entry for entry in entries
+                      if (entry.brand, entry.name) == (row["brand"], row["name"])), None)
+        if entry is None:
+            raise ValueError("Item identity does not exist in catalog.json")
+        conn.execute(
+            "UPDATE items SET search_query = ?, manual_price_usd = ?, config_source = 'catalog' "
+            "WHERE id = ?",
+            (entry.search_query, entry.manual_price_usd, item_id),
+        )
+        _replace_keywords(conn, item_id, entry.keywords, entry.exclude_keywords)
+    return item_id
 
 
 def get_active_brands() -> list[TrackedBrand]:

@@ -869,7 +869,7 @@ def test_rc05_c5_and_c11_absent_listing_keeps_ended_fields_and_schema_stays_v3(
         "2020-02-01T00:00:00+00:00",
         12345,
     )
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 4
     assert tuple(db_conn.execute(
         "SELECT ended_at, final_price_yen FROM listings WHERE url = ?", (URL_4,)
     ).fetchone()) == (None, None)
@@ -1268,7 +1268,7 @@ def test_rc10_c26_yahoo_no_active_items_is_a_successful_no_work_run(
 def test_rc03b_c19_main_on_newer_schema_version_is_a_clean_error(
     temp_db, fake_http, sent_emails, capsys
 ):
-    set_user_version(temp_db, 4)
+    set_user_version(temp_db, 5)
     before = sha256(temp_db)
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()

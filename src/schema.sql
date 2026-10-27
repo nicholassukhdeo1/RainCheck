@@ -1,4 +1,4 @@
--- Schema version 3 (PRAGMA user_version = 3).
+-- Schema version 4 (PRAGMA user_version = 4).
 -- This file always describes the LATEST version, and it is only used to create
 -- a brand new database. An existing database is upgraded by MIGRATIONS in
 -- db.py instead, because CREATE TABLE IF NOT EXISTS cannot add a column to a
@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS items (
     search_query      TEXT,
     manual_price_usd  REAL CHECK (manual_price_usd IS NULL OR manual_price_usd > 0),
     active            INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+    config_source     TEXT NOT NULL DEFAULT 'unclaimed' CHECK (config_source IN ('unclaimed', 'catalog', 'cli')),
     UNIQUE (brand_id, name)
 );
 
