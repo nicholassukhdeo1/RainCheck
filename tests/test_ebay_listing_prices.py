@@ -70,6 +70,21 @@ def test_rc06_c1_fresh_schema_v2_has_listing_price_table_key_fk_and_index(temp_d
     ) == []
 
 
+def test_rc06_c1_database_rejects_empty_ebay_listing_id(seeded_db):
+    item_id = ramones_id(seeded_db)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        run(
+            seeded_db,
+            "INSERT INTO ebay_listing_prices "
+            "(item_id, ebay_listing_id, first_price_usd, first_seen_at) "
+            "VALUES (?, ?, ?, ?)",
+            (item_id, "", 100.0, OBSERVED),
+        )
+
+    assert rows(seeded_db, "SELECT COUNT(*) FROM ebay_listing_prices") == [(0,)]
+
+
 def test_rc06_c2_version_one_migration_preserves_existing_rows(legacy_db):
     _upgrade_to_v1(legacy_db)
     run(legacy_db, "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (1, 'old', 'exclude')")
@@ -409,6 +424,11 @@ def _prepare_update_repo(tmp_path, monkeypatch):
     monkeypatch.setenv("RAINCHECK_DB_PATH", str(db_path))
     db.init_db()
     db.seed_from_catalog(catalog_path)
+    run(
+        db_path,
+        "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
+        (db.get_item_id("Rick Owens", "pod shorts"), "database only phrase", "include"),
+    )
     home = tmp_path / "home"
     home.mkdir()
     env = os.environ.copy()
@@ -430,11 +450,15 @@ def test_rc06_c25_targeted_update_script_preserves_keywords_and_is_idempotent(
         (db.get_item_id("Rick Owens", "rick owens ramones"), "fake", "exclude"),
         (db.get_item_id("Rick Owens", "pod shorts"), "fake", "exclude"),
     }
+    custom_keyword = (db.get_item_id("Rick Owens", "pod shorts"), "database only phrase", "include")
+    assert custom_keyword in after_first
     assert len(list((home / "RainCheck-backups").glob("raincheck-before-rc06-fake-*.db"))) == 1
 
     second = subprocess.run([sys.executable, "-c", script], cwd=repo, env=env, capture_output=True, text=True)
     assert second.returncode == 0, second.stderr
-    assert set(rows(db_path, "SELECT item_id, keyword, kind FROM item_keywords")) == after_first
+    after_second = set(rows(db_path, "SELECT item_id, keyword, kind FROM item_keywords"))
+    assert after_second == after_first
+    assert custom_keyword in after_second
     assert len(list((home / "RainCheck-backups").glob("raincheck-before-rc06-fake-*.db"))) == 2
 
 
