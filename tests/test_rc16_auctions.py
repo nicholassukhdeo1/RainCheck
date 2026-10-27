@@ -251,6 +251,7 @@ def test_rc16_c5_saved_live_fixture_exposes_valid_flags_prices_and_utc_ends(fixt
         ({"buyNowPrice": None}, False, None, "2026-11-01T12:00:00+00:00"),
         ({"endTime": "2026-11-01T21:00:00"}, False, None, None),
         ({"endTime": "bad"}, False, None, None),
+        ({"endTime": "0001-01-01T00:00:00+14:00"}, False, None, None),
     ],
 )
 def test_rc16_c12_c13_parser_keeps_untrusted_metadata_unknown(
