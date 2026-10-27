@@ -11,10 +11,11 @@ from db import (
 from digest import Deal, ItemDeals, build_digest
 from matching import title_matches
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Collection, Sequence
 import json
 import logging
+import math
 import requests
 import sys
 
@@ -27,7 +28,9 @@ LISTING_PATH = ("props", "pageProps", "initialState", "search", "items", "listin
 AUCTION_URL_PREFIX = "https://auctions.yahoo.co.jp/jp/auction/"
 FLEAMARKET_URL_PREFIX = "https://paypayfleamarket.yahoo.co.jp/item/"
 
-YEN_TO_USD = 0.0062  # RC-08 replaces this with a live rate
+YEN_TO_USD = 0.0062  # fallback when the exchange provider cannot supply a usable rate
+FRANKFURTER_RATE_URL = "https://api.frankfurter.dev/v2/rate/jpy/usd"
+RATE_TIMEOUT_SECONDS = 10
 TOP_DEALS_PER_ITEM = 5
 NO_ITEMS_LINE = "No active items in the database. Add items to catalog.json, then run python3 src/db.py --seed."
 NO_DEALS_LINE = "No new deals; no email sent."
@@ -37,6 +40,65 @@ logger = logging.getLogger(__name__)
 
 class YahooPageError(Exception):
     """The page is not a results page we understand (layout drift), as opposed to 'no results'."""
+
+
+class RateDataError(ValueError):
+    """The exchange provider returned a rate that cannot be used safely."""
+
+
+def _validate_yen_to_usd(rate):
+    # bool is a number in Python, but cannot represent a meaningful exchange rate.
+    if isinstance(rate, bool) or not isinstance(rate, (int, float)):
+        raise ValueError("JPY-to-USD rate must be a positive finite number")
+    try:
+        if not math.isfinite(rate) or rate <= 0:
+            raise ValueError("JPY-to-USD rate must be a positive finite number")
+    except OverflowError as e:
+        raise ValueError("JPY-to-USD rate must be a positive finite number") from e
+
+
+def fetch_yen_to_usd_rate(today_utc: date) -> float:
+    """Fetch one current JPY-to-USD reference rate from Frankfurter."""
+    response = requests.get(FRANKFURTER_RATE_URL, timeout=RATE_TIMEOUT_SECONDS)
+    response.raise_for_status()
+    try:
+        data = response.json()
+    except ValueError as e:
+        raise RateDataError("invalid JSON") from e
+
+    if not isinstance(data, dict):
+        raise RateDataError("response is not an object")
+    if data.get("base") != "JPY" or data.get("quote") != "USD":
+        raise RateDataError("currency pair is not JPY to USD")
+
+    published = data.get("date")
+    if not isinstance(published, str):
+        raise RateDataError("missing or invalid publication date")
+    try:
+        published_date = date.fromisoformat(published)
+    except ValueError as e:
+        raise RateDataError("invalid publication date") from e
+    if published_date.isoformat() != published:
+        raise RateDataError("publication date is not YYYY-MM-DD")
+    age_days = (today_utc - published_date).days
+    if not 0 <= age_days <= 7:
+        raise RateDataError(f"publication date is {age_days} days old")
+
+    rate = data.get("rate")
+    try:
+        _validate_yen_to_usd(rate)
+    except ValueError as e:
+        raise RateDataError("missing or invalid rate") from e
+    return rate
+
+
+def resolve_yen_to_usd_rate(today_utc: date) -> float:
+    """Use the provider's rate, or warn once and use the documented fallback."""
+    try:
+        return fetch_yen_to_usd_rate(today_utc)
+    except (requests.RequestException, RateDataError) as e:
+        logger.warning("Using fallback JPY-to-USD rate %.4f: %s", YEN_TO_USD, e)
+        return YEN_TO_USD
 
 
 # frozen=True makes each record read-only, so a listing can't be changed after it is validated
@@ -163,11 +225,17 @@ def parse_listings(html):
     return listings
 
 
-def find_item_deals(item: TrackedItem, listings: Sequence[YahooListing], skip_urls: Collection[str]) -> list[Deal]:
+def find_item_deals(
+    item: TrackedItem,
+    listings: Sequence[YahooListing],
+    skip_urls: Collection[str],
+    yen_to_usd: float,
+) -> list[Deal]:
     """
     Pure: returns the item's new deals (keyword match, below market, not in skip_urls),
     best discount first. Nothing is written, so the caller decides when a deal counts as seen.
     """
+    _validate_yen_to_usd(yen_to_usd)
     # the item already carries its price (eBay first, catalog fallback), so no database read is needed
     market_price = item.effective_price_usd
     if market_price is None:
@@ -182,7 +250,7 @@ def find_item_deals(item: TrackedItem, listings: Sequence[YahooListing], skip_ur
         if listing.url in skip_urls:
             continue
 
-        price_usd = listing.price_yen * YEN_TO_USD
+        price_usd = listing.price_yen * yen_to_usd
         pct_cheaper = ((market_price - price_usd) / market_price) * 100
         if pct_cheaper > 0:
             deals.append(Deal(
@@ -206,16 +274,18 @@ def build_sections(
     items: Sequence[TrackedItem],
     listings: Sequence[YahooListing],
     known_urls: Collection[str],
+    yen_to_usd: float,
     per_item_limit: int = TOP_DEALS_PER_ITEM,
 ) -> list[ItemDeals]:
     """Pure: one section per item that has new deals, top per_item_limit each, in item order."""
+    _validate_yen_to_usd(yen_to_usd)
     known = set(known_urls)
     # a listing that is a deal for two items is shown under the first only,
     # even if the first item's top-N cut hid it
     claimed = set()
     sections = []
     for item in items:
-        deals = find_item_deals(item, listings, known | claimed)
+        deals = find_item_deals(item, listings, known | claimed, yen_to_usd)
         claimed.update(deal.url for deal in deals)
         if deals:
             sections.append(ItemDeals(
@@ -240,11 +310,19 @@ def main():
         listings = parse_listings(fetch_yahoo_page(RICK_OWENS_URL))
         # A parsed page is a fresh observation even when it contains no new deals.
         update_last_seen_at((listing.url for listing in listings), datetime.now(timezone.utc))
+        if not listings:
+            print(NO_DEALS_LINE)
+            return
+        # Resolve once so all items and listings in this run share one conversion.
+        yen_to_usd = resolve_yen_to_usd_rate(datetime.now(timezone.utc).date())
         for item in items:
             if item.effective_price_usd is None:
                 print(f"Skipping {item.name}: no usable market price.")
         known = get_known_listing_urls(listing.url for listing in listings)
-        digest = build_digest(build_sections(items, listings, known), datetime.now().astimezone().date())
+        digest = build_digest(
+            build_sections(items, listings, known, yen_to_usd),
+            datetime.now().astimezone().date(),
+        )
         if digest is None:
             print(NO_DEALS_LINE)
             return
