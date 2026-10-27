@@ -62,7 +62,7 @@ If implementing the handler requires a change beyond the stated callable adjustm
 ### Schema changes and migration
 
 None.
-At drafting, `src/db.py:25` sets `SCHEMA_VERSION = 2`, but RC-16 may merge before deployment.
+The merged RC-16 code sets `SCHEMA_VERSION = 3`.
 The S3 object must match the `db.SCHEMA_VERSION` in the deployed code, rather than a version number copied into the handler or SAM template.
 The runner must not call `db.init_db()` or `db.seed_from_catalog()` on the production object, and it must not create an empty database if the object is missing.
 For first deployment, the user makes a local backup of the existing database, runs any then-current migration through the documented backup-first procedure for that feature, and confirms integrity and `PRAGMA user_version = db.SCHEMA_VERSION` against the exact release to deploy.
@@ -150,7 +150,7 @@ AWS recommends bundling `boto3` with its dependencies for a stable Python Lambda
 ## Test plan
 
 - Saved Yahoo fixture from the existing test suite for parser-shape validation, plus a separate human CloudShell probe of the live page before any build.
-- Existing seed database fixture at the then-current `db.SCHEMA_VERSION` (version 2 at drafting); temporary copies for success, corrupt bytes, wrong version, missing object, and oversized-object cases.
+- Existing seed database fixture at `db.SCHEMA_VERSION` (version 3 after RC-16); temporary copies for success, corrupt bytes, wrong version, missing object, and oversized-object cases.
 - Fake S3 client returning an in-memory object and ETag, recording conditional `PutObject` calls and simulating 412 and transport errors.
 - Fake SSM client returning named SecureString values or missing/blank errors; assert decryption flags and no secret leakage.
 - Fake eBay, Frankfurter, Yahoo, and SMTP behavior for success, partial eBay failure, token failure, malformed Yahoo page, failed send, and post-send upload failure.
