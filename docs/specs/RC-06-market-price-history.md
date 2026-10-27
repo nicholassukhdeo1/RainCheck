@@ -1,6 +1,6 @@
 # RC-06: Market price history from distinct eBay listings
 
-**Status:** Draft
+**Status:** Approved
 **Backlog item:** RC-06 in `docs/BACKLOG.md`
 
 ## Summary
@@ -441,6 +441,7 @@ The first-price, fixed-price, newest-first, all-time-pool, five-retained minimum
 - 2026-10-27: The user chose to add only `fake` to the exclude keywords of the two currently tracked catalog items, `Rick Owens` / `rick owens ramones` and `Rick Owens` / `pod shorts`.
   The user did not approve adding `replica` or `Rikko`.
   Existing real-database keyword sets must be preserved through a targeted backup-first update instead of a full seed.
+- 2026-10-27: The user approved the complete revised RC-06 spec after reviewing listing-level history, the cumulative mean, the five-retained minimum, and the `fake` exclusion.
 
 ## Rollback
 
