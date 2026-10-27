@@ -223,6 +223,32 @@ Check that the artifact contains only the nine runtime files from `src/`, with n
    Record the returned S3 `VersionId`, download that exact version to a separate temporary file, and repeat the SQLite integrity, foreign-key, and schema-version checks on the downloaded bytes.
    Confirm the bucket and key in the Lambda configuration match this object before the schedule is enabled.
 
+   Set `BUCKET` and `KEY` from the production stack outputs, and set `BACKUP_PATH` to the verified SQLite backup outside the repository.
+   The commands stop if any of these values is missing or a database check fails, and the downloaded copy is removed when the shell exits.
+
+   ```bash
+   set -eu
+   : "${BUCKET:?Set BUCKET from DatabaseBucketName}"
+   : "${KEY:?Set KEY from DatabaseKey}"
+   : "${BACKUP_PATH:?Set BACKUP_PATH to the verified backup outside this repository}"
+   test -f "$BACKUP_PATH"
+   EXPECTED_SCHEMA="$(PYTHONPATH=src python3 -c 'import db; print(db.SCHEMA_VERSION)')"
+   check_sqlite() {
+       test "$(sqlite3 "$1" 'PRAGMA integrity_check;')" = ok
+       test -z "$(sqlite3 "$1" 'PRAGMA foreign_key_check;')"
+       test "$(sqlite3 "$1" 'PRAGMA user_version;')" = "$EXPECTED_SCHEMA"
+   }
+   check_sqlite "$BACKUP_PATH"
+   VERSION_ID="$(aws s3api put-object --bucket "$BUCKET" --key "$KEY" --body "$BACKUP_PATH" --server-side-encryption AES256 --region us-east-2 --query VersionId --output text)"
+   case "$VERSION_ID" in ''|None|null) echo 'S3 did not return a version ID' >&2; exit 1;; esac
+   DOWNLOAD_PATH="$(mktemp "${TMPDIR:-/tmp}/raincheck-s3-verify.XXXXXX")"
+   trap 'rm -f "$DOWNLOAD_PATH"' EXIT
+   aws s3api get-object --bucket "$BUCKET" --key "$KEY" --version-id "$VERSION_ID" --region us-east-2 "$DOWNLOAD_PATH" >/dev/null
+   check_sqlite "$DOWNLOAD_PATH"
+   ```
+
+   Keep the recorded `VERSION_ID` with the deployment notes and enable the schedule only after the downloaded copy passes all three checks.
+
 The execution role can access only that exact S3 object and the named SSM parameters, so a changed key or parameter name requires a reviewed stack update.
 Stop the schedule before any manual object replacement; the handler's ETag condition rejects changed content, but equal-content replacements can share an ETag.
 
