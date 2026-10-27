@@ -386,6 +386,50 @@ def test_rc08_c10_rate_change_can_move_listing_across_deal_threshold():
     assert deals_at_fallback[0].price_usd == pytest.approx(744.0)
 
 
+def test_rc08_c10_main_leaves_same_listing_unrecorded_then_sends_it_after_rate_change(
+    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn, capsys
+):
+    rate_values = iter([0.0067, 0.0062])
+    rate_calls = []
+    real_get = requests.get
+
+    class ExchangeResponse:
+        def __init__(self, rate):
+            self.rate = rate
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "date": "2026-10-27", "base": "JPY", "quote": "USD", "rate": self.rate
+            }
+
+    def fake_get(url, **kwargs):
+        if url == FRANKFURTER_URL:
+            rate_calls.append((url, kwargs))
+            return ExchangeResponse(next(rate_values))
+        return real_get(url, **kwargs)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    listing = inline_listing(1, "Rick Owens Ramones High", 120000)
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: [listing])
+
+    yahoo_scrape.main()
+    assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+    assert sql_rows(seeded_db, "SELECT listing_id FROM listing_matches") == []
+    assert sent_emails == []
+    assert "No new deals; no email sent." in capsys.readouterr().out
+
+    yahoo_scrape.main()
+    assert len(rate_calls) == 2
+    assert all(call[1].get("timeout") == 10 for call in rate_calls)
+    assert len(sent_emails) == 1
+    assert "$744.00" in sent_emails[0][1] and "7.0% off" in sent_emails[0][1]
+    assert sql_rows(seeded_db, "SELECT url FROM listings") == [(listing.url,)]
+    assert len(sql_rows(seeded_db, "SELECT listing_id FROM listing_matches")) == 1
+
+
 def test_rc08_c2_one_fetched_rate_drives_all_items_and_digest_values(
     yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn
 ):
@@ -395,7 +439,8 @@ def test_rc08_c2_one_fetched_rate_drives_all_items_and_digest_values(
         "parse_listings",
         lambda html: [
             inline_listing(1, "Rick Owens Ramones High", 50000),
-            inline_listing(2, "Rick Owens Pod Shorts", 10000),
+            inline_listing(2, "Rick Owens Ramones Vintage", 70000),
+            inline_listing(3, "Rick Owens Pod Shorts", 10000),
         ],
     )
     observed_at = datetime(2026, 10, 27, tzinfo=timezone.utc)
@@ -407,10 +452,11 @@ def test_rc08_c2_one_fetched_rate_drives_all_items_and_digest_values(
     assert len(rate_calls) == 1
     assert len(sent_emails) == 1
     html = sent_emails[0][1]
-    assert "$335.00" in html and "$67.00" in html
-    assert "58.1% off" in html and "77.7% off" in html
+    assert "$335.00" in html and "$469.00" in html and "$67.00" in html
+    assert "58.1% off" in html and "41.4% off" in html and "77.7% off" in html
+    assert _row_urls(html) == [f"{AUCTION}t1", f"{AUCTION}t2", f"{AUCTION}t3"]
     assert [row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")] == [
-        f"{AUCTION}t1", f"{AUCTION}t2"
+        f"{AUCTION}t1", f"{AUCTION}t2", f"{AUCTION}t3"
     ]
 
 
