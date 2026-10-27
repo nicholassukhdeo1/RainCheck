@@ -7,7 +7,7 @@ I built this to get hands-on with web scraping, HTTP requests, and automating a 
 ## What it does
 
 - Lets me build a watchlist of items to track, each with a market price and keywords
-- Sets each item's market price to the median price of matching active eBay listings, fetched through the eBay Browse API
+- Sets each item's market price from matching active eBay listings in the first 50 eBay Browse API search results
 - Scrapes the Rick Owens brand page on Yahoo Auctions Japan (sorted newest-first)
 - Filters listings by keyword, converts prices from JPY to USD, and keeps only those below market
 - Ranks the remaining listings by discount and remembers which ones it has already seen
@@ -87,6 +87,11 @@ Both can be run from any directory.
 - Both jobs ignore listings whose title contains an exclude keyword.
 - Matching is case-insensitive substring matching, so `low` also matches `yellow` (until RC-17 makes it word-aware).
 - eBay is searched with the item's `search_query`, or with the item name when it has none.
+- eBay pricing counts distinct, valid USD title matches in those first 50 results.
+  It removes outliers using the median absolute deviation (MAD): a price more than 3.5 scaled MADs from the candidate median is excluded, and when MAD is zero only prices equal to the median remain.
+  The median of retained prices is stored only when at least five distinct listings remain.
+  Each run prints candidate, outlier, and retained counts; these counts are not stored.
+  When fewer than five listings remain, the existing eBay market price is kept.
 - If a job finds an outdated or missing database, it prints one `Error:` line naming the command that fixes it and stops before any network request.
 
 `src/setup.py` is the exception.
