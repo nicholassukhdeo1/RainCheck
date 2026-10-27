@@ -388,7 +388,7 @@ def test_rc14_c14_c15_v3_upgrade_and_reseed_preserve_unclaimed_items_and_history
     assert user_version(path) == 4
     assert rows(path, "SELECT config_source FROM items WHERE id=41") == [("unclaimed",)]
     db.seed_from_catalog(CATALOG)
-    assert rows(path, "SELECT id,brand_id,name,market_price_usd,search_query,manual_price_usd,active FROM items WHERE id=41") == before
+    assert rows(path, "SELECT id,brand_id,name,market_price_usd,search_query,manual_price_usd,active FROM items WHERE id IN (41,42) ORDER BY id") == before
     assert rows(path, "SELECT keyword,kind FROM item_keywords WHERE item_id=41") == [("database-only", "include")]
     assert rows(path, "SELECT listing_id,item_id,matched_at FROM listing_matches") == [(51,41,"t")]
     assert rows(path, "SELECT item_id,ebay_listing_id,first_price_usd,first_seen_at FROM ebay_listing_prices") == [(41,"ebay-history",205.0,"t")]
