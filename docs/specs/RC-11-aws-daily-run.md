@@ -79,6 +79,12 @@ Use S3 versioning for recovery and expire noncurrent database versions after 30 
 - `src/lambda_handler.py` exports `handler(event, context)`.
   It accepts the Scheduler event or an empty test event; it does not accept arbitrary bucket or parameter names from event input.
   Names come from nonsecret Lambda configuration and must refer to resources in `us-east-2`.
+- The handler reads nonsecret configuration only from these environment variables: `RAINCHECK_DB_BUCKET`, `RAINCHECK_DB_KEY`, `RAINCHECK_TMP_CAPACITY_BYTES`, `RAINCHECK_SSM_EBAY_CLIENT_ID`, `RAINCHECK_SSM_EBAY_CLIENT_SECRET`, `RAINCHECK_SSM_SENDER_EMAIL`, `RAINCHECK_SSM_SENDER_PASSWORD`, and optional `RAINCHECK_SSM_RECEIVER_EMAIL`.
+  The four required SSM variables hold parameter names, never credential values; the optional receiver parameter name may be omitted so `sendemail.py` uses the sender as recipient.
+  `RAINCHECK_TMP_CAPACITY_BYTES` is the configured Lambda ephemeral-storage capacity in bytes and must be a positive integer; the handler leaves space for both the working database and its snapshot.
+  Missing or invalid required configuration fails before any AWS client call or job.
+  The Lambda-selected `AWS_REGION` must be `us-east-2`; an event field cannot override it.
+  Offline tests replace the module's `boto3.client` factory with fake S3 and SSM clients, and set these environment variables with `monkeypatch`.
 - At invocation start, create a unique temporary directory, download the configured S3 key, close the response stream, and set `RAINCHECK_DB_PATH` to the downloaded file before any database access.
   Save the returned ETag and version ID for diagnostics, without logging the object body.
   Do not reuse warm `/tmp` state from a previous invocation.
@@ -124,7 +130,8 @@ AWS recommends bundling `boto3` with its dependencies for a stable Python Lambda
 1. The CloudShell gate records the selected Region and, for each active Yahoo brand ID, the HTTP status, presence of the expected `__NEXT_DATA__` listing path, and number of production-shape-valid records without printing titles, credentials, or page HTML.
    Validity checks the auction ID, title, price, optional buy-now price, and UTF-8 encodability of title and image URL as in `yahoo_scrape._parse_record`.
 2. Any intended brand's CloudShell 403, 429, timeout, missing expected path, or zero valid records is a no-go; RC-11b and RC-11c do not proceed until the cause is resolved or the user approves a revised architecture.
-3. An empty or malformed handler event cannot redirect storage, parameters, or Region; only configured names are used.
+3. An empty or malformed handler event cannot redirect storage, parameters, or Region; only the named environment configuration is used.
+   Missing or invalid required configuration, including a nonpositive or noninteger temporary-storage capacity, fails before any AWS client call or job.
 4. Missing S3 object, a schema version different from `db.SCHEMA_VERSION`, failed `PRAGMA integrity_check`, failed `PRAGMA foreign_key_check`, or size beyond configured `/tmp` capacity stops before eBay, Yahoo, or SMTP and leaves the S3 object unchanged.
 5. The handler sets a unique `RAINCHECK_DB_PATH` per invocation and removes its temporary directory after completion, including failures.
 6. The S3 download body and all SQLite connections opened by the handler are closed on success and failure.
@@ -219,6 +226,8 @@ On 2026-10-27, independent review identified two small corrections to the approv
 The Lambda dry-run must suppress the existing `sendemail.py` body printout before CloudWatch captures stdout, and its throwaway database must contain only synthetic listings.
 The RC-11a result was confirmed with the full production-shape validity check, and future brand probes now use that same check.
 The stale `src/db.py` and `LISTING_PATH` line references were corrected.
+On 2026-10-27, RC-11b test planning clarified the handler's nonsecret environment-variable contract and the fake-client patch point above.
+This clarification does not change the approved storage, credential, Region, or deployment policy.
 
 ## CloudShell probe for future brands
 
