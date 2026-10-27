@@ -1,6 +1,6 @@
 # RC-16: Auction-aware deals
 
-**Status:** Draft
+**Status:** Approved
 **Backlog item:** RC-16 in `docs/BACKLOG.md`
 
 ## Summary
@@ -241,20 +241,16 @@ It also touches `src/yahoo_scrape.py`, and builds on RC-10's merged batch writer
 
 ## Open questions
 
-1. Should each item have independent limits of five immediately purchasable deals and five auction watches, with watches ordered by soonest scheduled end rather than largest provisional percentage?
-   **Recommendation:** Yes.
-   This lets meaningful auctions appear without ¥1 opening bids crowding out buy-now deals, and gives the reader the most time-sensitive watches first.
-   The tradeoff is a digest that can show up to ten rows per item instead of five, so the phone and desktop render must be checked before release.
-2. Should an auction with a below-market buy-now price appear once as a buy-now deal, with its lower current bid and potential percentage shown separately as provisional?
-   **Recommendation:** Yes.
-   The immediately purchasable price supports a real discount claim while preserving the cheaper bidding possibility.
-   The tradeoff is that this auction uses the buy-now quota rather than the watch quota and is not repeated as a watch.
+None.
 
 ## Resolved
 
 - 2026-10-27: The user rejected suppressing bid-only auctions and said they are central to finding opportunities.
 - 2026-10-27: The user chose to email bid-only auctions when first discovered if their current price is below market, instead of waiting until near the scheduled end.
 - 2026-10-27: The user chose to show a potential percentage discount calculated from Yahoo's current auction price, including an opening price before any bids, clearly labeled as provisional rather than guaranteed.
+- 2026-10-27: The user approved independent per-item limits of five immediate deals and five auction watches, with watches ordered by soonest scheduled end.
+- 2026-10-27: The user approved one row for a dual-price auction whose buy-now price is below market, showing the lower current bid and its potential percentage separately as provisional.
+- 2026-10-27: The user approved the full revised RC-16 spec.
 
 ## Rollback
 
