@@ -628,9 +628,10 @@ def record_listing_match(brand_id, url, title, price_yen, image_url, item_id) ->
         conn.execute("BEGIN IMMEDIATE")
         try:
             inserted = conn.execute(
-                "INSERT OR IGNORE INTO listings "
+                "INSERT INTO listings "
                 "(brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at) "
-                "VALUES (?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?) "
+                "ON CONFLICT(url) DO NOTHING",
                 (brand_id, url, title, price_yen, image_url, now, now),
             )
             listing = conn.execute(
