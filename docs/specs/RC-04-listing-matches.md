@@ -88,8 +88,9 @@ If the user wants every keyword match recorded, the design must separately defin
 ## Test plan
 
 - Use the existing temporary SQLite database fixture and seeded item rows from `tests/conftest.py`.
-- Add database tests for new listing plus match insertion, a second item association for the same URL, idempotent repeats, unchanged metadata on URL conflict, `None` image URLs, foreign-key failure rollback, and connection closure on errors.
-- Extend Yahoo job tests with mocked email delivery and database functions to assert persistence occurs only after a successful send and uses each `Deal.item_id`.
+- Add database tests for new listing plus match insertion, a second item association for the same URL, idempotent repeats, unchanged metadata on URL conflict, `None` image URLs, required-field failure rollback, foreign-key failure rollback, and connection closure on errors.
+- Extend Yahoo job tests with mocked email delivery and database functions to assert persistence occurs only after a successful send and uses each `Deal.item_id`, including a digest with deals for two different items.
+- Intercept `yahoo_scrape.record_listing_match` by its public name in post-send persistence tests.
 - Test the above-market then below-market sequence with the same fixture listing to verify the recommended alert behavior remains intact.
 - No saved HTML or recorded API JSON fixture changes are needed because Yahoo parsing and eBay behavior are unchanged.
 
@@ -109,6 +110,10 @@ The recommended design does not touch `src/schema.sql` or `src/catalog.json`.
 
 - 2026-10-26: The user approved recording only deals included in a successfully sent digest.
   This preserves the existing later-price-drop alert behavior.
+
+## Amendments
+
+- 2026-10-26: Expanded the test plan after independent review to cover NULL item-ID rollback, distinct item IDs in one Yahoo digest, and the correctly named `record_listing_match` job hook.
 
 ## Rollback
 
