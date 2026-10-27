@@ -796,11 +796,13 @@ def update_item(item_id, *, keywords=_OMITTED, exclude_keywords=_OMITTED,
         row = conn.execute("SELECT id FROM items WHERE id = ?", (item_id,)).fetchone()
         if row is None:
             raise ValueError(f"Unknown item ID: {item_id}")
-        old_includes, old_excludes = _item_keywords(conn, item_id)
-        includes, excludes = _validate_keyword_sets(
-            old_includes if keywords is _OMITTED else keywords,
-            old_excludes if exclude_keywords is _OMITTED else exclude_keywords,
-        )
+        # A legacy item may have no keyword rows; price or query edits keep that state.
+        if keywords is not _OMITTED or exclude_keywords is not _OMITTED:
+            old_includes, old_excludes = _item_keywords(conn, item_id)
+            includes, excludes = _validate_keyword_sets(
+                old_includes if keywords is _OMITTED else keywords,
+                old_excludes if exclude_keywords is _OMITTED else exclude_keywords,
+            )
         if query is not _OMITTED:
             conn.execute("UPDATE items SET search_query = ? WHERE id = ?", (query, item_id))
         if price is not _OMITTED:

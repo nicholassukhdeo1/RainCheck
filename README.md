@@ -113,10 +113,11 @@ python3 src/setup.py update 3 --manual-price 275 --exclude-keyword fake
 python3 src/setup.py remove 3
 python3 src/setup.py list --all
 python3 src/setup.py add --name "Pod Shorts Custom" --keyword "pod shorts"
-python3 src/setup.py adopt 3
+python3 src/setup.py update 2 --manual-price 250
+python3 src/setup.py adopt 2
 ```
 
-Use the ID printed by `list` in place of `3`.
+Use the IDs printed by `list` in place of `3` and `2`; `2` is the catalog's `pod shorts` item in this example.
 `add` reuses an inactive item's ID when its brand and name match.
 The CLI edits the manual fallback USD price for a tracked item; each Yahoo auction keeps its own yen price and the eBay estimate takes priority when available.
 `adopt` requires an exact brand and name match in `src/catalog.json` and copies that entry's configuration to the item.

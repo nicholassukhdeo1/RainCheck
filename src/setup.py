@@ -107,7 +107,10 @@ def main(argv=None):
             db.adopt_catalog_item(args.id)
             print(f"Adopted item {args.id} from catalog.json.")
     except (ValueError, db.SchemaVersionError, sqlite3.Error, OSError, json.JSONDecodeError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        # Catalog validation lists several problems on separate lines; the CLI
+        # keeps failures to one Error line while retaining those details.
+        detail = " ".join(str(exc).splitlines())
+        print(f"Error: {detail}", file=sys.stderr)
         return 1
     return 0
 
