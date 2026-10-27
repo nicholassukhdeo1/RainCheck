@@ -438,8 +438,8 @@ def test_rc08_c2_one_fetched_rate_drives_all_items_and_digest_values(
         yahoo_scrape,
         "parse_listings",
         lambda html: [
-            inline_listing(1, "Rick Owens Ramones High", 50000),
             inline_listing(2, "Rick Owens Ramones Vintage", 70000),
+            inline_listing(1, "Rick Owens Ramones High", 50000),
             inline_listing(3, "Rick Owens Pod Shorts", 10000),
         ],
     )
