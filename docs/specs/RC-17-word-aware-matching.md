@@ -22,13 +22,14 @@ Both the Yahoo deal path at `src/yahoo_scrape.py:179` and the eBay price path at
 - Require a Latin keyword's ASCII letter or digit at either outer edge to have no adjacent ASCII letter or digit in the normalized title.
 - Preserve literal substring matching for keywords whose outer edges are Japanese characters.
 - Keep excludes decisive over includes, and keep one matching include sufficient.
+- Add `pod shorts` as an explicit include keyword for the pod shorts catalog item, alongside `pod short` and `ポッドショーツ`.
 - Measure old and new decisions on every title in both saved live fixtures using the real catalog keywords.
-- Update matcher tests that currently pin the old substring and unnormalized-keyword behavior.
+- Update matcher and real-catalog tests that pin the old substring, unnormalized-keyword, or exact pod shorts keyword behavior.
 
 **Out of scope:**
 
 - Changing Yahoo or eBay search queries, API calls, parsing, prices, or deal thresholds.
-- Editing `src/catalog.json`, reseeding the database, or automatically adding singular/plural keyword variants.
+- Bulk reseeding the user's existing database or automatically generating singular/plural keyword variants beyond the explicit `pod shorts` addition.
 - Japanese word segmentation, transliteration, accent removal, fuzzy matching, synonyms, or stemming.
 - Rewriting historical `listings`, `listing_matches`, or stored market prices.
 
@@ -47,22 +48,120 @@ Digits are part of a Latin word for boundary purposes, so `ramones42` does not m
 For example, `low` does not match `yellow` or `follow`, but matches `LOW`, `low-top`, and `ローlowカット`.
 `ramones` matches `ＲＡＭＯＮＥＳ`, `ラモーンズRamones`, and `Ramonesスニーカー`, but not `ramones42` or `superramones`.
 `ポッドショーツ` continues to match inside `リックオウエンスポッドショーツ`.
+The new `pod shorts` include matches the plural product name as a whole phrase, while the existing `pod short` still matches the singular phrase under the boundary rule.
+`src/catalog.json` is seed input only; the jobs continue to read keyword rows from the database.
 
 ### Files touched
 
 | File | Change |
 | --- | --- |
 | `src/matching.py` | Implement normalization and edge-aware literal matching in `title_matches`, with any private helper kept here. |
+| `src/catalog.json` | Add `pod shorts` to the pod shorts item's include keywords without removing its two existing includes. |
 | `tests/test_matching.py` | Replace obsolete RC-03b expectations and add explicit Unicode, boundary, punctuation, empty-input, and live-fixture comparisons. |
+| `tests/test_seed_catalog.py` | Update the exact real-catalog pod shorts keyword expectation and verify all three includes. |
 | `docs/specs/RC-17-word-aware-matching.md` | Record the approved behavior and measured fixture impact. |
 
-`src/yahoo_scrape.py`, `src/ebay_pricing.py`, `src/db.py`, `src/schema.sql`, and `src/catalog.json` are read for compatibility but need no edits.
+`src/yahoo_scrape.py`, `src/ebay_pricing.py`, `src/db.py`, and `src/schema.sql` are read for compatibility but need no edits.
 Both jobs already call `title_matches` with the same three arguments.
 
 ### Schema changes and migration
 
 None.
-Existing `raincheck.db` stays at schema version 1 and requires no migration or reseed because the matcher normalizes keywords loaded from existing rows at use time.
+Existing `raincheck.db` stays at schema version 1 and requires no schema migration.
+The matcher normalizes keywords loaded from existing rows at use time, but adding `pod shorts` to `src/catalog.json` does not update the user's existing database by itself.
+Apply the targeted backup-first data update below after merge to add that one keyword to the real database.
+Do not run a full `--seed` for this amendment because it replaces each item's complete keyword set and could erase database-only edits.
+
+### Existing database keyword update after merge
+
+Stop the scheduled jobs and run the following from the repository root on the user's machine after the merged code is in place.
+It explicitly opens `src/raincheck.db`, makes a unique SQLite backup in `~/RainCheck-backups`, requires schema version 1 and exactly one `Rick Owens` / `pod shorts` item, and inserts only one include row with bound SQL parameters.
+It refuses to overwrite an existing exclude keyword or proceed if keyword rows change between the backup and transaction.
+The final check reads the stored keyword sets and confirms that a plural title matches.
+
+```sh
+python3 - <<'PY'
+from contextlib import closing
+from datetime import datetime, timezone
+from pathlib import Path
+import os
+import sqlite3
+import sys
+
+db_path = Path("src/raincheck.db").resolve(strict=True)
+backup_dir = Path.home() / "RainCheck-backups"
+backup_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+backup_path = backup_dir / f"raincheck-before-rc17-{stamp}.db"
+keyword = "pod shorts"
+all_keywords = "SELECT item_id, keyword, kind FROM item_keywords"
+find_item = (
+    "SELECT items.id FROM items JOIN brands ON brands.id = items.brand_id "
+    "WHERE brands.name = ? AND items.name = ?"
+)
+
+with closing(sqlite3.connect(db_path.as_uri() + "?mode=rw", uri=True,
+                             isolation_level=None)) as conn:
+    conn.execute("PRAGMA foreign_keys = ON")
+    if conn.execute("PRAGMA user_version").fetchone()[0] != 1:
+        raise RuntimeError("Expected schema version 1; database left unchanged")
+    matches = conn.execute(find_item, ("Rick Owens", "pod shorts")).fetchall()
+    if len(matches) != 1:
+        raise RuntimeError("Expected exactly one Rick Owens / pod shorts item")
+    item_id = matches[0][0]
+    before = set(conn.execute(all_keywords).fetchall())
+    if (item_id, keyword, "exclude") in before:
+        raise RuntimeError("pod shorts already exists as an exclude keyword")
+
+    fd = os.open(backup_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    os.close(fd)
+    with closing(sqlite3.connect(backup_path)) as backup:
+        conn.backup(backup)
+        if backup.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            raise RuntimeError("Backup integrity check failed; database left unchanged")
+        if set(backup.execute(all_keywords).fetchall()) != before:
+            raise RuntimeError("Backup differs from source; database left unchanged")
+
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        if conn.execute("PRAGMA user_version").fetchone()[0] != 1:
+            raise RuntimeError("Schema changed after backup")
+        if conn.execute(find_item, ("Rick Owens", "pod shorts")).fetchall() != matches:
+            raise RuntimeError("Item changed after backup")
+        if set(conn.execute(all_keywords).fetchall()) != before:
+            raise RuntimeError("Keywords changed after backup")
+        conn.execute(
+            "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?) "
+            "ON CONFLICT(item_id, keyword) DO NOTHING",
+            (item_id, keyword, "include"),
+        )
+        after = set(conn.execute(all_keywords).fetchall())
+        if after != before | {(item_id, keyword, "include")}:
+            raise RuntimeError("Unexpected keyword change")
+        conn.execute("COMMIT")
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+
+    rows = conn.execute(
+        "SELECT keyword, kind FROM item_keywords WHERE item_id = ? ORDER BY keyword",
+        (item_id,),
+    ).fetchall()
+
+sys.path.insert(0, str(Path("src").resolve()))
+from matching import title_matches
+includes = tuple(word for word, kind in rows if kind == "include")
+excludes = tuple(word for word, kind in rows if kind == "exclude")
+assert keyword in includes
+assert title_matches("Rick Owens Pod Shorts", includes, excludes)
+print(f"Backup: {backup_path}")
+print(f"Verified pod shorts includes: {includes}")
+PY
+```
+
+This is a post-merge user data step, not a schema migration or part of the test suite.
+No planner, test-writer, implementer, or verifier should run it against the user's real database.
 
 ### Interfaces
 
@@ -87,6 +186,9 @@ The function does not catch or alter network, database, or parser exceptions fro
 10. The Yahoo and eBay jobs continue to import and use the same `matching.title_matches` function with no new parameters and no network requests made by the matcher.
 11. On `tests/fixtures/yahoo/brand_page_live.html`, the 100 parsed titles with the real `src/catalog.json` keywords have old/new matched counts of 1/1 for Ramones and 0/0 for pod shorts, with no changed title IDs.
 12. On `tests/fixtures/ebay/search_live.json`, the 50 titles with the real catalog keywords have old/new matched counts of 9/8 for Ramones and 0/0 for pod shorts; the sole removed match is item `v1|178432099849|0`, titled `Size 41.5EU/8.5US - Rick Owens Textured Leather Ramone High Top`.
+13. The validated real catalog's pod shorts item has include keywords `("pod short", "ポッドショーツ", "pod shorts")` in catalog order, and its `pants` exclude and search query remain unchanged.
+14. With that catalog keyword tuple, `title_matches("Rick Owens Pod Shorts", includes, ("pants",))` returns `True`, while `title_matches("Rick Owens Pod Shorts", ("pod short",), ())` returns `False`.
+15. On a seeded throwaway database, the pod shorts item has all three include rows and the existing exclude row; this does not require a schema version change.
 
 ## Edge cases
 
@@ -100,17 +202,21 @@ The function does not catch or alter network, database, or parser exceptions fro
 ## Test plan
 
 Use small synthetic titles in `tests/test_matching.py` for all boundary, Unicode, case, punctuation, multiword, empty, and exclude-precedence cases.
+Add a `pod shorts` title assertion with the validated real-catalog include tuple, and update the existing exact tuple expectation in `tests/test_matching.py`.
+Update `tests/test_seed_catalog.py` to assert the three real-catalog includes, unchanged exclude, and unchanged search query; use only its throwaway database fixtures for any seed assertion.
 Reuse the saved `tests/fixtures/yahoo/brand_page_live.html` through `yahoo_scrape.parse_listings` and `tests/fixtures/ebay/search_live.json` through `json.loads`.
 Use `src/catalog.json` only as read-only seed input for the fixture comparison, or its validated `CatalogEntry` values; do not open the real database.
 These seed keywords are a reproducible proxy for the fixture measurement; both jobs actually read keywords from the database, which may differ from the current catalog.
+Remeasuring the saved fixtures with the amended catalog still gives the counts in criteria 11 and 12; neither fixture contains a newly matched pod shorts title.
 For each fixture and tracked item, compare a local copy of the old substring predicate against `title_matches`, assert the old/new counts and exact changed IDs listed above, and fail if a fixture is empty.
 Keep existing fake HTTP and throwaway database fixtures for any job-level assertion that needs them; no live network or email is needed.
 The fixture comparison measures match selection only; it does not assert email delivery or write a market price.
 
 ## Shared-file conflicts
 
-No edits to `src/schema.sql`, `src/db.py`, or `src/catalog.json` are planned, so RC-17 has no shared-file conflict under the project parallelism rule.
-If the user decides to add `ramone` to the real catalog as part of this feature, that decision expands scope to `src/catalog.json` and must be coordinated with any other feature touching that file.
+RC-17 now edits `src/catalog.json`, so it must not run in parallel with another feature editing that file.
+No edits to `src/schema.sql` or `src/db.py` are planned.
+The `ramone` keyword remains outside RC-17 despite the catalog file already being in scope for the approved `pod shorts` addition.
 
 ## Open questions
 
@@ -123,8 +229,16 @@ If the user decides to add `ramone` to the real catalog as part of this feature,
 
 - 2026-10-27: The user approved RC-17 with the recommended boundary rule and accepted the one removed fixture match.
   Adding an explicit `ramone` catalog keyword remains outside this feature.
+- 2026-10-27: The user approved adding `pod shorts` as an explicit include keyword alongside `pod short` and `ポッドショーツ`.
+  The change updates catalog seed input but requires the separate backup-first data update above for the user's existing database.
+
+## Amendments
+
+- 2026-10-27: Added the approved plural pod shorts keyword, real-catalog and seeded-data assertions, shared catalog conflict, and targeted existing-database update procedure.
+  The live fixture counts remain unchanged under the amended seed keywords.
 
 ## Rollback
 
-Revert the matcher and its test changes to restore substring behavior; no database restore or migration is needed.
+Revert the matcher, catalog, and test changes to restore the prior code and seed input; no schema restore or migration is needed.
+If the targeted existing-database update was applied, use the saved backup for recovery or remove only the verified `pod shorts` include row for the `Rick Owens` / `pod shorts` item with a new backup and a parameterized `DELETE` bounded by `item_id`, `keyword`, and `kind`.
 Previously stored eBay prices are not recalculated automatically, so rerun the eBay pricing job with the user's normal credentials if the old matching rule must be reflected in stored market prices.
