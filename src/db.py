@@ -42,12 +42,12 @@ MIGRATIONS = {
     2: (
         "CREATE TABLE ebay_listing_prices ("
         "item_id INTEGER NOT NULL REFERENCES items(id), "
-        "ebay_listing_id TEXT NOT NULL, "
+        "ebay_listing_id TEXT NOT NULL CHECK (length(ebay_listing_id) > 0), "
         "first_price_usd REAL NOT NULL CHECK (first_price_usd > 0), "
         "first_seen_at TEXT NOT NULL, "
         "PRIMARY KEY (item_id, ebay_listing_id))",
         "CREATE INDEX idx_ebay_listing_prices_item_seen "
-        "ON ebay_listing_prices (item_id, first_seen_at, ebay_listing_id)",
+        "ON ebay_listing_prices (item_id, first_seen_at)",
     ),
 }
 
