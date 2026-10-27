@@ -639,8 +639,9 @@ def record_listing_match(brand_id, url, title, price_yen, image_url, item_id) ->
                 (url,),
             ).fetchone()
             conn.execute(
-                "INSERT OR IGNORE INTO listing_matches (listing_id, item_id, matched_at) "
-                "VALUES (?,?,?)",
+                "INSERT INTO listing_matches (listing_id, item_id, matched_at) "
+                "VALUES (?,?,?) "
+                "ON CONFLICT(listing_id, item_id) DO NOTHING",
                 (listing["id"], item_id, now),
             )
             conn.commit()
