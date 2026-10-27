@@ -8,7 +8,7 @@ I built this to get hands-on with web scraping, HTTP requests, and automating a 
 
 - Lets me build a watchlist of items to track, each with a market price and keywords
 - Sets each item's market price from matching active eBay listings in the first 50 eBay Browse API search results
-- Scrapes the Rick Owens brand page on Yahoo Auctions Japan (sorted newest-first)
+- Scrapes the newest Yahoo Auctions Japan listings for each active tracked brand
 - Filters listings by keyword, converts prices from JPY to USD, and keeps only those below market
 - Ranks the remaining listings by discount and remembers which ones it has already seen
 - Sends one digest email per run with the top 5 new deals per item (an HTML table plus a plain-text version), and no email when there are no new deals
@@ -85,7 +85,7 @@ Both can be run from any directory.
 
 - Both jobs read the items only from the database, never from `catalog.json`, so a `catalog.json` edit takes effect only after you seed.
 - Both jobs ignore listings whose title contains an exclude keyword.
-- Matching is case-insensitive substring matching, so `low` also matches `yellow` (until RC-17 makes it word-aware).
+- Matching normalizes Unicode (NFKC), ignores case, and requires boundaries around ASCII letters and digits at a keyword's edges, so `low` does not match `yellow`.
 - eBay is searched with the item's `search_query`, or with the item name when it has none.
 - eBay searches the newest-first first 50 results and stores each distinct fixed-price listing's first observed USD ask for that item.
   Variations that share a legacy listing ID count once, and a later asking-price change never rewrites the first observation.
@@ -214,8 +214,9 @@ Check that the artifact contains only the nine runtime files from `src/`, with n
    If the database needs migration, follow its backup-first upgrade procedure before taking the final upload snapshot.
    On that snapshot, require `PRAGMA integrity_check` to return `ok`, `PRAGMA foreign_key_check` to return no rows, and `PRAGMA user_version` to equal `db.SCHEMA_VERSION` in this release.
    Keep the local backup separately from S3 version retention.
-4. Build and deploy a reviewed change set using `sam deploy --template-file .aws-sam/build/template.yaml --stack-name raincheck --region us-east-2 --capabilities CAPABILITY_IAM --no-execute-changeset`.
-   Inspect the change set, then deploy with the same command without `--no-execute-changeset` after authorization.
+4. Build and prepare the production change set using `sam deploy --template-file .aws-sam/build/template.yaml --stack-name raincheck --region us-east-2 --capabilities CAPABILITY_IAM --resolve-s3 --no-execute-changeset`.
+   `--resolve-s3` lets SAM create and use a deployment artifact bucket on a first non-guided deploy.
+   Review the production change set in CloudFormation, then execute that exact change set from the console after authorization.
    Always deploy the built template so the explicit Makefile allowlist, rather than the repository root, becomes the Lambda package.
    The S3 bucket is retained if the stack is deleted, and its name is available from the `DatabaseBucketName` stack output.
 5. Upload the verified snapshot to the stack's bucket at the configured `DatabaseKey` using an HTTPS S3 request with SSE-S3 (`AES256`).
@@ -227,7 +228,9 @@ Stop the schedule before any manual object replacement; the handler's ETag condi
 
 ### Isolated dry-run and schedule enablement
 
-Deploy a separate throwaway stack in `us-east-2` with `--parameter-overrides DryRun=1`, which creates a separate bucket and keeps its schedule disabled.
+Prepare the separate throwaway stack's change set using `sam deploy --template-file .aws-sam/build/template.yaml --stack-name raincheck-dry-run --region us-east-2 --capabilities CAPABILITY_IAM --resolve-s3 --parameter-overrides DryRun=1 --no-execute-changeset`.
+Review the throwaway stack's change set in CloudFormation, then execute that exact change set from the console after authorization.
+The separate stack creates a separate database bucket and keeps its schedule disabled.
 Upload a separate database containing only synthetic listings and no active items; `DryRun=1` sets `RAINCHECK_DRY_RUN=1` in that stack's Lambda configuration.
 The empty active watchlist avoids live listing acquisition while exercising S3 download, schema checks, SSM access, the runner, and the conditional upload.
 Invoke only that throwaway function with an empty event after the separate bucket and database have been verified.
