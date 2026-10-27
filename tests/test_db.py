@@ -266,7 +266,7 @@ def test_rc03a_c35_get_item_id_returns_inactive_items(seeded_db, db_conn):
     assert db.get_item_id("Rick Owens", "pod shorts") == expected
 
 
-def test_rc03a_c36_update_market_price_reports_a_change_and_touches_one_cell(
+def test_rc10_c28_update_market_price_changes_cell_without_operational_print(
     seeded_db, db_conn, capsys
 ):
     item_id = db.get_item_id("Rick Owens", "rick owens ramones")
@@ -275,7 +275,7 @@ def test_rc03a_c36_update_market_price_reports_a_change_and_touches_one_cell(
 
     assert db.update_market_price(item_id, 912.5) is True
 
-    assert "Market price updated!" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""
     after = _items_table(db_conn)
     cols = [r[1] for r in db_conn.execute("PRAGMA table_info(items)")]
     market = cols.index("market_price_usd")

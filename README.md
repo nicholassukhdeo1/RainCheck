@@ -92,10 +92,17 @@ Both can be run from any directory.
   The table keeps these observations permanently, including prices that are currently outliers.
   The current market price is the all-time arithmetic mean of prices retained after the median absolute deviation (MAD) filter: prices more than 3.5 scaled MADs from the pool median are excluded, and when MAD is zero only prices equal to the median remain.
   RainCheck updates that price once at least five retained distinct listings have accumulated; otherwise it preserves the existing market price.
-  Each run prints new and duplicate counts plus cumulative candidate, outlier, and retained counts.
+  Each run logs new and duplicate counts plus cumulative candidate, outlier, and retained counts.
   The first-page limit means listings beyond the newest 50 can be missed when more than 50 relevant new listings arrive between runs.
   Listing history can be inspected with `SELECT ebay_listing_id, first_price_usd, first_seen_at FROM ebay_listing_prices WHERE item_id = ? ORDER BY first_seen_at, ebay_listing_id`.
 - If a job finds an outdated or missing database, it prints one `Error:` line naming the command that fixes it and stops before any network request.
+- HTTP 429 and 5xx responses are retried up to two times with short bounded waits; transport errors are not retried.
+  Requests retain their explicit per-call timeouts, and server `Retry-After` delays above five seconds stop that request from retrying.
+- Job status and failures are logged to stderr.
+  A job exits with status 1 after a terminal failure, including an isolated item failure; successful no-work runs exit 0.
+- eBay item failures leave that item's prior data intact and do not stop later item searches, except a final HTTP 429 stops further eBay searches.
+- Yahoo sends at most one digest per run and records all displayed deals together only after a successful send.
+  If SMTP accepts a message and the later database transaction fails, the deals can be emailed again on a later run.
 
 `src/setup.py` is the exception.
 It reads and writes `catalog.json` relative to the current directory, so run it from inside `src/`:

@@ -1,4 +1,5 @@
 import os
+import logging
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -10,6 +11,7 @@ load_dotenv()
 
 
 DRY_RUN_ENV = "RAINCHECK_DRY_RUN"
+logger = logging.getLogger(__name__)
 
 
 def is_dry_run():
@@ -62,9 +64,9 @@ def send_email(subject, html_body, text_body):
             server.starttls()
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, receiver_email, msg.as_string())
-            print("Email sent!")
+            logger.info("Digest email sent")
         return True
-    except Exception as e:
-        print(f"Error: unable to send email ({e})")
+    except Exception as exc:
+        logger.error("Unable to send email (%s)", type(exc).__name__)
         # the caller must know, so it doesn't record deals that were never emailed
         return False

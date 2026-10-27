@@ -687,6 +687,40 @@ def record_listing_match(brand_id, url, title, price_yen, image_url, item_id) ->
             raise
 
 
+def record_listing_matches(deals) -> int:
+    """Record a displayed digest's listings and matches in one transaction."""
+    timestamp = datetime.now(timezone.utc).isoformat()
+    with closing(get_connection()) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            inserted_count = 0
+            for deal in deals:
+                inserted = conn.execute(
+                    "INSERT INTO listings "
+                    "(brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at) "
+                    "VALUES (?,?,?,?,?,?,?) ON CONFLICT(url) DO NOTHING",
+                    (
+                        deal.brand_id, deal.url, deal.title, deal.price_yen,
+                        deal.image_url, timestamp, timestamp,
+                    ),
+                )
+                inserted_count += inserted.rowcount
+                listing = conn.execute(
+                    "SELECT id FROM listings WHERE url = ?", (deal.url,)
+                ).fetchone()
+                conn.execute(
+                    "INSERT INTO listing_matches (listing_id, item_id, matched_at) "
+                    "VALUES (?,?,?) ON CONFLICT(listing_id, item_id) DO NOTHING",
+                    (listing["id"], deal.item_id, timestamp),
+                )
+            conn.commit()
+            return inserted_count
+        except BaseException:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
+
+
 def get_known_listing_urls(urls: Iterable[str]) -> set[str]:
     """Returns the subset of urls already stored in listings. Read-only: never writes or commits."""
     # consume the iterable once and de-duplicate it
@@ -855,8 +889,6 @@ def update_market_price(item_id, price):
         )
         conn.commit()
         changed = (cursor.rowcount == 1)
-    if changed:
-        print("Market price updated!")
     return changed
 
 def get_item_id(brand_name,item_name):

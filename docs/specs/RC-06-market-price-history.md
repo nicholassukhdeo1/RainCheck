@@ -443,6 +443,16 @@ The first-price, fixed-price, newest-first, all-time-pool, five-retained minimum
   Existing real-database keyword sets must be preserved through a targeted backup-first update instead of a full seed.
 - 2026-10-27: The user approved the complete revised RC-06 spec after reviewing listing-level history, the cumulative mean, the five-retained minimum, and the `fake` exclusion.
 
+## Amendments
+
+### Amendment 1 (2026-10-27, approved by the user): isolated eBay item failures
+
+RC-10 supersedes only criterion 18's requirement that an HTTP 500 or timeout stop later item searches.
+After its bounded retries, a failed item search writes nothing for that item and leaves earlier committed observations unchanged; the job logs the failure, continues later items, and exits 1 after processing them.
+The RC-10 spec defines the same isolation for an item-specific malformed response or transactional writer failure.
+A run-level token, credential, or schema failure still stops before later item searches, and a final 429 or a `Retry-After` above RC-10's wait cap stops later eBay searches.
+All other RC-06 price-pool, atomic item-write, and validation requirements remain in force.
+
 ## Rollback
 
 Before upgrading the user's database, revert the code; the previous code still reads version 1.

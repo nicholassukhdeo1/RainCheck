@@ -4,12 +4,14 @@ RainCheck scrapes Yahoo Auctions Japan for new listings of tracked items and ema
 It benchmarks each listing against a market price computed from active eBay listings.
 It is written in Python with a SQLite database.
 
+RC-06 is merged and stores distinct eBay listing-price observations in schema version 2.
+
 ## Layout
 
-- `src/schema.sql` defines the tables; `src/db.py` holds every database function.
+- `src/schema.sql` defines the tables at schema version 2; `src/db.py` holds every database function and the versioned migrations.
 - `src/yahoo_scrape.py` scrapes Yahoo and emails deals.
 - `src/ebay_pricing.py` computes each item's market price from the eBay Browse API and stores it.
-- `src/catalog.json` is the list of tracked items.
+- `src/catalog.json` is seed input; jobs read tracked items from the database.
 - `docs/BACKLOG.md` is the prioritized feature list; `docs/specs/` holds one approved spec per feature.
 - `.claude/agents/` defines the planner, test-writer, implementer, reviewer, and verifier agents.
   `.codex/agents/` holds the same five ported for OpenAI Codex, and `AGENTS.md` is the Codex handoff; keep them in sync with these files.

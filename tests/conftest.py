@@ -6,6 +6,7 @@ import copy
 import json
 import socket
 import sqlite3
+import sys
 from pathlib import Path
 
 import dotenv
@@ -51,6 +52,28 @@ def _block_network(monkeypatch):
     # of making a real lookup and raising requests.ConnectionError.
     monkeypatch.setattr(socket, "getaddrinfo", _blocked)
     monkeypatch.setattr(socket, "create_connection", _blocked)
+
+
+@pytest.fixture(autouse=True)
+def _disable_http_retry_waits(monkeypatch):
+    """Keep all job integration tests offline in time as well as network."""
+    try:
+        import http_retry
+    except ImportError:
+        return
+
+    original = http_retry.request_with_retry
+
+    def without_real_wait(*args, **kwargs):
+        kwargs.setdefault("sleep", lambda _seconds: None)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(http_retry, "request_with_retry", without_real_wait)
+    # Jobs may import the shared function directly, before the fixture runs.
+    for module_name in ("ebay_pricing", "yahoo_scrape"):
+        module = sys.modules.get(module_name)
+        if module is not None and getattr(module, "request_with_retry", None) is original:
+            monkeypatch.setattr(module, "request_with_retry", without_real_wait)
 
 
 def assert_db_is_temp(tmp_path):
@@ -132,10 +155,11 @@ def db_conn(tmp_path):
 
 
 class FakeResponse:
-    def __init__(self, *, json_data=None, text=None, status=200):
+    def __init__(self, *, json_data=None, text=None, status=200, headers=None):
         if text is None:
             text = json.dumps(json_data) if json_data is not None else ""
         self.status_code = status
+        self.headers = dict(headers or {})
         self.text = text
         self.content = text.encode("utf-8")
         self._json = json_data
@@ -156,15 +180,32 @@ class FakeHTTP:
         self.calls = []
 
     def add(self, method, url, *, json=None, text=None, status=200):
-        self._routes[(method.upper(), url)] = (json, text, status)
+        self._routes[(method.upper(), url)] = [(json, text, status, {})]
+
+    def add_sequence(self, method, url, responses):
+        """Register ordered offline responses as (json, text, status, headers) mappings."""
+        sequence = []
+        for response in responses:
+            if isinstance(response, dict):
+                sequence.append((
+                    response.get("json"), response.get("text"),
+                    response.get("status", 200), response.get("headers", {}),
+                ))
+            else:
+                json_data, text, status, *tail = response
+                sequence.append((json_data, text, status, tail[0] if tail else {}))
+        if not sequence:
+            raise ValueError("an HTTP response sequence must not be empty")
+        self._routes[(method.upper(), url)] = sequence
 
     def _handle(self, method, url, kwargs):
         self.calls.append((method, url, kwargs))
         key = (method, url)
         if key not in self._routes:
             raise AssertionError(f"Unregistered HTTP call: {method} {url}")
-        json_data, text, status = self._routes[key]
-        return FakeResponse(json_data=json_data, text=text, status=status)
+        responses = self._routes[key]
+        json_data, text, status, headers = responses.pop(0) if len(responses) > 1 else responses[0]
+        return FakeResponse(json_data=json_data, text=text, status=status, headers=headers)
 
     def get(self, url, **kwargs):
         return self._handle("GET", url, kwargs)

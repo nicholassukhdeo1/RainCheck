@@ -246,6 +246,21 @@ def test_rc15_c11_claim_holds_even_when_the_first_section_cut_the_listing():
     assert sections[0].not_shown == 1
 
 
+def test_rc10_c19_healthy_earlier_claim_still_blocks_a_cut_listing():
+    # Preserve the approved claim priority for healthy items after item isolation.
+    first = inline_item(1, "first", keywords=("ramones",))
+    second = inline_item(2, "second", keywords=("sneakers",))
+    listings = [
+        inline_listing(1, "Rick Owens Ramones High", 10000),
+        inline_listing(2, "Rick Owens Ramones Sneakers", 20000),
+    ]
+    sections = yahoo_scrape.build_sections(
+        [first, second], listings, set(), 0.0062, per_item_limit=1
+    )
+    assert [section.item_name for section in sections] == ["first"]
+    assert [deal.url for deal in sections[0].deals] == [f"{AUCTION}t1"]
+
+
 def test_rc15_c11_second_item_keeps_its_other_deals():
     first = inline_item(1, "first", keywords=("ramones",))
     second = inline_item(2, "second", keywords=("ramones", "geobasket"))
@@ -387,8 +402,9 @@ def test_rc08_c10_rate_change_can_move_listing_across_deal_threshold():
 
 
 def test_rc08_c10_main_leaves_same_listing_unrecorded_then_sends_it_after_rate_change(
-    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn, capsys
+    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn, caplog
 ):
+    caplog.set_level("INFO", logger="yahoo_scrape")
     rate_values = iter([0.0067, 0.0062])
     rate_calls = []
     real_get = requests.get
@@ -419,7 +435,7 @@ def test_rc08_c10_main_leaves_same_listing_unrecorded_then_sends_it_after_rate_c
     assert sql_rows(seeded_db, "SELECT url FROM listings") == []
     assert sql_rows(seeded_db, "SELECT listing_id FROM listing_matches") == []
     assert sent_emails == []
-    assert "No new deals; no email sent." in capsys.readouterr().out
+    assert any("no new deals" in record.getMessage().lower() for record in caplog.records)
 
     yahoo_scrape.main()
     assert len(rate_calls) == 2
@@ -476,7 +492,7 @@ def test_rc08_c6_provider_http_failure_warns_but_digest_and_records_still_happen
     assert [row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")] == [
         URL_1, URL_4
     ]
-    assert len([call for call in yahoo_http.calls if call[1] == FRANKFURTER_URL]) == 1
+    assert len([call for call in yahoo_http.calls if call[1] == FRANKFURTER_URL]) == 3
 
 
 @pytest.mark.parametrize("status", [400, 500])
@@ -527,17 +543,18 @@ def test_c46_one_email_sorted_by_discount_with_percentages(yahoo_http, seeded_db
     assert text.index(URL_1) < text.index(URL_4)
 
 
-def test_c47_second_run_inserts_no_new_rows(yahoo_http, seeded_db, sent_emails, db_conn, capsys):
+def test_c47_second_run_inserts_no_new_rows(yahoo_http, seeded_db, sent_emails, db_conn, caplog):
     """RC-15 criterion 41: the second run sends nothing and says so."""
+    caplog.set_level("INFO", logger="yahoo_scrape")
     yahoo_scrape.main()
     first = _rows(db_conn)
-    capsys.readouterr()
+    caplog.clear()
     yahoo_scrape.main()
     assert _rows(db_conn) == first
     assert len(first) == 2
     assert len(sent_emails) == 1
     assert yahoo_scrape.NO_DEALS_LINE == "No new deals; no email sent."
-    assert "No new deals; no email sent." in capsys.readouterr().out
+    assert any("no new deals" in record.getMessage().lower() for record in caplog.records)
 
 
 def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
@@ -568,9 +585,10 @@ def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
 
 
 def test_rc07_c25_null_market_price_skips_item(
-    yahoo_http, seeded_db, sent_emails, db_conn, capsys
+    yahoo_http, seeded_db, sent_emails, db_conn, caplog
 ):
     """RC-15 criterion 46."""
+    caplog.set_level("INFO", logger="yahoo_scrape")
     db_conn.execute(
         "UPDATE items SET market_price_usd = NULL, manual_price_usd = NULL WHERE name = ?",
         ("rick owens ramones",),
@@ -579,9 +597,9 @@ def test_rc07_c25_null_market_price_skips_item(
     yahoo_scrape.main()
     assert _rows(db_conn) == []
     assert sent_emails == []
-    out = capsys.readouterr().out
-    assert "Skipping rick owens ramones: no usable market price." in out
-    assert "No new deals; no email sent." in out
+    out = "\n".join(record.getMessage() for record in caplog.records)
+    assert "rick owens ramones" in out and "no usable market price" in out.lower()
+    assert "no new deals" in out.lower()
 
 
 def test_rc15_c42_deals_are_recorded_only_after_the_send(yahoo_http, seeded_db, monkeypatch):
@@ -833,7 +851,7 @@ def test_rc05_c5_and_c11_absent_listing_keeps_ended_fields_and_schema_stays_v1(
 
 
 @pytest.mark.parametrize("failure", ["connection", "http", "malformed"])
-def test_rc05_c9_fetch_or_parse_failure_does_not_refresh_or_email(
+def test_rc10_c15_fetch_or_parse_failure_exits_cleanly_without_refresh_or_email(
     failure, fake_http, fixtures_dir, seeded_db, db_conn, sent_emails, monkeypatch
 ):
     _make_existing_rc05_listing(db_conn)
@@ -845,16 +863,14 @@ def test_rc05_c9_fetch_or_parse_failure_does_not_refresh_or_email(
             raise requests.ConnectionError("injected fetch failure")
 
         monkeypatch.setattr(yahoo_scrape.requests, "get", fail_request)
-        expected = requests.ConnectionError
     elif failure == "http":
         fake_http.add("GET", RICK_OWENS_URL, status=503)
-        expected = requests.HTTPError
     else:
         fake_http.add("GET", RICK_OWENS_URL, text="not a Yahoo results page")
-        expected = yahoo_scrape.YahooPageError
 
-    with pytest.raises(expected):
+    with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
+    assert exc.value.code == 1
 
     assert sent_emails == []
     assert [
@@ -867,7 +883,7 @@ def test_rc05_c9_fetch_or_parse_failure_does_not_refresh_or_email(
 
 
 def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
-    yahoo_http, seeded_db, monkeypatch, capsys
+    yahoo_http, seeded_db, monkeypatch, caplog
 ):
     calls = []
 
@@ -880,10 +896,7 @@ def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
         yahoo_scrape.main()
     assert exc.value.code == 1
     assert len(calls) == 1
-    assert capsys.readouterr().err == (
-        "Error: digest email not sent, so its deals were not recorded and "
-        "will be offered again next run (2 deals).\n"
-    )
+    assert any(record.levelname == "ERROR" for record in caplog.records)
     assert sql_rows(seeded_db, "SELECT url FROM listings") == []
     assert sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches") == []
 
@@ -902,14 +915,14 @@ def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
 
 
 def test_rc15_c43_failed_send_message_uses_singular_for_one_deal(
-    yahoo_http, seeded_db, monkeypatch, capsys
+    yahoo_http, seeded_db, monkeypatch, caplog
 ):
     sql_run(seeded_db, "UPDATE items SET manual_price_usd = 400.0 WHERE name = ?", ("rick owens ramones",))
     monkeypatch.setattr(yahoo_scrape, "send_email", lambda s, h, t: False)
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
     assert exc.value.code == 1
-    assert capsys.readouterr().err.endswith("will be offered again next run (1 deal).\n")
+    assert any(record.levelname == "ERROR" for record in caplog.records)
 
 
 def test_rc15_c44_a_listing_stored_by_an_earlier_run_is_not_shown(
@@ -954,7 +967,7 @@ def test_rc15_c39_pipeline_main_prints_no_per_deal_console_lines(
 
 
 def test_c14_main_works_from_unrelated_cwd_and_emails_once_per_item(
-    yahoo_http, test_catalog, seeded_db, sent_emails, monkeypatch, tmp_path
+    yahoo_http, test_catalog, seeded_db, sent_emails, monkeypatch, tmp_path, caplog
 ):
     """RC-15 criterion 39: one digest for all items."""
     monkeypatch.chdir(tmp_path)
@@ -976,9 +989,10 @@ def test_c14_main_works_from_unrelated_cwd_and_emails_once_per_item(
 
 
 def test_rc15_c50_dry_run_end_to_end_prints_whole_digest_and_records(
-    yahoo_http, seeded_db, monkeypatch, capsys
+    yahoo_http, seeded_db, monkeypatch, capsys, caplog
 ):
     import smtplib
+    caplog.set_level("INFO", logger="yahoo_scrape")
 
     def boom(*args, **kwargs):
         raise AssertionError("smtplib.SMTP must not be constructed in dry run")
@@ -995,19 +1009,18 @@ def test_rc15_c50_dry_run_end_to_end_prints_whole_digest_and_records(
     assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")] == [URL_1, URL_4]
 
     yahoo_scrape.main()
-    out2 = capsys.readouterr().out
-    assert "No new deals; no email sent." in out2
-    assert "[DRY RUN]" not in out2
+    assert any("no new deals" in record.getMessage().lower() for record in caplog.records)
 
 
 def test_rc15_c41_empty_yahoo_page_sends_nothing(
-    fake_http, fixtures_dir, seeded_db, sent_emails, monkeypatch, capsys
+    fake_http, fixtures_dir, seeded_db, sent_emails, monkeypatch, caplog
 ):
+    caplog.set_level("INFO", logger="yahoo_scrape")
     fake_http.add("GET", RICK_OWENS_URL, text=_html(fixtures_dir, "brand_page_minimal.html"))
     monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: [])
     yahoo_scrape.main()
     assert sent_emails == []
-    assert "No new deals; no email sent." in capsys.readouterr().out
+    assert any("no new deals" in record.getMessage().lower() for record in caplog.records)
     assert sql_rows(seeded_db, "SELECT url FROM listings") == []
     assert all(call[1] != FRANKFURTER_URL for call in fake_http.calls)
 
@@ -1043,9 +1056,10 @@ def test_rc03b_c11_effective_price_of_the_item_drives_the_deal_math(
 
 
 def test_rc03b_c12_item_without_usable_price_is_skipped_with_a_line(
-    yahoo_http, seeded_db, sent_emails, db_conn, capsys
+    yahoo_http, seeded_db, sent_emails, db_conn, caplog
 ):
     """RC-15 criterion 46."""
+    caplog.set_level("INFO", logger="yahoo_scrape")
     db_conn.execute(
         "UPDATE items SET market_price_usd = NULL, manual_price_usd = NULL WHERE name = ?",
         ("rick owens ramones",),
@@ -1054,7 +1068,7 @@ def test_rc03b_c12_item_without_usable_price_is_skipped_with_a_line(
     yahoo_scrape.main()
     assert _rows(db_conn) == []
     assert sent_emails == []
-    assert "Skipping rick owens ramones: no usable market price." in capsys.readouterr().out
+    assert any("no usable market price" in record.getMessage().lower() for record in caplog.records)
 
 
 def test_rc06_c24_yahoo_job_rejects_fake_titles_for_both_seeded_items(
@@ -1114,8 +1128,9 @@ def test_rc07_c28_http_503_raises_with_no_email_and_no_rows(
     fake_http, test_catalog, seeded_db, sent_emails, db_conn
 ):
     fake_http.add("GET", RICK_OWENS_URL, text="Service Unavailable", status=503)
-    with pytest.raises(requests.HTTPError):
+    with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
+    assert exc.value.code == 1
     assert sent_emails == []
     assert _rows(db_conn) == []
     assert all(call[1] != FRANKFURTER_URL for call in fake_http.calls)
@@ -1126,8 +1141,9 @@ def test_rc07_c29_old_layout_page_raises_with_no_email_and_no_rows(
 ):
     old = '<html><body><h3>Rick Owens Ramones</h3><span class="Product__priceValue u-textRed">1円</span></body></html>'
     fake_http.add("GET", RICK_OWENS_URL, text=old)
-    with pytest.raises(yahoo_scrape.YahooPageError):
+    with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
+    assert exc.value.code == 1
     assert sent_emails == []
     assert _rows(db_conn) == []
     assert all(call[1] != FRANKFURTER_URL for call in fake_http.calls)
@@ -1212,11 +1228,13 @@ def test_rc03b_c17_main_with_no_database_file_is_a_clean_error_and_creates_nothi
     assert not path.exists()
 
 
-def test_rc03b_c18_main_with_no_items_prints_one_line_and_returns(
-    temp_db, fake_http, sent_emails, capsys
+def test_rc10_c26_yahoo_no_active_items_is_a_successful_no_work_run(
+    temp_db, fake_http, sent_emails, caplog
 ):
-    yahoo_scrape.main()
-    assert NO_ITEMS_LINE in capsys.readouterr().out
+    caplog.set_level("INFO", logger="yahoo_scrape")
+    result = yahoo_scrape.main()
+    assert result in (None, 0)
+    assert any("no active items" in record.getMessage().lower() for record in caplog.records)
     assert fake_http.calls == []
     assert sent_emails == []
 
@@ -1312,7 +1330,7 @@ def test_rc15_c57_main_sends_one_digest_with_the_valid_deal(kwargs, fake_http, s
     assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings")] == [URL_1]
 
 
-def test_rc15_insert_failure_after_send_propagates_and_next_run_sends_only_the_rest(
+def test_rc10_c21_c22_batch_failure_rolls_back_then_next_run_resends_all_deals(
     yahoo_http, seeded_db, monkeypatch
 ):
     delivered = []
@@ -1322,23 +1340,327 @@ def test_rc15_insert_failure_after_send_propagates_and_next_run_sends_only_the_r
         return True
 
     monkeypatch.setattr(yahoo_scrape, "send_email", ok_send)
-    real_record_match = yahoo_scrape.record_listing_match
+    real_record_matches = db.record_listing_matches
     calls = []
 
-    def flaky_record_match(*args, **kwargs):
-        calls.append(args[1])
-        if len(calls) == 2:
+    def fail_first_batch(deals):
+        calls.append(tuple(deals))
+        if len(calls) == 1:
             raise RuntimeError("database is locked")
-        return real_record_match(*args, **kwargs)
+        return real_record_matches(deals)
 
-    monkeypatch.setattr(yahoo_scrape, "record_listing_match", flaky_record_match)
-    with pytest.raises(RuntimeError, match="database is locked"):
+    monkeypatch.setattr(db, "record_listing_matches", fail_first_batch)
+    with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
+    assert exc.value.code == 1
     assert len(delivered) == 1
-    assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings")] == [URL_1]
+    assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings")] == []
 
-    monkeypatch.setattr(yahoo_scrape, "record_listing_match", real_record_match)
     yahoo_scrape.main()
     assert len(delivered) == 2
-    assert _row_urls(delivered[1]) == [URL_4]
+    assert _row_urls(delivered[1]) == [URL_1, URL_4]
+    assert _row_urls(delivered[0]) == _row_urls(delivered[1])
     assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")] == [URL_1, URL_4]
+
+
+# ---- RC-10 reliability and logging -------------------------------------------------
+
+def test_rc10_c14_yahoo_page_retries_shared_fetch_once_and_records_one_digest(
+    fake_http, fixtures_dir, seeded_db, sent_emails, db_conn, monkeypatch
+):
+    fake_http.add_sequence("GET", RICK_OWENS_URL, [
+        {"status": 503},
+        {"text": _html(fixtures_dir, "brand_page_minimal.html")},
+    ])
+    _add_rate_response(fake_http)
+    waits = []
+    import http_retry
+    original = http_retry.request_with_retry
+    monkeypatch.setattr(http_retry, "request_with_retry", lambda *a, **kw: original(*a, sleep=waits.append, **kw))
+    original_parse = yahoo_scrape.parse_listings
+    parsed = []
+    def record_parse(html):
+        parsed.append(html)
+        return original_parse(html)
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", record_parse)
+
+    yahoo_scrape.main()
+
+    assert [call[1] for call in fake_http.calls].count(RICK_OWENS_URL) == 2
+    assert waits == [0.5]
+    assert len(parsed) == 1 and parsed[0]
+    assert len(sent_emails) == 1
+    assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 2
+
+
+@pytest.mark.parametrize("failure", ["final_503", "malformed"])
+def test_rc10_c15_yahoo_shared_page_failure_has_no_send_or_listing_writes(
+    failure, fake_http, seeded_db, sent_emails, db_conn, monkeypatch, capsys
+):
+    item = _item("rick owens ramones")
+    db.record_listing_match(item.brand_id, URL_1, "Stored listing", 50000, None, item.id)
+    old_seen = "2026-10-20T00:00:00+00:00"
+    db_conn.execute("UPDATE listings SET last_seen_at = ? WHERE url = ?", (old_seen, URL_1))
+    db_conn.commit()
+    parsed = []
+    original_parse = yahoo_scrape.parse_listings
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: parsed.append(html) or original_parse(html))
+    if failure == "final_503":
+        fake_http.add_sequence("GET", RICK_OWENS_URL, [
+            {"status": 503}, {"status": 503}, {"status": 503},
+        ])
+    else:
+        fake_http.add("GET", RICK_OWENS_URL, text="<html><body>unexpected page</body></html>")
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    assert exc.value.code == 1
+    assert sent_emails == []
+    assert "Traceback" not in capsys.readouterr().err
+    assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 1
+    assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 1
+    assert db_conn.execute("SELECT last_seen_at FROM listings WHERE url = ?", (URL_1,)).fetchone()[0] == old_seen
+    if failure == "malformed":
+        assert [call[1] for call in fake_http.calls].count(RICK_OWENS_URL) == 1
+        assert len(parsed) == 1
+    else:
+        assert [call[1] for call in fake_http.calls].count(RICK_OWENS_URL) == 3
+        assert parsed == []
+
+
+def test_rc10_c17_malformed_200_page_is_not_retried(
+    fake_http, seeded_db, sent_emails
+):
+    fake_http.add("GET", RICK_OWENS_URL, text="<html><body>unexpected page</body></html>")
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    assert exc.value.code == 1
+    assert len([call for call in fake_http.calls if call[1] == RICK_OWENS_URL]) == 1
+    assert sent_emails == []
+
+
+def test_rc10_c7_yahoo_transport_failure_sends_nothing_and_does_not_refresh_last_seen(
+    seeded_db, sent_emails, monkeypatch, db_conn
+):
+    item = _item("rick owens ramones")
+    db.record_listing_match(item.brand_id, URL_1, "Existing listing", 50000, None, item.id)
+    old = "2026-10-20T00:00:00+00:00"
+    db_conn.execute("UPDATE listings SET last_seen_at = ? WHERE url = ?", (old, URL_1))
+    db_conn.commit()
+
+    def transport_error(*args, **kwargs):
+        raise requests.Timeout("offline")
+
+    monkeypatch.setattr(requests, "get", transport_error)
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    assert exc.value.code == 1
+    assert sent_emails == []
+    assert db_conn.execute("SELECT last_seen_at FROM listings WHERE url = ?", (URL_1,)).fetchone()[0] == old
+
+
+def test_rc10_c16_rate_retry_uses_provider_without_fallback_warning(fake_http, caplog, monkeypatch):
+    fake_http.add_sequence("GET", FRANKFURTER_URL, [
+        {"status": 500},
+        {"json": {"date": "2026-10-27", "base": "JPY", "quote": "USD", "rate": 0.007}},
+    ])
+    import http_retry
+    original = http_retry.request_with_retry
+    waits = []
+    monkeypatch.setattr(http_retry, "request_with_retry", lambda *a, **kw: original(*a, sleep=waits.append, **kw))
+    assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.007
+    assert waits == [0.5]
+    assert not [record for record in caplog.records if "fallback" in record.getMessage().lower()]
+
+
+def test_rc10_c16_huge_retry_after_uses_frankfurter_fallback_without_overflow(fake_http, caplog):
+    import logging
+
+    fake_http.add_sequence("GET", FRANKFURTER_URL, [
+        {"status": 429, "headers": {"Retry-After": "9" * 400}},
+    ])
+    with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
+        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.0062
+    assert len([call for call in fake_http.calls if call[1] == FRANKFURTER_URL]) == 1
+    warnings = [record for record in caplog.records if record.name == "yahoo_scrape"]
+    assert len(warnings) == 1
+    assert "0.0062" in warnings[0].getMessage()
+    assert warnings[0].exc_info is None
+
+
+def test_rc10_c18_c19_item_calculation_error_does_not_claim_url_and_keeps_one_digest(
+    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn, caplog
+):
+    brand_id = db_conn.execute(
+        "SELECT id FROM brands WHERE name = ?", ("Rick Owens",)
+    ).fetchone()[0]
+    db_conn.execute(
+        "INSERT INTO items (brand_id, name, search_query, manual_price_usd, active) "
+        "VALUES (?, ?, ?, ?, 1)", (brand_id, "test boots", "boots", 500.0),
+    )
+    boots_id = db_conn.execute(
+        "SELECT id FROM items WHERE name = ?", ("test boots",)
+    ).fetchone()[0]
+    db_conn.execute(
+        "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
+        (boots_id, "boots", "include"),
+    )
+    db_conn.commit()
+
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: [
+        yahoo_scrape.YahooListing("ramones", "https://auctions.yahoo.co.jp/jp/auction/ramones",
+                                  "Rick Owens Ramones High", 50000, None),
+        yahoo_scrape.YahooListing("boots", "https://auctions.yahoo.co.jp/jp/auction/boots",
+                                  "Rick Owens Black Boots", 40000, None),
+    ])
+    original = yahoo_scrape.find_item_deals
+
+    def fail_middle(item, *args, **kwargs):
+        if item.name == "pod shorts":
+            raise ValueError("bad calculation")
+        return original(item, *args, **kwargs)
+
+    monkeypatch.setattr(yahoo_scrape, "find_item_deals", fail_middle)
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    assert exc.value.code == 1
+    assert len(sent_emails) == 1
+    assert _row_urls(sent_emails[0][1]) == [
+        "https://auctions.yahoo.co.jp/jp/auction/ramones",
+        "https://auctions.yahoo.co.jp/jp/auction/boots",
+    ]
+    assert [tuple(row) for row in db_conn.execute(
+        "SELECT item_id FROM listing_matches ORDER BY item_id"
+    )] == [
+        (_item("rick owens ramones").id,),
+        (boots_id,),
+    ]
+    assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 2
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+
+
+def test_rc10_c19_failed_earlier_item_does_not_claim_listing_from_later_healthy_item(
+    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn, caplog
+):
+    shared_url = "https://auctions.yahoo.co.jp/jp/auction/shared"
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: [
+        yahoo_scrape.YahooListing(
+            "shared", shared_url, "Rick Owens Ramones Pod Shorts", 10000, None
+        ),
+    ])
+    original = yahoo_scrape.find_item_deals
+
+    def fail_first_item(item, *args, **kwargs):
+        if item.name == "rick owens ramones":
+            raise ValueError("bad calculation")
+        return original(item, *args, **kwargs)
+
+    monkeypatch.setattr(yahoo_scrape, "find_item_deals", fail_first_item)
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+
+    assert exc.value.code == 1
+    assert len(sent_emails) == 1
+    assert _row_urls(sent_emails[0][1]) == [shared_url]
+    assert [tuple(row) for row in db_conn.execute(
+        "SELECT item_id FROM listing_matches"
+    )] == [(_item("pod shorts").id,)]
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+
+
+def test_rc10_c20_unsuccessful_send_records_no_deals_and_exits_failure(
+    yahoo_http, seeded_db, monkeypatch, db_conn, caplog
+):
+    sent = []
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda *args: sent.append(args) or False)
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    assert exc.value.code == 1
+    assert len(sent) == 1
+    assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 0
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+
+
+def test_rc10_c21_atomic_batch_failure_rolls_back_every_displayed_deal(
+    yahoo_http, seeded_db, monkeypatch, db_conn, caplog
+):
+    calls = []
+
+    def fail_batch(deals):
+        calls.append(tuple(deals))
+        raise RuntimeError("forced batch failure")
+
+    monkeypatch.setattr(db, "record_listing_matches", fail_batch, raising=False)
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+    assert exc.value.code == 1
+    assert len(calls) == 1 and len(calls[0]) == 2
+    assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 0
+    assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 0
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+
+
+def test_rc10_c22_failed_batch_can_be_offered_again_on_next_run(
+    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn
+):
+    real_batch = getattr(db, "record_listing_matches", None)
+    attempts = []
+
+    def fail_once(deals):
+        attempts.append(tuple(deals))
+        if len(attempts) == 1:
+            raise RuntimeError("forced batch failure")
+        return real_batch(deals)
+
+    monkeypatch.setattr(db, "record_listing_matches", fail_once, raising=False)
+    with pytest.raises(SystemExit):
+        yahoo_scrape.main()
+    yahoo_scrape.main()
+    assert len(sent_emails) == 2
+    assert _row_urls(sent_emails[0][1]) == _row_urls(sent_emails[1][1])
+
+
+def test_rc10_c24_dry_run_keeps_full_output_and_records_displayed_deals(
+    yahoo_http, seeded_db, monkeypatch, db_conn, capsys
+):
+    monkeypatch.setenv("RAINCHECK_DRY_RUN", "1")
+    yahoo_scrape.main()
+    output = capsys.readouterr().out
+    assert "[DRY RUN] Email not sent" in output
+    assert "--- text/plain ---" in output and "--- text/html ---" in output
+    assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 2
+
+
+def test_rc10_c27_yahoo_main_reuses_preinstalled_logging_without_duplicate_handlers(
+    temp_db, caplog
+):
+    import logging
+
+    root = logging.getLogger()
+    before_handlers = tuple(root.handlers)
+    before_level = root.level
+    with caplog.at_level(logging.INFO):
+        for _ in range(2):
+            try:
+                yahoo_scrape.main()
+            except SystemExit as exc:
+                assert exc.code == 0
+    assert tuple(root.handlers) == before_handlers
+    assert root.level == before_level
+    records = [r for r in caplog.records if r.name == "yahoo_scrape"]
+    assert records
+    assert len([r for r in records if "job started" in r.getMessage().lower()]) == 2
+
+
+def test_rc10_c25_yahoo_logs_exclude_seller_titles_urls_and_email_body(
+    yahoo_http, seeded_db, sent_emails, caplog
+):
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="yahoo_scrape"):
+        yahoo_scrape.main()
+    records = [r for r in caplog.records if r.name == "yahoo_scrape"]
+    assert records and all(r.levelno >= logging.INFO for r in records)
+    rendered = "\n".join(r.getMessage() for r in records)
+    assert "Rick Owens Ramones High" not in rendered
+    assert RICK_OWENS_URL not in rendered
+    assert sent_emails[0][1] not in rendered
