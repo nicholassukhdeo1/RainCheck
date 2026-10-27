@@ -1,6 +1,6 @@
 # RC-17: Word-aware keyword matching
 
-**Status:** Draft
+**Status:** Approved
 **Backlog item:** RC-17 in `docs/BACKLOG.md`
 
 ## Summary
@@ -118,6 +118,11 @@ If the user decides to add `ramone` to the real catalog as part of this feature,
   Recommendation: accept its removal in RC-17 and consider a separate catalog adjustment after reviewing whether singular `Ramone` listings are relevant.
   Tradeoff: the strict rule removes one potentially valid candidate from the saved eBay fixture, while an explicit `ramone` keyword would preserve it but broaden the catalog's matches and add a shared-file edit.
   The effect on an eventual stored market price depends on the pricing estimator and the keywords and listings available when that job runs.
+
+## Resolved
+
+- 2026-10-27: The user approved RC-17 with the recommended boundary rule and accepted the one removed fixture match.
+  Adding an explicit `ramone` catalog keyword remains outside this feature.
 
 ## Rollback
 
