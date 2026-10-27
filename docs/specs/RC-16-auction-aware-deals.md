@@ -180,7 +180,8 @@ Because this job reads only the newest page, it cannot promise to notice every l
 8. An auction with `price = 1000` and `buyNowPrice = 90000` below market produces one immediate deal at ¥90,000, shows ¥1,000 and its potential percentage separately as provisional in the same row, and calculates the real buy-now discount from ¥90,000.
 9. When that ¥90,000 buy-now price is at or above market but the ¥1,000 current price is below market, the auction produces one watch row, not a buy-now deal, with a clearly labeled potential percentage at ¥1,000.
 10. A bid-only auction with a current price below market produces one watch row when first discovered, even if its scheduled end is several days away; a current price at or above market produces no row.
-11. A ¥1 bid-only auction never displays `99.9% off`, a final-price claim, or language suggesting a guaranteed saving; it displays `Auction watch`, `current price (provisional)`, and `Potential discount at current price: 99.9% (not guaranteed; bids may rise)` when those rounded values apply.
+11. A ¥1 bid-only auction never displays an ordinary `X% off` or final-price claim.
+    With a synthetic ¥100 current price, an $800 market price, and a 0.0062 USD/JPY rate, it displays `Auction watch`, `current price (provisional)`, and `Potential discount at current price: 99.9% (not guaranteed; bids may rise)`.
 12. A listing with a missing or non-boolean `isFixedPrice`, invalid non-null buy-now value, or fixed-price/buy-now mismatch is not emailed; the invalid non-null buy-now record is skipped by the parser.
 13. Missing or malformed `endTime` leaves `scheduled_end_at` as `None`, puts a watch after watches with known scheduled ends, and displays `Scheduled end unavailable` without excluding an otherwise eligible row.
 14. A valid `endTime` with an explicit `+09:00` offset is stored as the equivalent UTC instant and shown in JST with a `may change` label; naive timestamps are not accepted as known end times.
@@ -251,6 +252,11 @@ None.
 - 2026-10-27: The user approved independent per-item limits of five immediate deals and five auction watches, with watches ordered by soonest scheduled end.
 - 2026-10-27: The user approved one row for a dual-price auction whose buy-now price is below market, showing the lower current bid and its potential percentage separately as provisional.
 - 2026-10-27: The user approved the full revised RC-16 spec.
+
+## Amendments
+
+- 2026-10-27: Corrected criterion 11's arithmetic example from a ¥1 current price to ¥100; at $800 market and 0.0062 USD/JPY, ¥100 gives a 99.9% potential difference when rounded to one decimal.
+  This changes no alert or labeling policy.
 
 ## Rollback
 
