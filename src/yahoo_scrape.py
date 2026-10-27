@@ -12,7 +12,7 @@ from digest import Deal, ItemDeals, build_digest
 import http_retry
 from matching import title_matches
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Collection, Sequence
 import json
 import logging
@@ -167,8 +167,11 @@ def _parse_record(record):
         try:
             parsed_end = datetime.fromisoformat(end)
             if parsed_end.utcoffset() is not None:
-                scheduled_end = parsed_end.astimezone(timezone.utc)
-        except ValueError:
+                normalized = parsed_end.astimezone(timezone.utc)
+                # A representable UTC time can still overflow when shown in JST.
+                normalized.astimezone(timezone(timedelta(hours=9)))
+                scheduled_end = normalized
+        except (ValueError, OverflowError):
             pass
 
     image_url = record.get("imageUrl")

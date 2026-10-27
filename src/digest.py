@@ -90,9 +90,16 @@ def _display_title(title):
 
 
 def _scheduled_end_line(end):
-    if end is None:
+    if not isinstance(end, datetime):
         return "Scheduled end unavailable"
-    jst = end.astimezone(timezone(timedelta(hours=9)))
+    try:
+        if end.utcoffset() is None:
+            return "Scheduled end unavailable"
+        # Direct callers may supply an extreme datetime that cannot display in JST.
+        normalized = end.astimezone(timezone.utc)
+        jst = normalized.astimezone(timezone(timedelta(hours=9)))
+    except (ValueError, OverflowError):
+        return "Scheduled end unavailable"
     return f"Scheduled end {jst:%Y-%m-%d %H:%M} JST (may change)"
 
 
