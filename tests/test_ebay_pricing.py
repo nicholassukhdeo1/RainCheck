@@ -175,9 +175,16 @@ def test_c37_case_insensitive_title_matching(ebay_pricing, ebay_http, fixtures_d
 
 
 def test_c38_without_excludes_low_and_canvas_rows_are_candidates(ebay_pricing, ebay_http, fixtures_dir):
-    estimate = _fixture_price(ebay_pricing, ebay_http, fixtures_dir, ["ramon"], excludes=[])
+    estimate = _fixture_price(ebay_pricing, ebay_http, fixtures_dir, ["ramones"], excludes=[])
     assert estimate.price_usd == 900.0
-    assert (estimate.candidate_count, estimate.outlier_count, estimate.retained_count) == (8, 2, 6)
+    assert (estimate.candidate_count, estimate.outlier_count, estimate.retained_count) == (7, 2, 5)
+
+    from matching import title_matches
+
+    titles = [summary["title"] for summary in _load(fixtures_dir, "search_ramones.json")["itemSummaries"]]
+    candidates = [title for title in titles if title_matches(title, ("ramones",), ())]
+    assert any("low" in title.lower() for title in candidates)
+    assert any("canvas" in title.lower() for title in candidates)
 
 
 def test_c39_listing_include_and_exclude_behavior_is_preserved(ebay_pricing, ebay_http, fixtures_dir):

@@ -134,9 +134,15 @@ def test_rc03b_c44_real_catalog_ramones_keywords_in_catalog_order():
 
 def test_rc03b_c44_real_catalog_pod_shorts_unchanged():
     pods = _real_entries()["pod shorts"]
-    assert pods.keywords == ("pod short", "ポッドショーツ")
+    assert pods.keywords == ("pod short", "ポッドショーツ", "pod shorts")
     assert pods.exclude_keywords == ("pants",)
     assert pods.search_query == "rick owens pod shorts"
+
+
+def test_rc17_c14_real_catalog_plural_keyword_matches_plural_title(title_matches):
+    pods = _real_entries()["pod shorts"]
+    assert title_matches("Rick Owens Pod Shorts", pods.keywords, ("pants",)) is True
+    assert title_matches("Rick Owens Pod Shorts", ("pod short",), ()) is False
 
 
 def _old_substring_match(title, keywords, exclude_keywords):

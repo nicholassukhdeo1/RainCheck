@@ -335,9 +335,22 @@ def test_rc03a_c28_real_catalog_has_the_resolved_values():
 
     by_name = {e.name: e for e in db.validate_catalog(parsed)}
 
-    assert by_name["pod shorts"].keywords == ("pod short", "ポッドショーツ")
+    assert by_name["pod shorts"].keywords == ("pod short", "ポッドショーツ", "pod shorts")
+    assert by_name["pod shorts"].exclude_keywords == ("pants",)
     assert by_name["pod shorts"].search_query == "rick owens pod shorts"
     assert by_name["rick owens ramones"].search_query == "rick owens ramones"
+
+
+def test_rc17_c15_seeded_database_has_three_pod_includes_and_existing_exclude(
+    temp_db, monkeypatch
+):
+    monkeypatch.setattr(db, "CATALOG_PATH", REPO_ROOT / "src" / "catalog.json")
+    db.seed_from_catalog()
+
+    assert keyword_sets(temp_db)["pod shorts"] == {
+        "include": {"pod short", "ポッドショーツ", "pod shorts"},
+        "exclude": {"pants"},
+    }
 
 
 def test_rc03a_c29_validate_catalog_returns_normalized_entries():
