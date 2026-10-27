@@ -1,6 +1,7 @@
 """Offline semantic checks for the RC-11c SAM deployment and runbook."""
 
 from pathlib import Path
+import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -422,6 +423,33 @@ def test_rc11c_criterion_23_and_24_deploy_commands_set_artifact_bucket_and_isola
         and ("--resolve-s3" in command or "--s3-bucket" in command)
         for command in dry_run_commands
     ), "dry-run deployment must target a separate stack and configure its SAM artifact bucket"
+
+
+def test_rc11c_criterion_23_runbook_uploads_and_verifies_exact_s3_object_version():
+    runbook = _runbook()
+    production_section = runbook.split("### production preflight", 1)[1].split(
+        "### isolated dry-run", 1
+    )[0]
+    continued_lines = re.sub(r"\\\n\s*", " ", production_section)
+    put_commands = [
+        line for line in continued_lines.splitlines()
+        if "aws s3api put-object" in line
+    ]
+    assert put_commands, "runbook must show the production S3 upload command"
+    put_command = " ".join(put_commands)
+    assert re.search(r"--server-side-encryption\s+aes256\b", put_command)
+    assert "version_id" in put_command
+    assert re.search(r"--query\s+versionid\b", put_command)
+    assert re.search(r"--output\s+text\b", put_command)
+
+    get_commands = [
+        line for line in continued_lines.splitlines()
+        if "aws s3api get-object" in line
+    ]
+    assert get_commands, "runbook must show version-specific S3 download verification"
+    get_command = " ".join(get_commands)
+    assert "--version-id" in get_command
+    assert "version_id" in get_command
 
 
 def test_rc11c_criterion_24_dry_run_is_isolated_synthetic_and_cannot_write_production_state():
