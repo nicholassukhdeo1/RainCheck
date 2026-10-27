@@ -1472,30 +1472,99 @@ def test_rc10_c16_rate_retry_uses_provider_without_fallback_warning(fake_http, c
     assert not [record for record in caplog.records if "fallback" in record.getMessage().lower()]
 
 
+def test_rc10_c16_huge_retry_after_uses_frankfurter_fallback_without_overflow(fake_http, caplog):
+    import logging
+
+    fake_http.add_sequence("GET", FRANKFURTER_URL, [
+        {"status": 429, "headers": {"Retry-After": "9" * 400}},
+    ])
+    with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
+        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.0062
+    assert len([call for call in fake_http.calls if call[1] == FRANKFURTER_URL]) == 1
+    warnings = [record for record in caplog.records if record.name == "yahoo_scrape"]
+    assert len(warnings) == 1
+    assert "0.0062" in warnings[0].getMessage()
+    assert warnings[0].exc_info is None
+
+
 def test_rc10_c18_c19_item_calculation_error_does_not_claim_url_and_keeps_one_digest(
-    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn
+    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn, caplog
 ):
+    brand_id = db_conn.execute(
+        "SELECT id FROM brands WHERE name = ?", ("Rick Owens",)
+    ).fetchone()[0]
+    db_conn.execute(
+        "INSERT INTO items (brand_id, name, search_query, manual_price_usd, active) "
+        "VALUES (?, ?, ?, ?, 1)", (brand_id, "test boots", "boots", 500.0),
+    )
+    boots_id = db_conn.execute(
+        "SELECT id FROM items WHERE name = ?", ("test boots",)
+    ).fetchone()[0]
+    db_conn.execute(
+        "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
+        (boots_id, "boots", "include"),
+    )
+    db_conn.commit()
+
     monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: [
-        yahoo_scrape.YahooListing("rc10", "https://auctions.yahoo.co.jp/jp/auction/rc10",
-                                  "Rick Owens Ramones Pod Shorts", 10000, None),
+        yahoo_scrape.YahooListing("ramones", "https://auctions.yahoo.co.jp/jp/auction/ramones",
+                                  "Rick Owens Ramones High", 50000, None),
+        yahoo_scrape.YahooListing("boots", "https://auctions.yahoo.co.jp/jp/auction/boots",
+                                  "Rick Owens Black Boots", 40000, None),
     ])
     original = yahoo_scrape.find_item_deals
 
-    def fail_first(item, *args, **kwargs):
-        if item.name == "rick owens ramones":
+    def fail_middle(item, *args, **kwargs):
+        if item.name == "pod shorts":
             raise ValueError("bad calculation")
         return original(item, *args, **kwargs)
 
-    monkeypatch.setattr(yahoo_scrape, "find_item_deals", fail_first)
+    monkeypatch.setattr(yahoo_scrape, "find_item_deals", fail_middle)
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
     assert exc.value.code == 1
     assert len(sent_emails) == 1
-    assert _row_urls(sent_emails[0][1]) == ["https://auctions.yahoo.co.jp/jp/auction/rc10"]
-    assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] > 0
-    assert [tuple(row) for row in db_conn.execute("SELECT item_id FROM listing_matches")] == [
-        (_item("pod shorts").id,),
+    assert _row_urls(sent_emails[0][1]) == [
+        "https://auctions.yahoo.co.jp/jp/auction/ramones",
+        "https://auctions.yahoo.co.jp/jp/auction/boots",
     ]
+    assert [tuple(row) for row in db_conn.execute(
+        "SELECT item_id FROM listing_matches ORDER BY item_id"
+    )] == [
+        (_item("rick owens ramones").id,),
+        (boots_id,),
+    ]
+    assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 2
+    assert any(record.levelname == "ERROR" for record in caplog.records)
+
+
+def test_rc10_c19_failed_earlier_item_does_not_claim_listing_from_later_healthy_item(
+    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn, caplog
+):
+    shared_url = "https://auctions.yahoo.co.jp/jp/auction/shared"
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda html: [
+        yahoo_scrape.YahooListing(
+            "shared", shared_url, "Rick Owens Ramones Pod Shorts", 10000, None
+        ),
+    ])
+    original = yahoo_scrape.find_item_deals
+
+    def fail_first_item(item, *args, **kwargs):
+        if item.name == "rick owens ramones":
+            raise ValueError("bad calculation")
+        return original(item, *args, **kwargs)
+
+    monkeypatch.setattr(yahoo_scrape, "find_item_deals", fail_first_item)
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+
+    assert exc.value.code == 1
+    assert len(sent_emails) == 1
+    assert _row_urls(sent_emails[0][1]) == [shared_url]
+    assert [tuple(row) for row in db_conn.execute(
+        "SELECT item_id FROM listing_matches"
+    )] == [(_item("pod shorts").id,)]
+    assert any(record.levelname == "ERROR" for record in caplog.records)
 
 
 def test_rc10_c20_unsuccessful_send_records_no_deals_and_exits_failure(

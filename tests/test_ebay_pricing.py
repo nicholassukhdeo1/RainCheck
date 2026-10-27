@@ -411,7 +411,7 @@ def test_rc10_c9_c10_http_500_isolates_item_and_continues_later_items(
 
 
 def test_rc10_c9_partial_ebay_cli_run_exits_one_after_committing_earlier_item(
-    ebay_pricing, creds, fake_http, fixtures_dir, seeded_db, db_conn
+    ebay_pricing, creds, fake_http, fixtures_dir, seeded_db, db_conn, caplog
 ):
     fake_http.add("POST", TOKEN_URL, json=_load(fixtures_dir, "token.json"))
     first = _summaries(*_valid_prices([100, 110, 120, 130, 140]))
@@ -430,6 +430,11 @@ def test_rc10_c9_partial_ebay_cli_run_exits_one_after_committing_earlier_item(
         "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
         (db.get_item_id("Rick Owens", "pod shorts"),),
     ).fetchone()[0] == 0
+    assert any(
+        record.name == "ebay_pricing" and record.levelname == "ERROR"
+        and "failed" in record.getMessage().lower()
+        for record in caplog.records
+    )
 
 
 def test_rc10_c10_third_item_after_failure_is_searched_and_committed(

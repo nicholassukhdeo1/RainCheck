@@ -102,6 +102,17 @@ def test_rc10_c5_retry_after_over_cap_returns_response_without_retry(retry_modul
         response.raise_for_status()
 
 
+def test_rc10_c5_huge_retry_after_returns_status_without_integer_overflow(retry_module, monkeypatch):
+    response, calls, waits = _retry(
+        retry_module, monkeypatch,
+        [FakeResponse(status=429, headers={"Retry-After": "9" * 400})],
+    )
+    assert len(calls) == 1
+    assert waits == []
+    with pytest.raises(requests.HTTPError):
+        response.raise_for_status()
+
+
 def test_rc10_c5_cumulative_planned_wait_never_exceeds_ten_seconds(retry_module, monkeypatch):
     _, calls, waits = _retry(
         retry_module, monkeypatch,
