@@ -341,6 +341,32 @@ def test_rc11c_criterion_23_preflight_requires_gate_parameters_backup_integrity_
     assert "value" in runbook and any(term in runbook for term in ("without", "never", "do not"))
 
 
+def test_rc11c_criterion_23_and_24_deploy_commands_set_artifact_bucket_and_isolate_dry_run():
+    runbook = _runbook()
+    production_section = runbook.split("### production preflight", 1)[1].split(
+        "### isolated dry-run", 1
+    )[0]
+    production_deploy_commands = [
+        line for line in production_section.splitlines()
+        if "sam deploy" in line and "--no-execute-changeset" in line
+    ]
+    assert production_deploy_commands, "production change-set command must be documented"
+    assert any(
+        "--resolve-s3" in command or "--s3-bucket" in command
+        for command in production_deploy_commands
+    ), "SAM must have an artifact bucket option before it can package the zip"
+
+    dry_run_section = runbook.split("### isolated dry-run", 1)[1].split("### rollback", 1)[0]
+    dry_run_commands = [line for line in dry_run_section.splitlines() if "sam deploy" in line]
+    assert any(
+        "--stack-name" in command
+        and "--parameter-overrides" in command
+        and "dryrun=1" in command
+        and ("--resolve-s3" in command or "--s3-bucket" in command)
+        for command in dry_run_commands
+    ), "dry-run deployment must target a separate stack and configure its SAM artifact bucket"
+
+
 def test_rc11c_criterion_24_dry_run_is_isolated_synthetic_and_cannot_write_production_state():
     runbook = _runbook()
     for required in (
