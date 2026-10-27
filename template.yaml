@@ -1,0 +1,193 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Daily RainCheck pricing and deals in us-east-2.
+
+Parameters:
+  DatabaseObjectKey:
+    Type: String
+    Default: raincheck.db
+    Description: The single SQLite object the function may read and replace.
+    AllowedPattern: '[A-Za-z0-9._/-]+'
+  EbayClientIdParameterName:
+    Type: String
+    Default: /raincheck/ebay/client-id
+    AllowedPattern: '/[A-Za-z0-9_./-]+'
+  EbayClientSecretParameterName:
+    Type: String
+    Default: /raincheck/ebay/client-secret
+    AllowedPattern: '/[A-Za-z0-9_./-]+'
+  SenderEmailParameterName:
+    Type: String
+    Default: /raincheck/sender/email
+    AllowedPattern: '/[A-Za-z0-9_./-]+'
+  SenderPasswordParameterName:
+    Type: String
+    Default: /raincheck/sender/password
+    AllowedPattern: '/[A-Za-z0-9_./-]+'
+  ReceiverEmailParameterName:
+    Type: String
+    Default: ''
+    Description: Optional SecureString parameter name; blank uses the sender as recipient.
+    AllowedPattern: '(^$|^/[A-Za-z0-9_./-]+$)'
+  DryRun:
+    Type: String
+    Default: '0'
+    AllowedValues: ['0', '1']
+    Description: Set to 1 only in a separate throwaway stack.
+
+Rules:
+  SelectedRegion:
+    Assertions:
+      - Assert: !Equals [!Ref 'AWS::Region', us-east-2]
+        AssertDescription: RainCheck can only be deployed in us-east-2.
+
+Conditions:
+  HasReceiverEmail: !Not [!Equals [!Ref ReceiverEmailParameterName, '']]
+
+Resources:
+  DatabaseBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireNoncurrentDatabaseVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+
+  DatabaseBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DatabaseBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: RequireHttps
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt DatabaseBucket.Arn
+              - !Sub '${DatabaseBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  RainCheckExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RainCheckRuntime
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # The runner uses GetObject and conditional PutObject on this one key.
+              - Sid: DatabaseObject
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub '${DatabaseBucket.Arn}/${DatabaseObjectKey}'
+              - Sid: NamedCredentials
+                Effect: Allow
+                Action: ssm:GetParameter
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${EbayClientIdParameterName}'
+                  - !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${EbayClientSecretParameterName}'
+                  - !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SenderEmailParameterName}'
+                  - !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SenderPasswordParameterName}'
+                  - !If
+                    - HasReceiverEmail
+                    - !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ReceiverEmailParameterName}'
+                    - !Ref 'AWS::NoValue'
+              # CloudFormation creates the group; Lambda only creates streams and writes events.
+              - Sid: FunctionLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-raincheck:*'
+
+  RainCheckLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-raincheck'
+      RetentionInDays: 30
+
+  RainCheckFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-raincheck'
+      CodeUri: .
+      Handler: lambda_handler.handler
+      Runtime: python3.12
+      PackageType: Zip
+      Architectures: [x86_64]
+      MemorySize: 512
+      Timeout: 840
+      EphemeralStorage:
+        Size: 512
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt RainCheckExecutionRole.Arn
+      Environment:
+        Variables:
+          RAINCHECK_DB_BUCKET: !Ref DatabaseBucket
+          RAINCHECK_DB_KEY: !Ref DatabaseObjectKey
+          RAINCHECK_TMP_CAPACITY_BYTES: '536870912'
+          RAINCHECK_SSM_EBAY_CLIENT_ID: !Ref EbayClientIdParameterName
+          RAINCHECK_SSM_EBAY_CLIENT_SECRET: !Ref EbayClientSecretParameterName
+          RAINCHECK_SSM_SENDER_EMAIL: !Ref SenderEmailParameterName
+          RAINCHECK_SSM_SENDER_PASSWORD: !Ref SenderPasswordParameterName
+          RAINCHECK_SSM_RECEIVER_EMAIL: !Ref ReceiverEmailParameterName
+          RAINCHECK_DRY_RUN: !Ref DryRun
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
+        MaximumEventAgeInSeconds: 3600
+      Events:
+        DailySchedule:
+          Type: ScheduleV2
+          Properties:
+            Name: !Sub '${AWS::StackName}-daily'
+            ScheduleExpression: cron(0 9 * * ? *)
+            ScheduleExpressionTimezone: Asia/Tokyo
+            FlexibleTimeWindow:
+              Mode: 'OFF'
+            State: DISABLED
+            RetryPolicy:
+              MaximumRetryAttempts: 0
+              MaximumEventAgeInSeconds: 300
+
+Outputs:
+  DatabaseBucketName:
+    Value: !Ref DatabaseBucket
+  DatabaseKey:
+    Value: !Ref DatabaseObjectKey
+  FunctionName:
+    Value: !Ref RainCheckFunction
+  ScheduleName:
+    Value: !Sub '${AWS::StackName}-daily'

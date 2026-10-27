@@ -184,6 +184,69 @@ pip install -r requirements-dev.txt
 python3 -m pytest
 ```
 
+## AWS daily run (RC-11)
+
+The SAM template is limited to `us-east-2` and rejects a deployment in another selected Region.
+The schedule starts disabled and is set for 09:00 `Asia/Tokyo` each day.
+No AWS deployment, production database upload, or schedule enablement is part of local development.
+Review the proposed CloudFormation change set and the cost categories in [the RC-11 spec](docs/specs/RC-11-aws-daily-run.md) before an authorized deployment.
+
+### Offline preflight
+
+Run `python3 -m pytest` to check the handler and template without AWS, network, SMTP, or the production database.
+Run `sam validate --template-file template.yaml --lint` when the SAM CLI and linter are available.
+Run `sam build --use-container --template-file template.yaml` with the Python 3.12 Lambda build container before deployment.
+The `build-RainCheckFunction` Makefile target copies an explicit source allowlist and installs the pinned production dependencies, including `boto3`, into the Lambda artifact.
+For an offline source-only package check, run `make build-RainCheckFunction ARTIFACTS_DIR=/tmp/raincheck-package-check PIP=true` using a fresh output directory.
+Check that the artifact contains only the nine runtime files from `src/`, with no `.env`, `.db`, test, or fixture file.
+
+### Production preflight and initial upload
+
+1. Confirm that the selected Region is `us-east-2`.
+   Review the recorded AWS CloudShell gate for every active Yahoo brand: each brand needs HTTP 200, the expected `__NEXT_DATA__` listing path, and at least one valid listing record.
+   The current gate passed only for Rick Owens brand ID `103538`; probe each future brand using the command in the RC-11 spec before including it in an AWS run.
+2. Create the required standard-tier SSM `SecureString` parameters in `us-east-2` with the AWS-managed `aws/ssm` key.
+   The default names are `/raincheck/ebay/client-id`, `/raincheck/ebay/client-secret`, `/raincheck/sender/email`, and `/raincheck/sender/password`.
+   Set the optional receiver parameter name when mail should go to a different address.
+   Check parameter names, types, and presence without printing or exporting their values.
+   The template stores only parameter names in Lambda environment variables.
+3. Stop local jobs and make a timestamped SQLite `.backup` of `src/raincheck.db` outside the repository, following the Database section above.
+   If the database needs migration, follow its backup-first upgrade procedure before taking the final upload snapshot.
+   On that snapshot, require `PRAGMA integrity_check` to return `ok`, `PRAGMA foreign_key_check` to return no rows, and `PRAGMA user_version` to equal `db.SCHEMA_VERSION` in this release.
+   Keep the local backup separately from S3 version retention.
+4. Build and deploy a reviewed change set using `sam deploy --template-file .aws-sam/build/template.yaml --stack-name raincheck --region us-east-2 --capabilities CAPABILITY_IAM --no-execute-changeset`.
+   Inspect the change set, then deploy with the same command without `--no-execute-changeset` after authorization.
+   Always deploy the built template so the explicit Makefile allowlist, rather than the repository root, becomes the Lambda package.
+   The S3 bucket is retained if the stack is deleted, and its name is available from the `DatabaseBucketName` stack output.
+5. Upload the verified snapshot to the stack's bucket at the configured `DatabaseKey` using an HTTPS S3 request with SSE-S3 (`AES256`).
+   Record the returned S3 `VersionId`, download that exact version to a separate temporary file, and repeat the SQLite integrity, foreign-key, and schema-version checks on the downloaded bytes.
+   Confirm the bucket and key in the Lambda configuration match this object before the schedule is enabled.
+
+The execution role can access only that exact S3 object and the named SSM parameters, so a changed key or parameter name requires a reviewed stack update.
+Stop the schedule before any manual object replacement; the handler's ETag condition rejects changed content, but equal-content replacements can share an ETag.
+
+### Isolated dry-run and schedule enablement
+
+Deploy a separate throwaway stack in `us-east-2` with `--parameter-overrides DryRun=1`, which creates a separate bucket and keeps its schedule disabled.
+Upload a separate database containing only synthetic listings and no active items; `DryRun=1` sets `RAINCHECK_DRY_RUN=1` in that stack's Lambda configuration.
+The empty active watchlist avoids live listing acquisition while exercising S3 download, schema checks, SSM access, the runner, and the conditional upload.
+Invoke only that throwaway function with an empty event after the separate bucket and database have been verified.
+The dry-run sends no email; the handler suppresses the complete printed digest before CloudWatch receives stdout.
+Inspect its logs for success and confirm they contain no digest HTML, synthetic listing title, or recipient address.
+Check that the production bucket's current S3 object version is unchanged.
+The dry-run can never write the production S3 object because its execution role and environment point to the throwaway bucket.
+
+After the CloudShell, parameter, backup, upload, and isolated dry-run checks pass, change only the production `DailySchedule` `State` in `template.yaml` from `DISABLED` to `ENABLED` in a reviewed deployment and inspect its change set before applying it.
+Keep the default checked-in template disabled until that explicit enablement decision.
+The schedule uses a fixed 09:00 Tokyo time, no flexible delivery window, and bounded Scheduler delivery attempts and event age.
+
+### Rollback
+
+Disable the schedule first by setting its template `State` back to `DISABLED` and deploying the reviewed change.
+If the current database object is bad, inspect a prior S3 version, verify its SQLite integrity and schema version, then restore that version while retaining the bad version for investigation.
+Redeploy the prior Lambda code and SAM template if the code or infrastructure caused the failure.
+Keep the local backup and retained bucket until a replacement has been verified; decide whether to retain or remove billable resources before deleting the stack.
+
 ## Notes
 
 This is a personal learning project, built to sharpen my Python and get comfortable with scraping and automation end-to-end.
