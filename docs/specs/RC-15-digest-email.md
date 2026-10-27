@@ -567,3 +567,10 @@ The plain-text part, the subject, the escaping rules, and `is_safe_http_url` are
   - The border and muted colors use the short hex forms (`#eee`, `#ddd`, `#666`), and the left-aligned header cells use `align="left"` alone, while the right-aligned `Price` header and price cell keep both `align="right"` and `text-align:right`.
   - The `<h1>` is 18px instead of 20px, so the longest realistic subject (`RainCheck: 10 new deals - 2026-10-26`, 323px) fits a 375px phone without breaking the date at a hyphen.
   - Criterion 29's input is deliberately pathological (10 sections and titles made entirely of `<&>`, which grow about 4x when escaped); a realistic digest for the 2-item catalog is about 13 KB, so its 40-byte headroom is a property of the test input, not a clipping risk in real emails.
+
+### Amendment 3 (2026-10-27, approved by the user): atomic post-send recording
+
+RC-10 supersedes the per-deal recording loop after a successful digest send with one SQLite transaction that records all displayed listing rows and their item associations together.
+If any insert fails, the transaction rolls back every new listing and match from that digest, the job exits 1, and the next run may offer the same deals again.
+The user retained RC-15's approved at-least-once policy: recording still happens only after `send_email` returns `True`, dry-run still records displayed deals, and a send followed by a database failure or crash can cause a later duplicate digest.
+The job still sends at most one digest per run and never retries SMTP automatically.

@@ -1,6 +1,6 @@
 # RC-10: Reliability and logging
 
-**Status:** Draft
+**Status:** Approved
 **Backlog item:** RC-10 in `docs/BACKLOG.md`
 
 ## Summary
@@ -138,9 +138,8 @@ Keep `db.py` CLI initialization and seed messages, argument help, and actionable
 RC-15's approved design explicitly chose at-least-once email delivery when an SMTP send succeeds but a later database write fails.
 The atomic batch removes partial recording, but SQLite cannot prove whether an SMTP server accepted a message if the process crashes or the socket times out near delivery.
 RC-10 therefore must not promise zero duplicate emails across runs under that failure.
-Proposed RC-15 amendment, dated 2026-10-27: replace separate per-deal post-send inserts with one batch transaction while retaining the approved at-least-once delivery policy and one digest per run.
-The user must approve this amendment as part of approving RC-10.
-Proposed RC-06 amendment, dated 2026-10-27: replace criterion 18's stop-later-items outcome after a failed search with the RC-10 item-isolation policy selected in Open question 1, while retaining its no-write rule for the failed item and all earlier committed observations.
+Approved RC-15 amendment, dated 2026-10-27: replace separate per-deal post-send inserts with one batch transaction while retaining the approved at-least-once delivery policy and one digest per run.
+Approved RC-06 amendment, dated 2026-10-27: replace criterion 18's stop-later-items outcome after a failed search with the RC-10 item-isolation policy selected in Open question 1, while retaining its no-write rule for the failed item and all earlier committed observations.
 
 ## Acceptance criteria
 
@@ -215,6 +214,12 @@ The documentation alignment in this feature must use current code and the approv
 3. **Should RC-10 retain RC-15's at-least-once email policy?**
    Recommendation: yes; send once per run, record the whole digest atomically after a successful send, and accept possible resend after a crash or post-send database failure.
    Pre-recording would avoid some duplicate emails but could permanently lose deals when SMTP fails; guaranteed exactly-once delivery needs a larger design with an external idempotent delivery service or a user-visible recovery process.
+
+## Resolved
+
+- 2026-10-27: The user approved the RC-10 spec and chose to continue later eBay items after an isolated item failure, preserve the failing item's data, and exit 1 after the run.
+- 2026-10-27: The user chose to stop later eBay searches and exit 1 when a 429 has a `Retry-After` longer than the five-second cap or remains 429 after all bounded attempts.
+- 2026-10-27: The user chose to retain RC-15's at-least-once email policy, send at most one digest per run, and record every shown deal in one transaction after a successful send.
 
 ## Rollback
 
