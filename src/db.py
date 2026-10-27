@@ -58,14 +58,14 @@ MIGRATIONS = {
     ),
 }
 
-# only one brand is supported until RC-13 stores a Yahoo id per brand
+# The existing Rick Owens ID is retained for tests and compatibility callers.
 DEFAULT_YAHOO_BRAND_ID = "103538"
 
 # the catalog keys we understand. anything else is probably a typo
 # (like "exclude_keyword"), and a typo must not quietly mean "no excludes".
 ALLOWED_CATALOG_KEYS = {
     "brand", "item name", "size", "search_query",
-    "market_price", "keywords", "exclude_keywords",
+    "market_price", "keywords", "exclude_keywords", "yahoo_brand_id",
 }
 
 
@@ -81,6 +81,7 @@ class CatalogError(ValueError):
 class CatalogEntry:
     """One validated, normalized catalog.json entry."""
     brand: str
+    yahoo_brand_id: str
     name: str
     search_query: str | None
     manual_price_usd: float | None
@@ -124,6 +125,14 @@ class TrackedItem:
     @property
     def effective_price_usd(self):
         return _effective_price(self.market_price_usd, self.manual_price_usd)
+
+
+@dataclass(frozen=True)
+class TrackedBrand:
+    """One active brand and the Yahoo category ID used for its search."""
+    id: int
+    name: str
+    yahoo_brand_id: str
 
 
 @dataclass(frozen=True)
@@ -406,6 +415,8 @@ def validate_catalog(entries):
 
     result = []
     first_seen = {}  # (brand, name) -> entry number, to catch duplicates
+    brand_ids = {}  # name -> Yahoo ID, requiring one stable mapping per brand
+    yahoo_ids = {}  # Yahoo ID -> name, since the database column is unique
     for number, entry in enumerate(entries, start=1):
         label = f"entry {number}"
         if not isinstance(entry, dict):
@@ -428,6 +439,16 @@ def validate_catalog(entries):
             entry_problems.append(f"{label}: brand must be a non-blank string")
         if not name_ok:
             entry_problems.append(f"{label}: item name must be a non-blank string")
+
+        yahoo_brand_id = entry.get("yahoo_brand_id")
+        if not isinstance(yahoo_brand_id, str) or not yahoo_brand_id.strip():
+            entry_problems.append(f"{label}: yahoo_brand_id must be a non-blank string of ASCII digits")
+            yahoo_brand_id = None
+        else:
+            yahoo_brand_id = yahoo_brand_id.strip()
+            if any(character not in "0123456789" for character in yahoo_brand_id):
+                entry_problems.append(f"{label}: yahoo_brand_id must contain only ASCII digits")
+                yahoo_brand_id = None
 
         # keywords are required and need at least one, excludes are optional
         keywords = ()
@@ -484,10 +505,28 @@ def validate_catalog(entries):
             else:
                 first_seen[key] = number
 
+        if brand_ok and yahoo_brand_id is not None:
+            normalized_brand = brand.strip()
+            previous_id = brand_ids.get(normalized_brand)
+            if previous_id is not None and previous_id != yahoo_brand_id:
+                entry_problems.append(
+                    f"{label}: brand {normalized_brand!r} has conflicting yahoo_brand_id values"
+                )
+            else:
+                brand_ids[normalized_brand] = yahoo_brand_id
+            previous_brand = yahoo_ids.get(yahoo_brand_id)
+            if previous_brand is not None and previous_brand != normalized_brand:
+                entry_problems.append(
+                    f"{label}: yahoo_brand_id {yahoo_brand_id!r} is already assigned to brand {previous_brand!r}"
+                )
+            else:
+                yahoo_ids[yahoo_brand_id] = normalized_brand
+
         problems.extend(f"- {p}" for p in entry_problems)
         if not entry_problems:
             result.append(CatalogEntry(
                 brand=brand.strip(),
+                yahoo_brand_id=yahoo_brand_id,
                 name=name.strip(),
                 search_query=search_query,
                 manual_price_usd=manual_price,
@@ -521,23 +560,27 @@ def seed_from_catalog(catalog_path=None):
         for entry in entries:
             # the question marks are placeholder values for those columns.
             brand_row = conn.execute(
-                "SELECT id FROM brands WHERE name = ?",
+                "SELECT id, yahoo_brand_id FROM brands WHERE name = ?",
                 (entry.brand,),
             ).fetchone()
             if brand_row is None:
                 try:
                     cursor = conn.execute(
                         "INSERT INTO brands (name, yahoo_brand_id) VALUES (?,?)",
-                        (entry.brand, DEFAULT_YAHOO_BRAND_ID),
+                        (entry.brand, entry.yahoo_brand_id),
                     )
                 except sqlite3.IntegrityError:
-                    # yahoo_brand_id is UNIQUE and we hardcode it, so a 2nd brand collides
                     raise CatalogError(
-                        f"Cannot add brand {entry.brand!r}: only one brand is supported "
-                        "until RC-13 stores a Yahoo brand id per brand."
+                        f"Cannot add brand {entry.brand!r}: yahoo_brand_id "
+                        f"{entry.yahoo_brand_id!r} is already assigned to another brand."
                     ) from None
                 brand_id = cursor.lastrowid
             else:
+                if brand_row["yahoo_brand_id"] != entry.yahoo_brand_id:
+                    raise CatalogError(
+                        f"Cannot change yahoo_brand_id for existing brand {entry.brand!r} "
+                        f"from {brand_row['yahoo_brand_id']!r} to {entry.yahoo_brand_id!r}."
+                    )
                 brand_id = brand_row["id"]
 
             existing = conn.execute(
@@ -601,6 +644,19 @@ def seed_from_catalog(catalog_path=None):
     for brand, name in deactivated:
         print(f"Deactivated item no longer in catalog.json: {brand} / {name}")
     return SeedResult(added=tuple(added), updated=tuple(updated), deactivated=deactivated)
+
+
+def get_active_brands() -> list[TrackedBrand]:
+    """Return brands with active items in the order their first item is tracked."""
+    with closing(get_connection()) as conn:
+        rows = conn.execute(
+            "SELECT brands.id, brands.name, brands.yahoo_brand_id "
+            "FROM brands JOIN items ON items.brand_id = brands.id "
+            "WHERE items.active = 1 "
+            "GROUP BY brands.id, brands.name, brands.yahoo_brand_id "
+            "ORDER BY MIN(items.id)"
+        ).fetchall()
+    return [TrackedBrand(row["id"], row["name"], row["yahoo_brand_id"]) for row in rows]
 
 
 def get_tracked_items():

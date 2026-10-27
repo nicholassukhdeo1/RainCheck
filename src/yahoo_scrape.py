@@ -4,6 +4,7 @@ import db
 from db import (
     SchemaVersionError,
     TrackedItem,
+    get_active_brands,
     get_known_listing_urls,
     get_tracked_items,
     update_last_seen_at,
@@ -23,6 +24,7 @@ import sys
 # Rick Owens brand page - newest first, 100 items per page
 # (no trailing slash after 23000: with it Yahoo answers 308, an extra round trip every run)
 RICK_OWENS_URL = "https://auctions.yahoo.co.jp/category/list/23000?auccat=23000&s1=new&o1=d&brand_id=103538&n=100"
+BRAND_URL = "https://auctions.yahoo.co.jp/category/list/23000?auccat=23000&s1=new&o1=d&brand_id={}&n=100"
 YAHOO_TIMEOUT_SECONDS = 30
 # Yahoo's page is client-rendered, so the listings only exist inside the __NEXT_DATA__ JSON
 LISTING_PATH = ("props", "pageProps", "initialState", "search", "items", "listing", "items")
@@ -37,6 +39,17 @@ NO_ITEMS_LINE = "No active items in the database. Add items to catalog.json, the
 NO_DEALS_LINE = "No new deals; no email sent."
 
 logger = logging.getLogger(__name__)
+
+
+def build_brand_url(yahoo_brand_id: str) -> str:
+    """Build a category search URL after ensuring the ID cannot add URL syntax."""
+    if (
+        not isinstance(yahoo_brand_id, str)
+        or not yahoo_brand_id
+        or any(character not in "0123456789" for character in yahoo_brand_id)
+    ):
+        raise ValueError("Yahoo brand ID must contain only ASCII digits")
+    return BRAND_URL.format(yahoo_brand_id)
 
 
 def record_listing_matches(deals, *, sources_by_url=None):
@@ -390,14 +403,30 @@ def main():
         # read the items first: opening the database checks its schema version,
         # so an outdated database fails before any network call
         items = get_tracked_items()
+        brands = get_active_brands()
         if not items:
             logger.info("No active items in the database")
             logger.info("Yahoo deals job finished: 0 deals, 0 item failures")
             return 0
-        # fetch and parse once per run; errors propagate on purpose so a broken page
-        # means no emails and a non-zero exit instead of looking like "no deals today"
-        listings = parse_listings(fetch_yahoo_page(RICK_OWENS_URL))
-        # A parsed page is a fresh observation even when it contains no new deals.
+        # Finish every brand fetch first, so a broken later page cannot partially update the run.
+        listings_by_brand = {}
+        listings = []
+        sources_by_url = {}
+        seen_urls = set()
+        for brand in brands:
+            page_listings = parse_listings(fetch_yahoo_page(build_brand_url(brand.yahoo_brand_id)))
+            owned_listings = []
+            for listing in page_listings:
+                # The first active brand page owns a globally unique Yahoo URL for this run.
+                if listing.url in seen_urls:
+                    continue
+                seen_urls.add(listing.url)
+                owned_listings.append(listing)
+                listings.append(listing)
+                sources_by_url[listing.url] = listing
+            listings_by_brand[brand.id] = owned_listings
+
+        # A valid page is a fresh observation even when it has no new deals.
         update_last_seen_at((listing.url for listing in listings), datetime.now(timezone.utc))
         if not listings:
             logger.info(NO_DEALS_LINE)
@@ -414,7 +443,9 @@ def main():
         failed_item_count = 0
         for item in items:
             try:
-                deals = find_item_deals(item, listings, known | claimed, yen_to_usd)
+                deals = find_item_deals(
+                    item, listings_by_brand.get(item.brand_id, ()), known | claimed, yen_to_usd
+                )
             except (ValueError, TypeError) as exc:
                 failed_item_count += 1
                 logger.warning("Yahoo deal calculation failed for item %d (%s)", item.id, type(exc).__name__)
@@ -424,7 +455,7 @@ def main():
             if deals:
                 shown, not_shown = _shown_deals(deals, TOP_DEALS_PER_ITEM)
                 sections.append(ItemDeals(
-                    item.name,
+                    f"{item.brand} / {item.name}" if len(brands) > 1 else item.name,
                     item.effective_price_usd,
                     shown,
                     not_shown,
@@ -441,7 +472,6 @@ def main():
             logger.info("Yahoo deals job finished: 0 deals, 0 item failures")
             return 0
         # Every emailed row must have its original current bid and format available.
-        sources_by_url = {listing.url: listing for listing in listings}
         if any(deal.url not in sources_by_url for deal in digest.deals):
             logger.error("Yahoo digest has a displayed deal without a parsed source")
             raise SystemExit(1)
