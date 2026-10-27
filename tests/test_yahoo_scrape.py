@@ -508,7 +508,10 @@ def test_rc08_c6_provider_http_failure_warns_but_digest_and_records_still_happen
     assert len(warnings) == 1
     assert "0.0062" in warnings[0].getMessage()
     assert len(sent_emails) == 1
-    assert "$310.00" in sent_emails[0][1]
+    # The buy-now price is the payable deal price; the lower current bid remains
+    # visible as a provisional yen amount on the same auction row.
+    assert "$558.00" in sent_emails[0][1]
+    assert "¥50,000" in sent_emails[0][1]
     assert [row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")] == [
         URL_1, URL_4
     ]
@@ -558,7 +561,7 @@ def test_c46_one_email_sorted_by_discount_with_percentages(yahoo_http, seeded_db
     assert re.fullmatch(r"RainCheck: 2 new deals - \d{4}-\d{2}-\d{2}", subject)
     assert _row_urls(html) == [URL_1, URL_4]
     rows = [tr for tr in _soup(html).find_all("tr") if tr.find("td")]
-    assert [r.find_all("td")[2].find("strong").get_text() for r in rows] == ["30.3% off", "22.5% off"]
+    assert [r.find_all("td")[2].find("strong").get_text() for r in rows] == ["30.2% off", "22.5% off"]
     assert "cheaper than market" not in html and "cheaper than market" not in text
     assert text.index(URL_1) < text.index(URL_4)
 
@@ -589,18 +592,20 @@ def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
     assert rows[X3]["image_url"] is None
     assert len(sent_emails) == 1
     html = sent_emails[0][1]
-    assert _row_urls(html) == [X3, X1, Z2]
+    # The fixed-price flea-market row and the auction's buy-now price are
+    # immediately purchasable; the bid-only auction is shown after them as a watch.
+    assert _row_urls(html) == [Z2, X1, X3]
     soup = _soup(html)
     assert len(soup.find_all("img")) == 2
     first_cells = [tr.find_all("td")[0] for tr in soup.find_all("tr") if tr.find("td")]
-    assert first_cells[0].get_text(strip=True) == "No image"
-    assert first_cells[0].find("img") is None
-    assert first_cells[1].find("img") is not None and first_cells[2].find("img") is not None
-    discounts = [
-        tr.find_all("td")[2].find("strong").get_text() for tr in soup.find_all("tr") if tr.find("td")
-    ]
-    # 76.75 is exact in binary, and format() rounds the tie to even, so this is always 76.8
-    assert discounts == ["84.5% off", "76.8% off", "69.0% off"]
+    assert first_cells[0].find("img") is not None and first_cells[1].find("img") is not None
+    assert first_cells[2].get_text(strip=True) == "No image"
+    assert first_cells[2].find("img") is None
+    rendered = soup.get_text(" ", strip=True)
+    assert "69.0% off" in rendered and "65.1% off" in rendered
+    assert "76.8% (not guaranteed; bids may rise)" in rendered
+    assert "84.5% (not guaranteed; bids may rise)" in rendered
+    assert "Auction watch - current price (provisional)" in rendered
     assert len([call for call in fake_http.calls if call[1] == FRANKFURTER_URL]) == 1
 
 
@@ -1299,7 +1304,8 @@ def _surrogate_page(bad_title=None, bad_image=None):
     import json
 
     good = {"auctionId": "t1000000001", "title": "Rick Owens Ramones High Top 42",
-            "price": 50000, "imageUrl": "https://auc-pctr.c.yimg.jp/i/test/1.jpg"}
+            "price": 50000, "isFixedPrice": True, "buyNowPrice": 50000,
+            "imageUrl": "https://auc-pctr.c.yimg.jp/i/test/1.jpg"}
     bad = {"auctionId": "t1000000002", "title": bad_title or "Rick Owens Ramones Bad 44",
            "price": 20000, "imageUrl": bad_image or "https://auc-pctr.c.yimg.jp/i/test/2.jpg"}
     data = {"props": {"pageProps": {"initialState": {"search": {"items": {"listing": {

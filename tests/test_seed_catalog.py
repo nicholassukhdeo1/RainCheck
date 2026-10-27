@@ -411,5 +411,8 @@ def test_rc03a_c27_seeding_a_migrated_legacy_database_keeps_ids_and_prices(legac
         "pod shorts": {"include": {"pod short", "pod shorts"}, "exclude": {"pants", "fake"}},
     }
     assert "high top" not in {r[0] for r in rows(legacy_db, "SELECT keyword FROM item_keywords")}
-    assert dump_table(legacy_db, "listings") == legacy_before["listings"]
+    listings = dump_table(legacy_db, "listings")
+    before_listings = legacy_before["listings"]
+    assert [row[:len(before_listings[0])] for row in listings] == before_listings
+    assert all(row[len(before_listings[0]):] == (None, None, None) for row in listings)
     assert dump_table(legacy_db, "listing_matches") == legacy_before["listing_matches"]

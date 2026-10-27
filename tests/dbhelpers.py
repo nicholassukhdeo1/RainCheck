@@ -1,7 +1,7 @@
 """Plain-sqlite3 helpers shared by database and migration tests.
 
-They deliberately bypass db.get_connection so they work on legacy (version 0)
-and current (version 2) databases alike, and never trigger the version check.
+They deliberately bypass db.get_connection so they work on legacy databases
+and current databases alike, and never trigger the version check.
 """
 import hashlib
 import sqlite3
@@ -87,8 +87,23 @@ def assert_legacy_data_preserved(path, before):
 
     `before` is dump_all() of the legacy database taken before migrating.
     """
-    for table in ("brands", "listings", "listing_matches"):
+    for table in ("brands", "listing_matches"):
         assert dump_table(path, table) == before[table], table
+
+    # Migrations may append listing metadata columns. Preserve every original
+    # value while checking that newly added metadata starts empty.
+    listings_after = dump_table(path, "listings")
+    listings_before = before["listings"]
+    assert len(listings_after) == len(listings_before)
+    if listings_before:
+        assert [row[:len(listings_before[0])] for row in listings_after] == listings_before
+    listing_columns = set(columns(path, "listings"))
+    auction_columns = {"is_fixed_price", "buy_now_price_yen", "scheduled_end_at"}
+    if auction_columns <= listing_columns:
+        assert rows(
+            path,
+            "SELECT is_fixed_price, buy_now_price_yen, scheduled_end_at FROM listings ORDER BY id",
+        ) == [(None, None, None)] * len(listings_after)
 
     items = rows(
         path,

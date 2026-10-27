@@ -51,8 +51,8 @@ def _upgrade_to_v1(path):
         conn.close()
 
 
-def test_rc06_c1_fresh_schema_v2_has_listing_price_table_key_fk_and_index(temp_db):
-    assert user_version(temp_db) == 2
+def test_rc06_c1_fresh_schema_v3_has_listing_price_table_key_fk_and_index(temp_db):
+    assert user_version(temp_db) == 3
     assert columns(temp_db, "ebay_listing_prices") == [
         "item_id", "ebay_listing_id", "first_price_usd", "first_seen_at"
     ]
@@ -96,21 +96,27 @@ def test_rc06_c2_version_one_migration_preserves_existing_rows(legacy_db):
 
     db.init_db()
 
-    assert user_version(legacy_db) == 2
+    assert user_version(legacy_db) == 3
     for table, expected in before.items():
-        assert rows(legacy_db, f"SELECT * FROM {table} ORDER BY rowid") == expected
+        actual = rows(legacy_db, f"SELECT * FROM {table} ORDER BY rowid")
+        if table == "listings":
+            # RC-16 appends nullable metadata; the legacy columns and values remain intact.
+            assert [row[:len(expected[0])] for row in actual] == expected
+            assert all(row[len(expected[0]):] == (None, None, None) for row in actual)
+        else:
+            assert actual == expected
     assert rows(legacy_db, "SELECT COUNT(*) FROM ebay_listing_prices") == [(0,)]
 
 
-def test_rc06_c3_version_zero_migrates_through_one_to_two_and_is_idempotent(legacy_db):
+def test_rc06_c3_version_zero_migrates_through_one_to_three_and_is_idempotent(legacy_db):
     db.init_db()
-    assert user_version(legacy_db) == 2
+    assert user_version(legacy_db) == 3
     snapshot = {
         table: rows(legacy_db, f"SELECT * FROM {table} ORDER BY rowid")
         for table in ("brands", "items", "item_keywords", "listings", "listing_matches", "ebay_listing_prices")
     }
     db.init_db()
-    assert user_version(legacy_db) == 2
+    assert user_version(legacy_db) == 3
     assert {
         table: rows(legacy_db, f"SELECT * FROM {table} ORDER BY rowid")
         for table in snapshot
@@ -418,17 +424,41 @@ def _prepare_update_repo(tmp_path, monkeypatch):
     catalog = json.loads((source_root / "tests/fixtures/catalog.json").read_text(encoding="utf-8"))
     for entry in catalog:
         entry["exclude_keywords"] = [word for word in entry["exclude_keywords"] if word != "fake"]
-    catalog_path = tmp_path / "catalog-before-fake.json"
-    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
     db_path = src_dir / "raincheck.db"
     monkeypatch.setenv("RAINCHECK_DB_PATH", str(db_path))
-    db.init_db()
-    db.seed_from_catalog(catalog_path)
-    run(
-        db_path,
-        "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
-        (db.get_item_id("Rick Owens", "pod shorts"), "database only phrase", "include"),
-    )
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.executescript(
+            (source_root / "tests/fixtures/db/schema_v2.sql").read_text(encoding="utf-8")
+        )
+        conn.execute("PRAGMA user_version = 2")
+        conn.execute(
+            "INSERT INTO brands (id, name, yahoo_brand_id) VALUES (?, ?, ?)",
+            (1, "Rick Owens", db.DEFAULT_YAHOO_BRAND_ID),
+        )
+        for item_id, entry in enumerate(catalog, start=1):
+            conn.execute(
+                "INSERT INTO items (id, brand_id, name, manual_price_usd, search_query) "
+                "VALUES (?, 1, ?, ?, ?)",
+                (item_id, entry["item name"], entry["market_price"], entry["search_query"]),
+            )
+            for keyword in entry["keywords"]:
+                conn.execute(
+                    "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
+                    (item_id, keyword, "include"),
+                )
+            for keyword in entry["exclude_keywords"]:
+                conn.execute(
+                    "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
+                    (item_id, keyword, "exclude"),
+                )
+        conn.execute(
+            "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
+            (2, "database only phrase", "include"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
     home = tmp_path / "home"
     home.mkdir()
     env = os.environ.copy()
@@ -447,10 +477,10 @@ def test_rc06_c25_targeted_update_script_preserves_keywords_and_is_idempotent(
     assert first.returncode == 0, first.stderr
     after_first = set(rows(db_path, "SELECT item_id, keyword, kind FROM item_keywords"))
     assert after_first == before | {
-        (db.get_item_id("Rick Owens", "rick owens ramones"), "fake", "exclude"),
-        (db.get_item_id("Rick Owens", "pod shorts"), "fake", "exclude"),
+        (1, "fake", "exclude"),
+        (2, "fake", "exclude"),
     }
-    custom_keyword = (db.get_item_id("Rick Owens", "pod shorts"), "database only phrase", "include")
+    custom_keyword = (2, "database only phrase", "include")
     assert custom_keyword in after_first
     assert len(list((home / "RainCheck-backups").glob("raincheck-before-rc06-fake-*.db"))) == 1
 
@@ -466,7 +496,7 @@ def test_rc06_c26_targeted_update_refuses_normalized_fake_include_without_writin
     tmp_path, monkeypatch
 ):
     repo, db_path, home, env = _prepare_update_repo(tmp_path, monkeypatch)
-    pods_id = db.get_item_id("Rick Owens", "pod shorts")
+    pods_id = 2
     run(db_path, "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
         (pods_id, "ｆａｋｅ", "include"))
     before = set(rows(db_path, "SELECT item_id, keyword, kind FROM item_keywords"))
@@ -481,17 +511,29 @@ def test_rc06_c26_targeted_update_refuses_normalized_fake_include_without_writin
     assert not list((home / "RainCheck-backups").glob("raincheck-before-rc06-fake-*.db"))
 
 
-def test_rc06_c21_upgrade_instructions_back_up_and_verify_old_rows(
+def test_rc16_c2_v1_through_v2_to_v3_upgrade_keeps_backup_integrity_and_keywords(
     legacy_db, tmp_path, monkeypatch
 ):
     _upgrade_to_v1(legacy_db)
+    # Recreate the installed RC-06 schema-v2 checkpoint before exercising its
+    # targeted keyword procedure and the subsequent RC-16 v2 -> v3 migration.
+    conn = sqlite3.connect(legacy_db)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        for statement in db.MIGRATIONS[2]:
+            conn.execute(statement)
+        conn.execute("PRAGMA user_version = 2")
+        conn.commit()
+    finally:
+        conn.close()
+
     repo = tmp_path / "upgrade-repo"
     src_dir = repo / "src"
     src_dir.mkdir(parents=True)
-    source_root = Path(__file__).resolve().parents[1]
+    source_root = Path(db.__file__).resolve().parents[1]
     upgrade_db = src_dir / "raincheck.db"
     upgrade_db.write_bytes(Path(legacy_db).read_bytes())
-    for filename in ("db.py", "schema.sql"):
+    for filename in ("db.py", "schema.sql", "matching.py"):
         (src_dir / filename).write_bytes((source_root / "src" / filename).read_bytes())
     home = tmp_path / "upgrade-home"
     home.mkdir()
@@ -499,25 +541,61 @@ def test_rc06_c21_upgrade_instructions_back_up_and_verify_old_rows(
     env["HOME"] = str(home)
     env["RAINCHECK_DB_PATH"] = str(upgrade_db)
 
-    backup_run = subprocess.run(
-        [sys.executable, "-c", _spec_python_script_after("2. Make a timestamped SQLite online backup")],
+    # Apply the approved RC-06 data-only update while the database is still v2.
+    update_run = subprocess.run(
+        [sys.executable, "-c", _targeted_update_script()],
         cwd=repo, env=env, capture_output=True, text=True,
     )
-    assert backup_run.returncode == 0, backup_run.stderr
-    backup_path = Path(backup_run.stdout.strip())
-    assert backup_path.is_file()
-    assert user_version(backup_path) == 1
+    assert update_run.returncode == 0, update_run.stderr
+    assert len(list((home / "RainCheck-backups").glob("raincheck-before-rc06-fake-*.db"))) == 1
+
+    before_columns = columns(upgrade_db, "listings")
+    tables = ("brands", "items", "item_keywords", "listings", "listing_matches", "ebay_listing_prices")
+    before = {
+        table: rows(upgrade_db, f"SELECT * FROM {table} ORDER BY rowid")
+        for table in tables
+    }
+    backup_dir = home / "RainCheck-backups"
+    backup_dir.mkdir(mode=0o700, exist_ok=True)
+    backup_path = backup_dir / "raincheck-before-rc16-test.db"
+    live = sqlite3.connect(upgrade_db)
+    backup = sqlite3.connect(backup_path)
+    try:
+        live.backup(backup)
+        assert backup.execute("PRAGMA quick_check").fetchone() == ("ok",)
+        assert backup.execute("PRAGMA user_version").fetchone() == (2,)
+    finally:
+        backup.close()
+        live.close()
+    assert backup_path.is_file() and backup_path.stat().st_size > 0
+    assert rows(backup_path, "PRAGMA foreign_key_check") == []
+    assert {
+        (1, "fake", "exclude"),
+        (2, "fake", "exclude"),
+    } <= set(rows(backup_path, "SELECT item_id, keyword, kind FROM item_keywords"))
+    for table, expected in before.items():
+        assert rows(backup_path, f"SELECT * FROM {table} ORDER BY rowid") == expected
 
     migration_run = subprocess.run(
         [sys.executable, "src/db.py"], cwd=repo, env=env, capture_output=True, text=True,
     )
     assert migration_run.returncode == 0, migration_run.stderr
-    verification = subprocess.run(
-        [sys.executable, "-c", _spec_python_script_after("4. Run this read-only check")],
-        cwd=repo, env=env, input=f"{backup_path}\n", capture_output=True, text=True,
+    assert user_version(upgrade_db) == 3
+    assert rows(upgrade_db, "PRAGMA integrity_check") == [("ok",)]
+    assert rows(upgrade_db, "PRAGMA foreign_key_check") == []
+    assert {"is_fixed_price", "buy_now_price_yen", "scheduled_end_at"} <= set(
+        columns(upgrade_db, "listings")
     )
-    assert verification.returncode == 0, verification.stderr
-    assert "Schema version 2" in verification.stdout
+    for table, expected in before.items():
+        actual = rows(upgrade_db, f"SELECT * FROM {table} ORDER BY rowid")
+        if table == "listings":
+            assert columns(upgrade_db, table)[:len(before_columns)] == before_columns
+            assert [row[:len(before_columns)] for row in actual] == expected
+            assert all(row[len(before_columns):] == (None, None, None) for row in actual)
+        else:
+            assert actual == expected
+    keyword_rows = set(rows(upgrade_db, "SELECT item_id, keyword, kind FROM item_keywords"))
+    assert {(1, "fake", "exclude"), (2, "fake", "exclude")} <= keyword_rows
 
 
 def test_rc06_c28_backlog_describes_distinct_all_time_filtered_arithmetic_mean():
