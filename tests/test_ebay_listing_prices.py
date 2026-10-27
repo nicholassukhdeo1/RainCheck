@@ -53,7 +53,7 @@ def _upgrade_to_v1(path):
 
 
 def test_rc06_c1_fresh_schema_v3_has_listing_price_table_key_fk_and_index(temp_db):
-    assert user_version(temp_db) == 3
+    assert user_version(temp_db) == 4
     assert columns(temp_db, "ebay_listing_prices") == [
         "item_id", "ebay_listing_id", "first_price_usd", "first_seen_at"
     ]
@@ -97,7 +97,7 @@ def test_rc06_c2_version_one_migration_preserves_existing_rows(legacy_db):
 
     db.init_db()
 
-    assert user_version(legacy_db) == 3
+    assert user_version(legacy_db) == 4
     for table, expected in before.items():
         actual = rows(legacy_db, f"SELECT * FROM {table} ORDER BY rowid")
         if table == "listings":
@@ -111,13 +111,13 @@ def test_rc06_c2_version_one_migration_preserves_existing_rows(legacy_db):
 
 def test_rc06_c3_version_zero_migrates_through_one_to_three_and_is_idempotent(legacy_db):
     db.init_db()
-    assert user_version(legacy_db) == 3
+    assert user_version(legacy_db) == 4
     snapshot = {
         table: rows(legacy_db, f"SELECT * FROM {table} ORDER BY rowid")
         for table in ("brands", "items", "item_keywords", "listings", "listing_matches", "ebay_listing_prices")
     }
     db.init_db()
-    assert user_version(legacy_db) == 3
+    assert user_version(legacy_db) == 4
     assert {
         table: rows(legacy_db, f"SELECT * FROM {table} ORDER BY rowid")
         for table in snapshot
@@ -663,7 +663,7 @@ def test_rc16_c2_v1_through_v2_to_v3_upgrade_keeps_backup_integrity_and_keywords
         [sys.executable, "src/db.py"], cwd=repo, env=env, capture_output=True, text=True,
     )
     assert migration_run.returncode == 0, migration_run.stderr
-    assert user_version(upgrade_db) == 3
+    assert user_version(upgrade_db) == 4
     assert rows(upgrade_db, "PRAGMA integrity_check") == [("ok",)]
     assert rows(upgrade_db, "PRAGMA foreign_key_check") == []
     assert {"is_fixed_price", "buy_now_price_yen", "scheduled_end_at"} <= set(

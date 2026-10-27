@@ -100,15 +100,15 @@ def prepare_database(path, include_brand_b=False):
 
 
 def test_rc13_c1_fresh_schema_keeps_version_three_and_unique_yahoo_brand_id(temp_db):
-    assert db.SCHEMA_VERSION == 3
-    assert user_version(temp_db) == 3
+    assert db.SCHEMA_VERSION == 4
+    assert user_version(temp_db) == 4
     indexes = rows(temp_db, "PRAGMA index_list(brands)")
     unique_columns = [
         rows(temp_db, f"PRAGMA index_info('{index[1]}')")
         for index in indexes if index[2]
     ]
     assert any([column[2] for column in columns] == ["yahoo_brand_id"] for columns in unique_columns)
-    assert 4 not in db.MIGRATIONS
+    assert 5 not in db.MIGRATIONS
 
 
 def test_rc13_c2_real_and_fixture_catalogs_declare_rick_owens_id_in_order():
@@ -483,9 +483,9 @@ def test_rc13_c16_duplicate_listing_url_belongs_to_first_brand_only(temp_db, fak
 def test_rc13_c17_version_three_database_requires_no_seed_and_keeps_all_rows(temp_db):
     prepare_database(temp_db)
     before = dump_all(temp_db)
-    assert user_version(temp_db) == 3
+    assert user_version(temp_db) == 4
     db.init_db()
-    assert user_version(temp_db) == 3
+    assert user_version(temp_db) == 4
     assert dump_all(temp_db) == before
 
 

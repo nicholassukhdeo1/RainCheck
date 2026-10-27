@@ -869,7 +869,7 @@ def test_rc05_c5_and_c11_absent_listing_keeps_ended_fields_and_schema_stays_v3(
         "2020-02-01T00:00:00+00:00",
         12345,
     )
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 4
     assert tuple(db_conn.execute(
         "SELECT ended_at, final_price_yen FROM listings WHERE url = ?", (URL_4,)
     ).fetchone()) == (None, None)

@@ -146,7 +146,7 @@ def rc16_version2_db(tmp_path):
 
 def test_rc16_c1_fresh_schema_has_version_three_metadata_and_constraints(temp_db, db_conn):
     db.init_db()
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 4
     columns = {row[1]: row for row in db_conn.execute("PRAGMA table_info(listings)")}
     assert {"is_fixed_price", "buy_now_price_yen", "scheduled_end_at"} <= set(columns)
     assert columns["is_fixed_price"][3] == 0
@@ -196,7 +196,7 @@ def test_rc16_c2_c3_v2_migration_preserves_legacy_rows_and_is_idempotent(rc16_ve
             ("https://auctions.yahoo.co.jp/jp/auction/legacy",),
         ).fetchone()
         assert tuple(after_metadata) == (None, None, None)
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
     finally:
         conn.close()
     assert _read_legacy_v2_rows(rc16_version2_db) == before
@@ -205,7 +205,7 @@ def test_rc16_c2_c3_v2_migration_preserves_legacy_rows_and_is_idempotent(rc16_ve
     assert _read_legacy_v2_rows(rc16_version2_db) == before
     conn = sqlite3.connect(rc16_version2_db)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
     finally:
         conn.close()
 
