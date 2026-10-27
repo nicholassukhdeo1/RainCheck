@@ -58,12 +58,14 @@ The saved `tests/fixtures/yahoo/brand_page_live.html` contains all four fields o
 | `src/yahoo_scrape.py` | Parse and classify sale format, calculate deals from actionable prices, and pass original listing metadata to storage. |
 | `tests/test_yahoo_scrape.py` | Cover parsing, eligibility, displayed prices, item ordering, and send/record behavior. |
 | `tests/test_db.py` | Cover migration, constraints, atomic writes, and preservation of legacy rows. |
+| `tests/test_listing_matches.py` | Cover the existing batch recorder with source metadata, missing mapping entries, duplicates, and rollback. |
 | `tests/fixtures/yahoo/brand_page_minimal.html` | Retain as the recorded mixed-format fixture; no editing expected unless a documented test correction is necessary. |
 | `tests/fixtures/yahoo/brand_page_live.html` | Retain as the recorded 100-row fixture for field-shape assertions; do not regenerate with credentials. |
 | `tests/fixtures/yahoo/brand_page_malformed.html` | Retain for malformed-field and duplicate tests; supplement with synthetic `__NEXT_DATA__` snippets where needed. |
 | `docs/specs/RC-16-auction-aware-deals.md` | Record approved decisions and the backup-first upgrade procedure. |
 
-If RC-10 merges before RC-16 implementation, use its post-send batch-recording interface rather than reintroducing per-deal writes.
+RC-10 already sends one digest and calls `yahoo_scrape.record_listing_matches(digest.deals)`, which forwards to `db.record_listing_matches(deals)`.
+Extend this existing batch path while keeping its one `BEGIN IMMEDIATE` transaction and its returned count of newly inserted listing rows.
 This spec does not ask for a separate digest-format change; the existing `Deal.price_yen` and `Deal.price_usd` fields carry the actionable price.
 
 ### Schema changes and migration
@@ -118,12 +120,17 @@ This conservative rule prevents an undocumented field combination from creating 
 `Deal.price_yen`, `Deal.price_usd`, and `Deal.discount_pct` use the actionable price, so the digest and discount agree.
 The stored `listings.price_yen` uses the original `YahooListing.price_yen`.
 
-Extend `record_listing_match` with explicit keyword-only auction metadata arguments after the existing six positional arguments, preserving existing callers.
-The Yahoo job finds each displayed deal's source `YahooListing` by URL and passes its current price and parsed metadata to the record operation; the record operation must not derive the source current price from `Deal.price_yen`.
-For the job's new call path, pass the original current price as the existing fourth argument and pass metadata through the new keyword-only arguments.
+Extend both forwarding and database functions to `record_listing_matches(deals, *, sources_by_url=None) -> int`.
+`sources_by_url` maps each displayed deal URL to its parsed `YahooListing` from the same page; the parser's first-record-wins rule makes that mapping unambiguous.
+The Yahoo job builds the mapping from the parsed page and confirms every displayed deal has a source before attempting SMTP delivery, then passes it to the recorder after a successful send.
+When a mapping is supplied, the database recorder validates that every displayed deal URL is present and equals the corresponding source's `url`, and writes `source.price_yen` as the observed current price plus the source's parsed auction metadata.
+An absent or mismatched source raises `ValueError` before opening a database connection; it never falls back to the displayed buy-now price.
+Duplicate deals for the same URL use the one parsed source; existing `(listing_id, item_id)` deduplication remains unchanged.
+When `sources_by_url` is omitted, preserve RC-10's existing direct-caller behavior: write `deal.price_yen` with `NULL` auction metadata.
+No new fields are added to `digest.Deal`, which remains the pure email-facing record of the actionable price.
+The legacy single-deal `record_listing_match` remains available with its current six-argument interface and writes `NULL` for the new columns.
 On a URL conflict, preserve the preexisting listing metadata and insert only a missing item association, as today.
-The listing and match still commit or roll back together and every database connection closes.
-If RC-10 has replaced this operation with a batch operation, extend that operation instead and retain its all-or-nothing post-send transaction.
+The full displayed batch still commits or rolls back together and every database connection closes.
 
 ### Existing records and transition
 
@@ -148,20 +155,22 @@ Because this job reads only the newest page, it cannot promise to notice every l
 12. A valid `endTime` with an explicit `+09:00` offset is stored as the equivalent UTC instant; naive timestamps are not accepted as known end times.
 13. `isFleamarketItem` continues to select the existing URL prefix and does not bypass the format and buy-now rules.
 14. Two listings with different actionable prices are sorted by actual discount; equal discounts retain source-page order and existing per-item digest limits apply.
-15. A page mixing fixed-price, buy-now, and bid-only matching listings sends at most one digest containing only the eligible below-market listings and records exactly those displayed deals after a successful send.
+15. A page mixing fixed-price, buy-now, and bid-only matching listings sends at most one digest containing only the eligible below-market listings and records exactly those displayed deals in one post-send transaction.
 16. A failed email send records no new listing, metadata, or match row, and an eligible deal can be offered on the next run.
 17. A known URL is not re-emailed; its existing price and auction metadata are not overwritten, while `last_seen_at` still follows RC-05's observation rule.
 18. A listing that initially lacks an actionable price creates no row, then can be emailed and recorded on a later run when the same URL acquires a valid buy-now price.
-19. A duplicate Yahoo record follows the parser's first-record-wins rule, and a duplicate stored URL creates no second listing row.
-20. An invalid page, network error, or bad HTTP status produces no new digest or listing write; existing RC-10 retry behavior remains in force if merged first.
-21. Invalid metadata never bypasses database constraints; an SQL failure while recording an emailed deal rolls back its listing and match together and closes the connection.
+19. A duplicate Yahoo record follows the parser's first-record-wins rule, duplicate deals for one URL use that one source observation, and a duplicate stored URL creates no second listing row.
+20. An invalid page, network error, or bad HTTP status produces no new digest or listing write; RC-10's bounded retry behavior remains in force.
+21. Invalid metadata never bypasses database constraints; an SQL failure on the second deal in a displayed batch rolls back all new listings and matches from that batch and closes the connection.
 22. Existing schema-version rejection, keyword matching, market-price fallback, and exchange-rate behavior remain unchanged.
+23. A missing or mismatched `sources_by_url` entry raises `ValueError` before database access; the Yahoo job detects it before sending email.
+24. Direct callers that omit `sources_by_url` retain RC-10's insertion and deduplication behavior with `NULL` metadata, and legacy `record_listing_match` calls still work unchanged.
 
 ## Edge cases
 
 - Empty results: A valid empty page produces no digest and no new listing; no auction metadata is written.
 - `None` or missing values: Missing buy-now or format means an auction is not an immediate deal; a fixed-price listing may use its positive current price when buy-now is absent.
-- Network failure or bad HTTP status: Fetch failure exits before parsing or recording; RC-10's bounded retries apply once it is merged.
+- Network failure or bad HTTP status: Fetch failure exits before parsing or recording; RC-10's bounded retries apply.
 - Malformed input: Invalid IDs, titles, and current prices follow the existing parser's skip rule; invalid auction metadata cannot create a false actionable deal.
 - Duplicates: First Yahoo record per auction ID wins; database URL uniqueness and match keys remain authoritative.
 - End-time changes: `scheduled_end_at` is a snapshot, not proof of completion; a seller can extend or end early.
@@ -175,14 +184,16 @@ Because this job reads only the newest page, it cannot promise to notice every l
 - Create small synthetic `__NEXT_DATA__` pages for missing and malformed metadata, contradictory flags, duplicate IDs, empty results, and mixed-item digest ordering.
 - In `tests/test_yahoo_scrape.py`, test pure parsing and deal selection, then run `main()` with a temporary database and fake Yahoo, Frankfurter, and SMTP responses to check send-before-record behavior and stored fields.
 - Revise RC-15 and RC-07 tests that currently expect a discount from a current bid; keep their other assertions intact.
-- In `tests/test_db.py`, start from a version 2 database with listing and match rows, check version 3 migration preservation, fresh-schema parity, idempotence, rollback on injected SQL failure, constraints, URL conflicts, and connection closure.
+- In `tests/test_db.py`, start from a version 2 database with listing and match rows, and check version 3 migration preservation, fresh-schema parity, idempotence, rollback on injected migration failure, and constraints.
+- In `tests/test_listing_matches.py`, check source mapping validation before database access, stored current price versus displayed buy-now price, duplicate URL behavior, legacy caller compatibility, URL conflicts, a second-deal SQL failure rolling back the whole batch, and connection closure.
+- Update RC-10 Yahoo test doubles that intercept `record_listing_matches` to accept the new keyword argument without changing their failure behavior.
 - Add a two-run case where an initially bid-only listing gains a valid buy-now price and becomes a deal.
 - Do not capture live fixtures automatically or run a live Yahoo request in tests.
 
 ## Shared-file conflicts
 
-This feature touches both `src/schema.sql` and `src/db.py`, so do not implement it in parallel with another feature that touches either file, including RC-10 if it has not merged, RC-11, RC-13, RC-14, or RC-18.
-It also touches `src/yahoo_scrape.py`, which RC-10 changes; rebase on the merged RC-10 code before testing or implementing RC-16.
+This feature touches both `src/schema.sql` and `src/db.py`, so do not implement it in parallel with another feature that touches either file, including RC-11, RC-13, RC-14, or RC-18.
+It also touches `src/yahoo_scrape.py`, and builds on RC-10's merged batch writer and retry behavior.
 `src/catalog.json` is not touched.
 
 ## Open questions
