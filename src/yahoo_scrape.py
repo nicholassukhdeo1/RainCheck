@@ -1,6 +1,12 @@
 from bs4 import BeautifulSoup
 from sendemail import send_email
-from db import get_tracked_items, get_known_listing_urls, insert_listing, SchemaVersionError, TrackedItem
+from db import (
+    SchemaVersionError,
+    TrackedItem,
+    get_known_listing_urls,
+    get_tracked_items,
+    record_listing_match,
+)
 from digest import Deal, ItemDeals, build_digest
 from matching import title_matches
 from dataclasses import dataclass
@@ -250,7 +256,9 @@ def main():
             raise SystemExit(1)
         # record only after a successful send, and only the deals that were shown
         for deal in digest.deals:
-            insert_listing(deal.brand_id, deal.url, deal.title, deal.price_yen, deal.image_url)
+            record_listing_match(
+                deal.brand_id, deal.url, deal.title, deal.price_yen, deal.image_url, deal.item_id
+            )
     except SchemaVersionError as e:
         # the one error with a message written for you (it names the fix), so no traceback
         print(f"Error: {e}", file=sys.stderr)

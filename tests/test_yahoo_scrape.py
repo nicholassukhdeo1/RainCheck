@@ -20,6 +20,7 @@ from dbhelpers import rows as sql_rows, run as sql_run, set_user_version, sha256
 from yahoo_scrape import RICK_OWENS_URL
 
 URL_1 = "https://auctions.yahoo.co.jp/jp/auction/t1000000001"
+URL_3 = "https://auctions.yahoo.co.jp/jp/auction/t1000000003"
 URL_4 = "https://auctions.yahoo.co.jp/jp/auction/t1000000004"
 X1 = "https://auctions.yahoo.co.jp/jp/auction/x1000000001"
 X3 = "https://auctions.yahoo.co.jp/jp/auction/x1000000003"
@@ -357,6 +358,71 @@ def test_rc15_c42_deals_are_recorded_only_after_the_send(yahoo_http, seeded_db, 
     assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")] == [URL_1, URL_4]
 
 
+def test_rc04_c1_successful_digest_records_each_displayed_deals_item_association(
+    yahoo_http, seeded_db, sent_emails
+):
+    yahoo_scrape.main()
+    item_id = _item("rick owens ramones").id
+    matches = sql_rows(
+        seeded_db,
+        "SELECT l.url, m.item_id FROM listing_matches m "
+        "JOIN listings l ON l.id = m.listing_id ORDER BY l.url",
+    )
+    assert matches == [(URL_1, item_id), (URL_4, item_id)]
+    assert len(sent_emails) == 1
+
+
+def test_rc04_digest_persists_deal_association_for_each_item(
+    fake_http, fixtures_dir, seeded_db, sent_emails
+):
+    html = _html(fixtures_dir, "brand_page_minimal.html").replace(
+        "Rick Owens Geobasket 43", "Rick Owens Pod Shorts 43"
+    )
+    fake_http.add("GET", RICK_OWENS_URL, text=html)
+
+    yahoo_scrape.main()
+
+    item_ids = {
+        "rick owens ramones": _item("rick owens ramones").id,
+        "pod shorts": _item("pod shorts").id,
+    }
+    matches = sql_rows(
+        seeded_db,
+        "SELECT l.url, m.item_id FROM listing_matches m "
+        "JOIN listings l ON l.id = m.listing_id ORDER BY l.url",
+    )
+    assert matches == [
+        (URL_1, item_ids["rick owens ramones"]),
+        (URL_3, item_ids["pod shorts"]),
+        (URL_4, item_ids["rick owens ramones"]),
+    ]
+    assert len(sent_emails) == 1
+
+
+def test_rc04_c5_and_c6_non_deal_is_not_stored_and_later_deal_is_sent(
+    yahoo_http, seeded_db, sent_emails, db_conn
+):
+    db_conn.execute(
+        "UPDATE items SET market_price_usd = 100.0 WHERE name = ?",
+        ("rick owens ramones",),
+    )
+    db_conn.commit()
+    yahoo_scrape.main()
+    assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+    assert sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches") == []
+    assert sent_emails == []
+
+    db_conn.execute(
+        "UPDATE items SET market_price_usd = 800.0 WHERE name = ?",
+        ("rick owens ramones",),
+    )
+    db_conn.commit()
+    yahoo_scrape.main()
+    assert len(sent_emails) == 1
+    assert {row[0] for row in sql_rows(seeded_db, "SELECT url FROM listings")} == {URL_1, URL_4}
+    assert len(sql_rows(seeded_db, "SELECT listing_id FROM listing_matches")) == 2
+
+
 def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
     yahoo_http, seeded_db, monkeypatch, capsys
 ):
@@ -376,6 +442,7 @@ def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
         "will be offered again next run (2 deals).\n"
     )
     assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+    assert sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches") == []
 
     delivered = []
 
@@ -388,6 +455,7 @@ def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
     assert len(delivered) == 1
     assert _row_urls(delivered[0][1]) == [URL_1, URL_4]
     assert len(sql_rows(seeded_db, "SELECT url FROM listings")) == 2
+    assert len(sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches")) == 2
 
 
 def test_rc15_c43_failed_send_message_uses_singular_for_one_deal(
@@ -789,22 +857,22 @@ def test_rc15_insert_failure_after_send_propagates_and_next_run_sends_only_the_r
         return True
 
     monkeypatch.setattr(yahoo_scrape, "send_email", ok_send)
-    real_insert = yahoo_scrape.insert_listing
+    real_record_match = yahoo_scrape.record_listing_match
     calls = []
 
-    def flaky_insert(*args, **kwargs):
+    def flaky_record_match(*args, **kwargs):
         calls.append(args[1])
         if len(calls) == 2:
             raise RuntimeError("database is locked")
-        return real_insert(*args, **kwargs)
+        return real_record_match(*args, **kwargs)
 
-    monkeypatch.setattr(yahoo_scrape, "insert_listing", flaky_insert)
+    monkeypatch.setattr(yahoo_scrape, "record_listing_match", flaky_record_match)
     with pytest.raises(RuntimeError, match="database is locked"):
         yahoo_scrape.main()
     assert len(delivered) == 1
     assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings")] == [URL_1]
 
-    monkeypatch.setattr(yahoo_scrape, "insert_listing", real_insert)
+    monkeypatch.setattr(yahoo_scrape, "record_listing_match", real_record_match)
     yahoo_scrape.main()
     assert len(delivered) == 2
     assert _row_urls(delivered[1]) == [URL_4]

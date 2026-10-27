@@ -616,6 +616,42 @@ def insert_listing(brand_id,url,title,price_yen,image_url):
     return is_new
 
 
+def record_listing_match(brand_id, url, title, price_yen, image_url, item_id) -> bool:
+    """Store a listing and its tracked-item association in one transaction.
+
+    Returns True only when this call created the listing row. Existing listing
+    metadata is left alone, while a new item association can still be recorded.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    with closing(get_connection()) as conn:
+        # Keep the listing and its association together if either foreign key fails.
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            inserted = conn.execute(
+                "INSERT INTO listings "
+                "(brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at) "
+                "VALUES (?,?,?,?,?,?,?) "
+                "ON CONFLICT(url) DO NOTHING",
+                (brand_id, url, title, price_yen, image_url, now, now),
+            )
+            listing = conn.execute(
+                "SELECT id FROM listings WHERE url = ?",
+                (url,),
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO listing_matches (listing_id, item_id, matched_at) "
+                "VALUES (?,?,?) "
+                "ON CONFLICT(listing_id, item_id) DO NOTHING",
+                (listing["id"], item_id, now),
+            )
+            conn.commit()
+            return inserted.rowcount == 1
+        except BaseException:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
+
+
 def get_known_listing_urls(urls: Iterable[str]) -> set[str]:
     """Returns the subset of urls already stored in listings. Read-only: never writes or commits."""
     # consume the iterable once and de-duplicate it
