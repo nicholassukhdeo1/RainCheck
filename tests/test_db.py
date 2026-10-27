@@ -48,7 +48,7 @@ def test_c23_seed_inserts_brand_items_and_keywords(seeded_db, db_conn):
     assert kws == {
         ("rick owens ramones", "include"): {"ramones", "ramon"},
         ("rick owens ramones", "exclude"): {"drkshdw", "canvas", "low"},
-        ("pod shorts", "include"): {"pod short"},
+        ("pod shorts", "include"): {"pod short", "pod shorts"},
         ("pod shorts", "exclude"): {"pants"},
     }
 
@@ -58,11 +58,11 @@ def test_c24_seeding_twice_does_not_duplicate_rows(seeded_db, db_conn):
     db.seed_from_catalog()
     after = {t: _count(db_conn, t) for t in ("brands", "items", "item_keywords")}
     assert before == after
-    assert before == {"brands": 1, "items": 2, "item_keywords": 7}
+    assert before == {"brands": 1, "items": 2, "item_keywords": 8}
     kinds = dict(
         db_conn.execute("SELECT kind, COUNT(*) FROM item_keywords GROUP BY kind").fetchall()
     )
-    assert kinds == {"include": 3, "exclude": 4}
+    assert kinds == {"include": 4, "exclude": 4}
 
 
 def test_c25_insert_new_listing_returns_true_and_stores_utc_timestamps(seeded_db, db_conn):
@@ -180,7 +180,7 @@ def test_rc03a_c30_get_tracked_items_returns_full_configuration(seeded_db, db_co
             brand="Rick Owens",
             name="pod shorts",
             search_query="pod shorts",
-            keywords=("pod short",),
+            keywords=("pod short", "pod shorts"),
             exclude_keywords=("pants",),
             manual_price_usd=300.0,
             market_price_usd=None,

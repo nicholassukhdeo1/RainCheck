@@ -132,7 +132,7 @@ def test_rc03b_c44_real_catalog_ramones_keywords_in_catalog_order():
     assert ramones.exclude_keywords == ("drkshdw", "canvas", "low", "ローカット")
 
 
-def test_rc03b_c44_real_catalog_pod_shorts_unchanged():
+def test_rc17_c13_real_catalog_pod_shorts_has_plural_keyword():
     pods = _real_entries()["pod shorts"]
     assert pods.keywords == ("pod short", "ポッドショーツ", "pod shorts")
     assert pods.exclude_keywords == ("pants",)

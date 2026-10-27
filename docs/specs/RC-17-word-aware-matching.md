@@ -57,10 +57,14 @@ The new `pod shorts` include matches the plural product name as a whole phrase, 
 | --- | --- |
 | `src/matching.py` | Implement normalization and edge-aware literal matching in `title_matches`, with any private helper kept here. |
 | `src/catalog.json` | Add `pod shorts` to the pod shorts item's include keywords without removing its two existing includes. |
+| `tests/fixtures/catalog.json` | Add `pod shorts` beside the sample fixture's existing `pod short` include so `seeded_db` represents plural matching. |
 | `tests/test_matching.py` | Replace obsolete RC-03b expectations and add explicit Unicode, boundary, punctuation, empty-input, and live-fixture comparisons. |
-| `tests/test_seed_catalog.py` | Update the exact real-catalog pod shorts keyword expectation and verify all three includes. |
+| `tests/test_seed_catalog.py` | Update real-catalog and sample-fixture keyword expectations; verify all three real includes. |
+| `tests/test_db.py` | Update exact keyword sets, row counts, and tracked-item tuple for the changed sample fixture. |
+| `tests/test_db_cli.py` | Update exact seeded keyword rows and count for the changed sample fixture. |
 | `docs/specs/RC-17-word-aware-matching.md` | Record the approved behavior and measured fixture impact. |
 
+`tests/conftest.py` maps `seeded_db` to `tests/fixtures/catalog.json` and needs no edit.
 `src/yahoo_scrape.py`, `src/ebay_pricing.py`, `src/db.py`, and `src/schema.sql` are read for compatibility but need no edits.
 Both jobs already call `title_matches` with the same three arguments.
 
@@ -188,7 +192,8 @@ The function does not catch or alter network, database, or parser exceptions fro
 12. On `tests/fixtures/ebay/search_live.json`, the 50 titles with the real catalog keywords have old/new matched counts of 9/8 for Ramones and 0/0 for pod shorts; the sole removed match is item `v1|178432099849|0`, titled `Size 41.5EU/8.5US - Rick Owens Textured Leather Ramone High Top`.
 13. The validated real catalog's pod shorts item has include keywords `("pod short", "ポッドショーツ", "pod shorts")` in catalog order, and its `pants` exclude and search query remain unchanged.
 14. With that catalog keyword tuple, `title_matches("Rick Owens Pod Shorts", includes, ("pants",))` returns `True`, while `title_matches("Rick Owens Pod Shorts", ("pod short",), ())` returns `False`.
-15. On a seeded throwaway database, the pod shorts item has all three include rows and the existing exclude row; this does not require a schema version change.
+15. On a throwaway database seeded from the real catalog, the pod shorts item has all three include rows and the existing exclude row; the suite's `seeded_db` fixture instead has the sample catalog's `pod short` and `pod shorts` includes and `pants` exclude.
+16. The sample fixture adds only `pod shorts` to its prior pod shorts keyword set; its Ramones keywords, pod shorts exclude, prices, and queries remain unchanged.
 
 ## Edge cases
 
@@ -203,7 +208,11 @@ The function does not catch or alter network, database, or parser exceptions fro
 
 Use small synthetic titles in `tests/test_matching.py` for all boundary, Unicode, case, punctuation, multiword, empty, and exclude-precedence cases.
 Add a `pod shorts` title assertion with the validated real-catalog include tuple, and update the existing exact tuple expectation in `tests/test_matching.py`.
-Update `tests/test_seed_catalog.py` to assert the three real-catalog includes, unchanged exclude, and unchanged search query; use only its throwaway database fixtures for any seed assertion.
+Update `tests/test_seed_catalog.py` to assert the three real-catalog includes, unchanged exclude, and unchanged search query.
+Sync the explicit `pod shorts` include into `tests/fixtures/catalog.json` because `tests/conftest.py` seeds `seeded_db` from that sample file rather than `src/catalog.json`.
+Keep the sample fixture's other values as they are; it intentionally does not mirror every real-catalog keyword.
+Update exact seeded keyword sets, row counts, and tracked-item expectations in `tests/test_seed_catalog.py`, `tests/test_db.py`, and `tests/test_db_cli.py` to reflect the sample's one added keyword.
+Use only throwaway database fixtures for seed assertions.
 Reuse the saved `tests/fixtures/yahoo/brand_page_live.html` through `yahoo_scrape.parse_listings` and `tests/fixtures/ebay/search_live.json` through `json.loads`.
 Use `src/catalog.json` only as read-only seed input for the fixture comparison, or its validated `CatalogEntry` values; do not open the real database.
 These seed keywords are a reproducible proxy for the fixture measurement; both jobs actually read keywords from the database, which may differ from the current catalog.
@@ -236,6 +245,8 @@ The `ramone` keyword remains outside RC-17 despite the catalog file already bein
 
 - 2026-10-27: Added the approved plural pod shorts keyword, real-catalog and seeded-data assertions, shared catalog conflict, and targeted existing-database update procedure.
   The live fixture counts remain unchanged under the amended seed keywords.
+- 2026-10-27: Added `tests/fixtures/catalog.json` to the planned files because `seeded_db` loads this separate sample catalog through `tests/conftest.py`.
+  Syncing only the approved plural keyword keeps database-backed matcher tests representative and requires updating their exact sample keyword counts and tuples.
 
 ## Rollback
 

@@ -62,7 +62,7 @@ def test_rc03a_c13_seed_writes_expected_rows(seeded_db):
             "include": {"ramones", "ramon"},
             "exclude": {"drkshdw", "canvas", "low"},
         },
-        "pod shorts": {"include": {"pod short"}, "exclude": {"pants"}},
+        "pod shorts": {"include": {"pod short", "pod shorts"}, "exclude": {"pants"}},
     }
 
 
@@ -370,7 +370,7 @@ def test_rc03a_c29_validate_catalog_returns_normalized_entries():
             name="pod shorts",
             search_query="pod shorts",
             manual_price_usd=300.0,
-            keywords=("pod short",),
+            keywords=("pod short", "pod shorts"),
             exclude_keywords=("pants",),
         ),
     ]
@@ -408,7 +408,7 @@ def test_rc03a_c27_seeding_a_migrated_legacy_database_keeps_ids_and_prices(legac
             "include": {"ramones", "ramon"},
             "exclude": {"drkshdw", "canvas", "low"},
         },
-        "pod shorts": {"include": {"pod short"}, "exclude": {"pants"}},
+        "pod shorts": {"include": {"pod short", "pod shorts"}, "exclude": {"pants"}},
     }
     assert "high top" not in {r[0] for r in rows(legacy_db, "SELECT keyword FROM item_keywords")}
     assert dump_table(legacy_db, "listings") == legacy_before["listings"]
