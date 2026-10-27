@@ -135,7 +135,7 @@ def test_rc15_c52_digest_from_live_page_round_trips_real_image_urls(fixtures_dir
         manual_price_usd=100000.0, market_price_usd=None,
     )
     listings = yahoo_scrape.parse_listings(_live_html(fixtures_dir))
-    sections = yahoo_scrape.build_sections([item], listings, set())
+    sections = yahoo_scrape.build_sections([item], listings, set(), 0.0062)
     digest = build_digest(sections, date(2026, 10, 26))
     assert digest is not None and digest.deals, "live fixture produced no deals (test would be vacuous)"
     soup = BeautifulSoup(digest.html, "html.parser")
