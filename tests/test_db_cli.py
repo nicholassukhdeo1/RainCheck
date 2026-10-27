@@ -69,11 +69,13 @@ def test_rc02_c6_main_seed_produces_catalog_rows(fresh_path, test_catalog):
         "ORDER BY i.name, k.kind, k.keyword",
     )
     assert kws == [
+        ("pod shorts", "exclude", "fake"),
         ("pod shorts", "exclude", "pants"),
         ("pod shorts", "include", "pod short"),
         ("pod shorts", "include", "pod shorts"),
         ("rick owens ramones", "exclude", "canvas"),
         ("rick owens ramones", "exclude", "drkshdw"),
+        ("rick owens ramones", "exclude", "fake"),
         ("rick owens ramones", "exclude", "low"),
         ("rick owens ramones", "include", "ramon"),
         ("rick owens ramones", "include", "ramones"),
@@ -100,7 +102,7 @@ def test_rc02_c8_main_seed_twice_keeps_row_counts(fresh_path, test_catalog):
     db.main(["--seed"])
     second = {t: _count(fresh_path, t) for t in ("brands", "items", "item_keywords")}
 
-    assert first == {"brands": 1, "items": 2, "item_keywords": 8}
+    assert first == {"brands": 1, "items": 2, "item_keywords": 10}
     assert second == first
 
 
