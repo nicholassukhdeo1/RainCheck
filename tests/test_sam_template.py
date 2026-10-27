@@ -323,6 +323,63 @@ def test_rc11c_criterion_22_package_is_pinned_and_excludes_local_or_sensitive_fi
         for path in artifact_files
     )
 
+    dependency_artifact = tmp_path / "sam-with-dependency"
+    fake_pip = tmp_path / "fake-pip"
+    fake_pip_marker = tmp_path / "fake-pip-ran"
+    fake_pip.write_text(
+        "#!/usr/bin/env python3\n"
+        "from pathlib import Path\n"
+        f"artifact = Path({str(dependency_artifact)!r})\n"
+        f"Path({str(fake_pip_marker)!r}).write_text('ran')\n"
+        "dependency_tests = artifact / 'certifi' / 'tests'\n"
+        "dependency_tests.mkdir(parents=True, exist_ok=True)\n"
+        "(dependency_tests / 'test_certify.py').write_text('# synthetic dependency test')\n",
+        encoding="utf-8",
+    )
+    fake_pip.chmod(0o755)
+    result = subprocess.run(
+        [
+            "make",
+            f"build-{function_name}",
+            f"ARTIFACTS_DIR={dependency_artifact}",
+            f"PIP={fake_pip}",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert fake_pip_marker.read_text(encoding="utf-8") == "ran"
+    installed_files = {
+        str(path.relative_to(dependency_artifact))
+        for path in dependency_artifact.rglob("*")
+        if path.is_file()
+    }
+    assert not any(
+        "/tests/" in f"/{path}" or Path(path).name.startswith("test_")
+        for path in installed_files
+    ), "Lambda artifact must exclude dependency test files"
+
+
+def test_rc11c_sam_build_output_directory_is_ignored_by_git():
+    result = subprocess.run(
+        [
+            "git",
+            "check-ignore",
+            "--no-index",
+            "--quiet",
+            ".aws-sam/build.toml",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, ".aws-sam/ build artifacts must be ignored by Git"
+
 
 def test_rc11c_criterion_23_preflight_requires_gate_parameters_backup_integrity_and_s3_version():
     runbook = _runbook()
