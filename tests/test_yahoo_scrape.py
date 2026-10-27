@@ -7,7 +7,7 @@ send one digest; the superseded tests keep their names and now run main().
 """
 import dataclasses
 import re
-from datetime import date
+from datetime import date, datetime, timezone
 
 from bs4 import BeautifulSoup
 
@@ -421,6 +421,208 @@ def test_rc04_c5_and_c6_non_deal_is_not_stored_and_later_deal_is_sent(
     assert len(sent_emails) == 1
     assert {row[0] for row in sql_rows(seeded_db, "SELECT url FROM listings")} == {URL_1, URL_4}
     assert len(sql_rows(seeded_db, "SELECT listing_id FROM listing_matches")) == 2
+
+
+# ---- RC-05 listing lifecycle tracking (criteria 1-5, 9, 11) -------------------------
+
+
+def _freeze_rc05_clock(monkeypatch, observed_at):
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return observed_at.replace(tzinfo=None)
+            return observed_at.astimezone(tz)
+
+    monkeypatch.setattr(yahoo_scrape, "datetime", FrozenDateTime)
+
+
+def _make_existing_rc05_listing(db_conn, url=URL_1):
+    item = _item("rick owens ramones")
+    db.record_listing_match(
+        item.brand_id, url, "Previously stored title", 54321, "https://img/old.jpg", item.id
+    )
+    db_conn.execute(
+        "UPDATE listings SET first_seen_at = ?, last_seen_at = ? WHERE url = ?",
+        ("2019-01-02T03:04:05+00:00", "2020-02-03T04:05:06+00:00", url),
+    )
+    db_conn.commit()
+
+
+def test_rc05_c1_and_c3_refreshes_known_row_before_email_and_records_only_sent_new_deal(
+    fake_http, fixtures_dir, seeded_db, db_conn, sent_emails, monkeypatch
+):
+    fake_http.add(
+        "GET", RICK_OWENS_URL, text=_html(fixtures_dir, "brand_page_minimal.html")
+    )
+    _make_existing_rc05_listing(db_conn)
+    existing_before = dict(
+        db_conn.execute("SELECT * FROM listings WHERE url = ?", (URL_1,)).fetchone()
+    )
+    matches_before = [
+        tuple(row)
+        for row in db_conn.execute(
+            "SELECT listing_id, item_id, matched_at FROM listing_matches ORDER BY listing_id, item_id"
+        )
+    ]
+    observed_at = datetime(2035, 4, 5, 6, 7, 8, tzinfo=timezone.utc)
+    _freeze_rc05_clock(monkeypatch, observed_at)
+    state_during_send = []
+
+    def inspecting_send(subject, html_body, text_body):
+        state_during_send.append(
+            db_conn.execute(
+                "SELECT last_seen_at FROM listings WHERE url = ?", (URL_1,)
+            ).fetchone()[0]
+        )
+        sent_emails.append((subject, html_body, text_body))
+        return True
+
+    monkeypatch.setattr(yahoo_scrape, "send_email", inspecting_send)
+    yahoo_scrape.main()
+
+    assert state_during_send == [observed_at.isoformat()]
+    existing_after = dict(
+        db_conn.execute("SELECT * FROM listings WHERE url = ?", (URL_1,)).fetchone()
+    )
+    assert existing_after == {**existing_before, "last_seen_at": observed_at.isoformat()}
+    assert [
+        tuple(row)
+        for row in db_conn.execute(
+            "SELECT listing_id, item_id, matched_at FROM listing_matches ORDER BY listing_id, item_id"
+        )
+        if row[0] == existing_after["id"]
+    ] == [row for row in matches_before if row[0] == existing_after["id"]]
+    stored = {
+        row["url"]: row
+        for row in db_conn.execute(
+            "SELECT l.url, l.id, m.item_id FROM listings l "
+            "LEFT JOIN listing_matches m ON m.listing_id = l.id"
+        )
+    }
+    assert set(stored) == {URL_1, URL_4}
+    assert stored[URL_4]["item_id"] == _item("rick owens ramones").id
+    assert len(sent_emails) == 1
+    assert _row_urls(sent_emails[0][1]) == [URL_4]
+
+
+def test_rc05_c2_refreshes_previous_rows_when_there_are_no_new_deals(
+    yahoo_http, fixtures_dir, seeded_db, db_conn, sent_emails, monkeypatch
+):
+    listings = yahoo_scrape.parse_listings(_html(fixtures_dir, "brand_page_minimal.html"))
+    brand_id = _item("rick owens ramones").brand_id
+    old = "2020-02-03T04:05:06+00:00"
+    for listing in listings:
+        db.insert_listing(brand_id, listing.url, listing.title, listing.price_yen, listing.image_url)
+    for listing in listings:
+        db_conn.execute(
+            "UPDATE listings SET last_seen_at = ? WHERE url = ?", (old, listing.url)
+        )
+    db_conn.commit()
+    observed_at = datetime(2035, 4, 5, 6, 7, 8, tzinfo=timezone.utc)
+    _freeze_rc05_clock(monkeypatch, observed_at)
+
+    yahoo_scrape.main()
+
+    assert sent_emails == []
+    assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == len(listings)
+    assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 0
+    assert {
+        row[0] for row in db_conn.execute("SELECT last_seen_at FROM listings")
+    } == {observed_at.isoformat()}
+
+
+def test_rc05_c4_failed_send_refreshes_known_rows_but_leaves_new_deals_for_retry(
+    yahoo_http, seeded_db, db_conn, sent_emails, monkeypatch
+):
+    _make_existing_rc05_listing(db_conn)
+    observed_at = datetime(2035, 4, 5, 6, 7, 8, tzinfo=timezone.utc)
+    _freeze_rc05_clock(monkeypatch, observed_at)
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text: False)
+
+    with pytest.raises(SystemExit) as exc:
+        yahoo_scrape.main()
+
+    assert exc.value.code == 1
+    assert db_conn.execute(
+        "SELECT last_seen_at FROM listings WHERE url = ?", (URL_1,)
+    ).fetchone()[0] == observed_at.isoformat()
+    assert [
+        row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")
+    ] == [URL_1]
+    assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 1
+
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text: True)
+    yahoo_scrape.main()
+    assert [
+        row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")
+    ] == [URL_1, URL_4]
+    assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 2
+
+
+def test_rc05_c5_and_c11_absent_listing_keeps_ended_fields_and_schema_stays_v1(
+    yahoo_http, seeded_db, db_conn, monkeypatch, sent_emails
+):
+    brand_id = _item("rick owens ramones").brand_id
+    absent_url = "https://auctions.yahoo.co.jp/jp/auction/not-on-this-page"
+    db.insert_listing(brand_id, absent_url, "Absent", 1000, None)
+    db_conn.execute(
+        "UPDATE listings SET last_seen_at = ?, ended_at = ?, final_price_yen = ? WHERE url = ?",
+        ("2020-02-03T04:05:06+00:00", "2020-02-01T00:00:00+00:00", 12345, absent_url),
+    )
+    db_conn.commit()
+    observed_at = datetime(2035, 4, 5, 6, 7, 8, tzinfo=timezone.utc)
+    _freeze_rc05_clock(monkeypatch, observed_at)
+
+    yahoo_scrape.main()
+
+    absent = db_conn.execute(
+        "SELECT last_seen_at, ended_at, final_price_yen FROM listings WHERE url = ?",
+        (absent_url,),
+    ).fetchone()
+    assert tuple(absent) == (
+        "2020-02-03T04:05:06+00:00",
+        "2020-02-01T00:00:00+00:00",
+        12345,
+    )
+    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert tuple(db_conn.execute(
+        "SELECT ended_at, final_price_yen FROM listings WHERE url = ?", (URL_4,)
+    ).fetchone()) == (None, None)
+
+
+@pytest.mark.parametrize("failure", ["connection", "http", "malformed"])
+def test_rc05_c9_fetch_or_parse_failure_does_not_refresh_or_email(
+    failure, fake_http, fixtures_dir, seeded_db, db_conn, sent_emails, monkeypatch
+):
+    _make_existing_rc05_listing(db_conn)
+    prior = "2020-02-03T04:05:06+00:00"
+    db_conn.execute("UPDATE listings SET last_seen_at = ? WHERE url = ?", (prior, URL_1))
+    db_conn.commit()
+    if failure == "connection":
+        def fail_request(*args, **kwargs):
+            raise requests.ConnectionError("injected fetch failure")
+
+        monkeypatch.setattr(yahoo_scrape.requests, "get", fail_request)
+        expected = requests.ConnectionError
+    elif failure == "http":
+        fake_http.add("GET", RICK_OWENS_URL, status=503)
+        expected = requests.HTTPError
+    else:
+        fake_http.add("GET", RICK_OWENS_URL, text="not a Yahoo results page")
+        expected = yahoo_scrape.YahooPageError
+
+    with pytest.raises(expected):
+        yahoo_scrape.main()
+
+    assert sent_emails == []
+    assert [
+        row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")
+    ] == [URL_1]
+    assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 1
+    assert db_conn.execute(
+        "SELECT last_seen_at FROM listings WHERE url = ?", (URL_1,)
+    ).fetchone()[0] == prior
 
 
 def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
