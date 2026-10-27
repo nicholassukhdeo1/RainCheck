@@ -7,7 +7,8 @@
 
 Run eBay pricing and then the Yahoo deal job once per day in one AWS Lambda function in `us-east-2`.
 Keep the current-schema SQLite database in a private, versioned S3 bucket, load credentials from SSM Parameter Store, and define the resources in AWS SAM.
-The Yahoo reachability check from AWS CloudShell is a prerequisite, not an implementation test that has already passed.
+The Yahoo reachability check from AWS CloudShell is a prerequisite.
+The RC-11a check passed for the current one-brand configuration on 2026-10-27.
 Use on-demand Lambda Event Functions for the once-daily Python batch job, with S3 General Purpose as its persistent object store.
 
 ## Motivation
@@ -193,13 +194,23 @@ On 2026-10-27, the user approved the recommended RC-11 policy:
 Approval authorizes the spec and local implementation only after the CloudShell feasibility gate passes.
 It does not authorize AWS resource creation, a production database upload, or enabling the schedule.
 
-## Open questions
+### RC-11a CloudShell feasibility observation, 2026-10-27
 
-1. **CloudShell go/no-go result:** No CloudShell session is available to this planner, so the required live probe has not run.
-   Recommendation: the user lists the intended active Yahoo brand IDs from their own item configuration, then runs the following from AWS CloudShell with `us-east-2` selected.
-   Set `BRAND_IDS` to those comma-separated IDs; the default probes only Rick Owens and is insufficient if another brand is active.
-   Share only the selected Region and one status/path/count line per brand.
-   The command reads public Yahoo HTML into CloudShell memory, parses only counts, and prints no listing data.
+The orchestrator observed the probe in the user's existing AWS CloudShell browser tab with `us-east-2` selected.
+The public Yahoo results URL for Rick Owens brand ID `103538` returned HTTP 200.
+The expected `__NEXT_DATA__` listing path was present as a list, and 100 records passed the approved validity check.
+No listing titles, credentials, or page HTML were recorded.
+The user confirmed that Rick Owens is the only active Yahoo brand in the real database.
+The current `src/catalog.json` also names only Rick Owens, although it is seed input rather than proof of database state.
+RC-11a is **PASSED for the current configuration**.
+Any additional Yahoo brand must pass the same CloudShell gate before that brand is included in an AWS run.
+
+## CloudShell probe for future brands
+
+Before an additional brand is included in an AWS run, run the following from AWS CloudShell with `us-east-2` selected.
+Set `BRAND_IDS` to the new comma-separated brand IDs; the default shown probes only Rick Owens.
+Share only the selected Region and one status/path/count line per brand.
+The command reads public Yahoo HTML into CloudShell memory, parses only counts, and prints no listing data.
 
    ```sh
    BRAND_IDS=103538 python3 - <<'PY'
@@ -257,7 +268,9 @@ It does not authorize AWS resource creation, a production database upload, or en
 
    CloudShell has documented public-internet egress ([CloudShell limits](https://docs.aws.amazon.com/cloudshell/latest/userguide/limits.html)), but Yahoo may still block its addresses.
    A pass from CloudShell is necessary for this plan, yet it does not guarantee Lambda's egress or HTML shape forever.
-2. **Deployment authorization and cost:** The spec is approved, but AWS deployment requires separate user authorization after review of the SAM change set.
+## Open questions
+
+1. **Deployment authorization and cost:** The spec is approved, but AWS deployment requires separate user authorization after review of the SAM change set.
    Before creating resources or uploading the production database, the user should review the SAM change set and cost categories: [Lambda requests, duration, and extra `/tmp` allocation](https://aws.amazon.com/lambda/pricing/), [S3 current and noncurrent full-object versions, requests, and data transfer](https://aws.amazon.com/s3/pricing/), [Parameter Store tier and higher-throughput requests](https://aws.amazon.com/systems-manager/pricing/), any [customer-managed KMS key and API use](https://aws.amazon.com/kms/pricing/), [Scheduler invocations](https://aws.amazon.com/eventbridge/pricing/), and [CloudWatch log ingestion and storage](https://aws.amazon.com/cloudwatch/pricing/).
    At one run per day, estimate roughly 30 S3 reads and 30 full database versions per month, plus retries and manual runs; [S3 Versioning bills each full version](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html).
    Use S3 Standard for the frequently read current object, SSE-S3, blocked public access, bucket-owner-enforced ACLs, HTTPS-only bucket access, and a narrowly scoped Lambda role.
