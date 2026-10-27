@@ -1,6 +1,6 @@
 # RC-11: Daily run on AWS Lambda
 
-**Status:** Draft
+**Status:** Approved
 **Backlog item:** RC-11 in `docs/BACKLOG.md`
 
 ## Summary
@@ -71,7 +71,7 @@ The runner must not call `db.init_db()` or `db.seed_from_catalog()` on the produ
 For first deployment, the user stops all local RainCheck jobs, makes a local SQLite `.backup` of the existing database, runs any then-current migration through the documented backup-first procedure for that feature, and confirms integrity, `PRAGMA foreign_key_check`, and `PRAGMA user_version = db.SCHEMA_VERSION` against the exact release to deploy.
 Only then does the user upload the verified database to the private bucket and check the downloaded object before enabling the schedule.
 No agent reads or copies the user's real `src/raincheck.db` as part of this feature.
-Use S3 versioning for recovery, with a documented noncurrent-version lifecycle retention choice.
+Use S3 versioning for recovery and expire noncurrent database versions after 30 days.
 
 ### Interfaces
 
@@ -109,7 +109,7 @@ Use S3 versioning for recovery, with a documented noncurrent-version lifecycle r
 - Use a Python runtime supported by AWS SAM, a zip deployment with pinned dependencies including `boto3`, no VPC attachment, default 512 MB `/tmp` unless measured database size requires more, and a timeout below Lambda's 15-minute limit.
   Without a VPC, the function has public internet access without a NAT Gateway; actual Yahoo and SMTP reachability still need live verification.
   The handler should not rely on the runtime's incidental `boto3` version.
-- Use a daily Scheduler expression with a named time zone and flexible window disabled.
+- Run the daily Scheduler at 09:00 `Asia/Tokyo`, with flexible window disabled.
   Keep the schedule disabled until the CloudShell gate, parameter setup, backup-first upload, and a dry-run invocation have passed.
 
 Current AWS documentation confirms Lambda `/tmp` is ephemeral and configurable from 512 MB ([Lambda ephemeral storage](https://docs.aws.amazon.com/lambda/latest/dg/configuration-ephemeral-storage.html)); SAM supports disabled, time-zone-aware `ScheduleV2` schedules ([SAM ScheduleV2](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-property-function-schedulev2.html)); Lambda may retry asynchronous deliveries even when application retries are disabled ([Lambda asynchronous retries](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html)); and S3 `PutObject` supports an `If-Match` conditional write with 412 and 409 failure modes ([S3 PutObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html)).
@@ -120,7 +120,7 @@ AWS recommends bundling `boto3` with its dependencies for a stable Python Lambda
 1. The CloudShell gate records the selected Region and, for each active Yahoo brand ID, the HTTP status, presence of the expected `__NEXT_DATA__` listing path, and number of valid records without printing titles, credentials, or page HTML.
 2. Any intended brand's CloudShell 403, 429, timeout, missing expected path, or zero valid records is a no-go; RC-11b and RC-11c do not proceed until the cause is resolved or the user approves a revised architecture.
 3. An empty or malformed handler event cannot redirect storage, parameters, or Region; only configured names are used.
-4. Missing S3 object, wrong schema version 4 at the time of this draft, failed `PRAGMA integrity_check`, failed `PRAGMA foreign_key_check`, or size beyond configured `/tmp` capacity stops before eBay, Yahoo, or SMTP and leaves the S3 object unchanged.
+4. Missing S3 object, a schema version different from `db.SCHEMA_VERSION`, failed `PRAGMA integrity_check`, failed `PRAGMA foreign_key_check`, or size beyond configured `/tmp` capacity stops before eBay, Yahoo, or SMTP and leaves the S3 object unchanged.
 5. The handler sets a unique `RAINCHECK_DB_PATH` per invocation and removes its temporary directory after completion, including failures.
 6. The S3 download body and all SQLite connections opened by the handler are closed on success and failure.
 7. Required SSM parameters are fetched with decryption and a blank or missing required value prevents both jobs and an S3 upload.
@@ -136,9 +136,9 @@ AWS recommends bundling `boto3` with its dependencies for a stable Python Lambda
 16. Before each upload, a separate `Connection.backup()` snapshot passes SQLite integrity, foreign-key, and schema checks, and no WAL sidecar is uploaded.
    A fixture in WAL mode with committed changes present only in the WAL verifies that the uploaded standalone snapshot includes those changes.
 17. The SAM template defines only `us-east-2` resources; deployment documentation rejects another selected Region.
-18. The S3 bucket blocks public access, disables ACLs, encrypts objects at rest, enables versioning, and has a documented noncurrent-version lifecycle policy.
+18. The S3 bucket blocks public access, disables ACLs, encrypts objects at rest, enables versioning, and expires noncurrent database versions after 30 days.
 19. The Lambda execution role can read and conditionally write only the designated database object, call SSM `GetParameter` only for the named parameters, and write only its logs; it cannot list the whole bucket or read unrelated parameters.
-20. The schedule is disabled by default, daily at the approved local time zone, and has explicit bounded delivery retry attempts and maximum event age; Lambda function-error retries are zero.
+20. The schedule is disabled by default, runs daily at 09:00 `Asia/Tokyo` with flexible window off, and has explicit bounded delivery retry attempts and maximum event age; Lambda function-error retries are zero.
 21. Reserved concurrency is one, there is no public Lambda URL or API endpoint, and the function is not placed in a VPC.
 22. The deployment package contains the handler, application modules, and pinned third-party dependencies, including `boto3`; it contains no `.env`, database, test fixture, or secret.
 23. The documented preflight checks the CloudShell result for every intended brand, selected Region, parameter presence without exposing values, database backup and integrity, and S3 object version before the schedule is enabled.
@@ -176,6 +176,22 @@ AWS recommends bundling `boto3` with its dependencies for a stable Python Lambda
 No schema or catalog edits are planned.
 `src/db.py` is reused but not edited; if implementation reveals a needed DB change, pause for a spec amendment and do not run it alongside another schema or database feature.
 RC-11c changes `template.yaml`, so RC-12's alarm and budget work must wait until RC-11c is merged.
+
+## Resolved
+
+On 2026-10-27, the user approved the recommended RC-11 policy:
+
+- Run daily at 09:00 `Asia/Tokyo`, with the Scheduler flexible window disabled.
+  This is 17:00 or 16:00 on the US Pacific coast depending on daylight saving time; the current digest date uses Lambda's UTC local date.
+- If eBay pricing partially fails or token acquisition fails, run Yahoo using saved prices and manual fallbacks, persist valid changes, and report the overall invocation as failed.
+  The deal threshold can therefore use an older saved price.
+- Keep S3 versioning and expire noncurrent database versions after 30 days, while retaining the user's separate local backup.
+  Longer retention would improve recovery from an unnoticed bad write at additional storage cost.
+- Use standard-tier SSM SecureString with the AWS-managed `aws/ssm` key and scope the Lambda role to `ssm:GetParameter` on the named parameter ARNs.
+  The AWS-managed key does not provide parameter-specific key-level decrypt isolation; use a customer-managed key if different workloads later require different decrypt rights.
+
+Approval authorizes the spec and local implementation only after the CloudShell feasibility gate passes.
+It does not authorize AWS resource creation, a production database upload, or enabling the schedule.
 
 ## Open questions
 
@@ -241,18 +257,7 @@ RC-11c changes `template.yaml`, so RC-12's alarm and budget work must wait until
 
    CloudShell has documented public-internet egress ([CloudShell limits](https://docs.aws.amazon.com/cloudshell/latest/userguide/limits.html)), but Yahoo may still block its addresses.
    A pass from CloudShell is necessary for this plan, yet it does not guarantee Lambda's egress or HTML shape forever.
-2. **Daily time:** Recommendation: 09:00 `Asia/Tokyo`, with flexible window off so the Japanese auction page is checked in its local morning.
-   Tradeoff: that is 17:00 or 16:00 on the US Pacific coast depending on daylight saving time, and the current digest date uses Lambda's UTC local date.
-   The user should choose the time and zone before RC-11c.
-3. **Partial eBay failure:** Recommendation: still run Yahoo using the last saved or manual prices, persist any healthy state, and fail the invocation for monitoring.
-   Tradeoff: the Yahoo deal threshold may be based on an older price, but skipping Yahoo entirely would lose a day of deal detection.
-4. **Database backup retention:** Recommendation: keep S3 versioning and expire noncurrent database versions after 30 days, with the user's separate local backup retained.
-   Tradeoff: longer retention improves recovery from unnoticed bad writes but increases storage cost.
-5. **Secrets key choice:** Recommendation: standard-tier SSM SecureString using the AWS-managed `aws/ssm` key for this small personal project, with the Lambda role allowed to call `ssm:GetParameter` only on the named parameter ARNs.
-   This avoids the monthly customer-managed-key charge and key-policy setup; standard Parameter Store has no additional parameter charge, though KMS API requests can still be billed ([Parameter Store overview](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html), [AWS KMS pricing](https://aws.amazon.com/kms/pricing/)).
-   Tradeoff: AWS says the `aws/ssm` key's decrypt permission is available to all IAM principals in the project, so it cannot provide parameter-specific key-level isolation.
-   If other workloads or team members later need different decrypt rights, switch the sensitive parameters to a customer-managed key and scope its decrypt policy before sharing access ([SSM decryption guidance](https://docs.aws.amazon.com/systems-manager/latest/userguide/ps-restrict-decryption.html)).
-6. **Deployment authorization and cost:** The spec can be approved and code can be tested locally without granting AWS deployment permission.
+2. **Deployment authorization and cost:** The spec is approved, but AWS deployment requires separate user authorization after review of the SAM change set.
    Before creating resources or uploading the production database, the user should review the SAM change set and cost categories: [Lambda requests, duration, and extra `/tmp` allocation](https://aws.amazon.com/lambda/pricing/), [S3 current and noncurrent full-object versions, requests, and data transfer](https://aws.amazon.com/s3/pricing/), [Parameter Store tier and higher-throughput requests](https://aws.amazon.com/systems-manager/pricing/), any [customer-managed KMS key and API use](https://aws.amazon.com/kms/pricing/), [Scheduler invocations](https://aws.amazon.com/eventbridge/pricing/), and [CloudWatch log ingestion and storage](https://aws.amazon.com/cloudwatch/pricing/).
    At one run per day, estimate roughly 30 S3 reads and 30 full database versions per month, plus retries and manual runs; [S3 Versioning bills each full version](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html).
    Use S3 Standard for the frequently read current object, SSE-S3, blocked public access, bucket-owner-enforced ACLs, HTTPS-only bucket access, and a narrowly scoped Lambda role.
