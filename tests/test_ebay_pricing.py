@@ -393,7 +393,9 @@ def test_rc10_c9_c10_http_500_isolates_item_and_continues_later_items(
     db_conn.commit()
     result = ebay_pricing.refresh_market_prices()
     assert _stored(db_conn) == {"rick owens ramones": 120.0, "pod shorts": 765.0}
-    assert query_http.queries() == ["rick owens ramones", "pod shorts"]
+    assert query_http.queries() == [
+        "rick owens ramones", "pod shorts", "pod shorts", "pod shorts",
+    ]
     assert db_conn.execute(
         "SELECT COUNT(*) FROM ebay_listing_prices WHERE item_id = ?",
         (db.get_item_id("Rick Owens", "rick owens ramones"),),
@@ -452,7 +454,9 @@ def test_rc10_c10_third_item_after_failure_is_searched_and_committed(
 
     result = ebay_pricing.refresh_market_prices()
 
-    assert query_http.queries() == ["rick owens ramones", "pod shorts", "boots"]
+    assert query_http.queries() == [
+        "rick owens ramones", "pod shorts", "pod shorts", "pod shorts", "boots",
+    ]
     assert result.succeeded_item_ids == (db.get_item_id("Rick Owens", "rick owens ramones"), boots_id)
     assert result.failed_item_ids == (db.get_item_id("Rick Owens", "pod shorts"),)
     assert result.had_failure is True

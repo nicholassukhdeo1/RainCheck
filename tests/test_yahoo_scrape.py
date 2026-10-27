@@ -992,6 +992,7 @@ def test_rc15_c50_dry_run_end_to_end_prints_whole_digest_and_records(
     yahoo_http, seeded_db, monkeypatch, capsys, caplog
 ):
     import smtplib
+    caplog.set_level("INFO", logger="yahoo_scrape")
 
     def boom(*args, **kwargs):
         raise AssertionError("smtplib.SMTP must not be constructed in dry run")
@@ -1329,7 +1330,7 @@ def test_rc15_c57_main_sends_one_digest_with_the_valid_deal(kwargs, fake_http, s
     assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings")] == [URL_1]
 
 
-def test_rc15_insert_failure_after_send_propagates_and_next_run_sends_only_the_rest(
+def test_rc10_c21_c22_batch_failure_rolls_back_then_next_run_resends_all_deals(
     yahoo_http, seeded_db, monkeypatch
 ):
     delivered = []
@@ -1339,25 +1340,26 @@ def test_rc15_insert_failure_after_send_propagates_and_next_run_sends_only_the_r
         return True
 
     monkeypatch.setattr(yahoo_scrape, "send_email", ok_send)
-    real_record_match = yahoo_scrape.record_listing_match
+    real_record_matches = db.record_listing_matches
     calls = []
 
-    def flaky_record_match(*args, **kwargs):
-        calls.append(args[1])
-        if len(calls) == 2:
+    def fail_first_batch(deals):
+        calls.append(tuple(deals))
+        if len(calls) == 1:
             raise RuntimeError("database is locked")
-        return real_record_match(*args, **kwargs)
+        return real_record_matches(deals)
 
-    monkeypatch.setattr(yahoo_scrape, "record_listing_match", flaky_record_match)
-    with pytest.raises(RuntimeError, match="database is locked"):
+    monkeypatch.setattr(db, "record_listing_matches", fail_first_batch)
+    with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
+    assert exc.value.code == 1
     assert len(delivered) == 1
-    assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings")] == [URL_1]
+    assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings")] == []
 
-    monkeypatch.setattr(yahoo_scrape, "record_listing_match", real_record_match)
     yahoo_scrape.main()
     assert len(delivered) == 2
-    assert _row_urls(delivered[1]) == [URL_4]
+    assert _row_urls(delivered[1]) == [URL_1, URL_4]
+    assert _row_urls(delivered[0]) == _row_urls(delivered[1])
     assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")] == [URL_1, URL_4]
 
 
