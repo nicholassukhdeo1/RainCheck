@@ -225,6 +225,8 @@ Check that the artifact contains only the nine runtime files from `src/`, with n
 
    Set `BUCKET` and `KEY` from the production stack outputs, and set `BACKUP_PATH` to the verified SQLite backup outside the repository.
    The commands stop if any of these values is missing or a database check fails, and the downloaded copy is removed when the shell exits.
+   The first upload creates the object only when its key is absent.
+   An S3 412 response means an object already exists at that key; stop and inspect it, and do not retry with an unconditional upload.
 
    ```bash
    set -eu
@@ -234,12 +236,16 @@ Check that the artifact contains only the nine runtime files from `src/`, with n
    test -f "$BACKUP_PATH"
    EXPECTED_SCHEMA="$(PYTHONPATH=src python3 -c 'import db; print(db.SCHEMA_VERSION)')"
    check_sqlite() {
-       test "$(sqlite3 "$1" 'PRAGMA integrity_check;')" = ok
-       test -z "$(sqlite3 "$1" 'PRAGMA foreign_key_check;')"
-       test "$(sqlite3 "$1" 'PRAGMA user_version;')" = "$EXPECTED_SCHEMA"
+       local result
+       result="$(sqlite3 "$1" 'PRAGMA integrity_check;')" || return 1
+       test "$result" = ok || return 1
+       result="$(sqlite3 "$1" 'PRAGMA foreign_key_check;')" || return 1
+       test -z "$result" || return 1
+       result="$(sqlite3 "$1" 'PRAGMA user_version;')" || return 1
+       test "$result" = "$EXPECTED_SCHEMA"
    }
    check_sqlite "$BACKUP_PATH"
-   VERSION_ID="$(aws s3api put-object --bucket "$BUCKET" --key "$KEY" --body "$BACKUP_PATH" --server-side-encryption AES256 --region us-east-2 --query VersionId --output text)"
+   VERSION_ID="$(aws s3api put-object --bucket "$BUCKET" --key "$KEY" --body "$BACKUP_PATH" --if-none-match '*' --server-side-encryption AES256 --region us-east-2 --query VersionId --output text)"
    case "$VERSION_ID" in ''|None|null) echo 'S3 did not return a version ID' >&2; exit 1;; esac
    DOWNLOAD_PATH="$(mktemp "${TMPDIR:-/tmp}/raincheck-s3-verify.XXXXXX")"
    trap 'rm -f "$DOWNLOAD_PATH"' EXIT
