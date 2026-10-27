@@ -1,6 +1,6 @@
 # RC-13: Multi-brand support
 
-**Status:** Draft
+**Status:** Approved
 **Backlog item:** RC-13 in `docs/BACKLOG.md`
 
 ## Summary
@@ -165,18 +165,12 @@ RC-16 must be merged first; this spec assumes its schema version 3 and auction-a
 
 ## Open questions
 
-1. Should changing a stored Yahoo ID for an existing brand through the catalog be rejected?
-   Recommendation: reject it transactionally, as specified above, and add a deliberate correction command later if needed.
-   Tradeoff: this protects historical brand attribution and catches pasted IDs, but fixing a genuine ID typo requires a separate controlled operation.
-2. Should the catalog repeat `yahoo_brand_id` on every item, or have a separate brand registry?
-   Recommendation: repeat it on every item and validate consistency, as specified above, to preserve the existing flat catalog format.
-   Tradeoff: repeated values are easy to mistype, while a separate registry adds a second structure and migration path for a small catalog.
-3. Should one brand's failed page suppress the whole digest for that run?
-   Recommendation: yes, as specified above, to avoid a successful-looking partial digest and to preserve the existing all-or-nothing failure signal.
-   Tradeoff: a failing brand delays alerts from healthy brands until the next successful run.
-4. Should the seed command itself gain a built-in preview and preservation gate before writing to the real database?
-   Recommendation: defer that interface to RC-14's item-management command and use the explicit backup, preview-copy, row-comparison, and review procedure above for RC-13.
-   Tradeoff: this keeps RC-13 focused and avoids changing seeding semantics in the same pull request, but adding a brand requires careful manual review until RC-14 provides a safer command.
+None.
+
+## Resolved
+
+- 2026-10-27: The user approved the recommended RC-13 spec.
+  A stored Yahoo brand ID cannot be changed through catalog seeding; the ID is repeated and validated on each flat catalog entry; one failed brand page stops the whole digest; and a built-in seed preview or preservation gate is deferred to RC-14.
 
 ## Rollback
 
