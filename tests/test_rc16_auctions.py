@@ -266,7 +266,12 @@ def test_rc16_c12_c13_parser_keeps_untrusted_metadata_unknown(
 
 @pytest.mark.parametrize("bad", [0, -1, True, 1.5, "90000"])
 def test_rc16_c12_parser_skips_invalid_non_null_buy_now_amount(bad):
-    assert yahoo_scrape.parse_listings(_page([_record(buyNowPrice=bad)])) == []
+    parsed = yahoo_scrape.parse_listings(_page([
+        _record("t9000000001", buyNowPrice=bad),
+        _record("t9000000002", buyNowPrice=90000),
+    ]))
+    assert [listing.auction_id for listing in parsed] == ["t9000000002"]
+    assert parsed[0].buy_now_price_yen == 90000
 
 
 def test_rc16_c6_c7_fixed_price_uses_validated_purchase_amount_or_current_price():
