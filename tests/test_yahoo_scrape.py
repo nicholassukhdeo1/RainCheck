@@ -25,6 +25,15 @@ URL_4 = "https://auctions.yahoo.co.jp/jp/auction/t1000000004"
 X1 = "https://auctions.yahoo.co.jp/jp/auction/x1000000001"
 X3 = "https://auctions.yahoo.co.jp/jp/auction/x1000000003"
 Z2 = "https://paypayfleamarket.yahoo.co.jp/item/z1000000002"
+FRANKFURTER_URL = "https://api.frankfurter.dev/v2/rate/jpy/usd"
+
+
+def _add_rate_response(fake_http, rate=0.0062, published="2026-10-27", status=200):
+    fake_http.add(
+        "GET", FRANKFURTER_URL,
+        json={"date": published, "base": "JPY", "quote": "USD", "rate": rate},
+        status=status,
+    )
 
 
 def _html(fixtures_dir, name):
@@ -42,8 +51,10 @@ def malformed_listings(fixtures_dir):
 
 
 @pytest.fixture
-def yahoo_http(fake_http, fixtures_dir):
+def yahoo_http(fake_http, fixtures_dir, monkeypatch):
     fake_http.add("GET", RICK_OWENS_URL, text=_html(fixtures_dir, "brand_page_minimal.html"))
+    _add_rate_response(fake_http)
+    _freeze_rc05_clock(monkeypatch, datetime(2026, 10, 27, tzinfo=timezone.utc))
     return fake_http
 
 
@@ -108,7 +119,7 @@ def test_rc15_c1_find_item_deals_returns_both_deals_best_first_with_full_fields(
 ):
     from digest import Deal
 
-    deals = yahoo_scrape.find_item_deals(ramones_item, minimal_listings, set())
+    deals = yahoo_scrape.find_item_deals(ramones_item, minimal_listings, set(), 0.0062)
     assert [d.url for d in deals] == [URL_1, URL_4]
     assert all(isinstance(d, Deal) for d in deals)
     first, second = deals
@@ -124,19 +135,19 @@ def test_rc15_c1_find_item_deals_returns_both_deals_best_first_with_full_fields(
 
 
 def test_rc15_c2_skip_urls_are_excluded(ramones_item, minimal_listings):
-    deals = yahoo_scrape.find_item_deals(ramones_item, minimal_listings, {URL_1})
+    deals = yahoo_scrape.find_item_deals(ramones_item, minimal_listings, {URL_1}, 0.0062)
     assert [d.url for d in deals] == [URL_4]
 
 
 def test_rc15_c3_exclude_keywords_from_the_item_apply(ramones_item, minimal_listings):
     item = dataclasses.replace(ramones_item, exclude_keywords=("high",))
-    assert [d.url for d in yahoo_scrape.find_item_deals(item, minimal_listings, set())] == [URL_4]
+    assert [d.url for d in yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062)] == [URL_4]
 
 
 def test_rc15_c4_effective_price_drives_the_deal_math(ramones_item, minimal_listings):
     item = dataclasses.replace(ramones_item, market_price_usd=400.0)
     assert item.effective_price_usd == 400.0
-    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set())
+    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062)
     assert [d.url for d in deals] == [URL_1]
     assert deals[0].discount_pct == pytest.approx(22.5)
     assert deals[0].market_price_usd == 400.0
@@ -146,29 +157,29 @@ def test_rc15_c5_no_usable_price_returns_empty_and_prints_nothing(
     ramones_item, minimal_listings, capsys
 ):
     item = dataclasses.replace(ramones_item, market_price_usd=None, manual_price_usd=None)
-    assert yahoo_scrape.find_item_deals(item, minimal_listings, set()) == []
+    assert yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062) == []
     captured = capsys.readouterr()
     assert captured.out == "" and captured.err == ""
 
 
 def test_rc15_c6_a_listing_exactly_at_market_is_not_a_deal(ramones_item, minimal_listings):
     item = dataclasses.replace(ramones_item, market_price_usd=310.0)
-    assert [d.url for d in yahoo_scrape.find_item_deals(item, minimal_listings, set())] == []
+    assert [d.url for d in yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062)] == []
     # strictly above market is not a deal either
     item = dataclasses.replace(ramones_item, market_price_usd=300.0)
-    assert yahoo_scrape.find_item_deals(item, minimal_listings, set()) == []
+    assert yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062) == []
 
 
 def test_rc15_c7_equal_discounts_keep_input_order():
     listings = [inline_listing(1, "Ramones A", 20000), inline_listing(2, "Ramones B", 20000),
                 inline_listing(3, "Ramones C", 20000)]
-    deals = yahoo_scrape.find_item_deals(inline_item(), listings, set())
+    deals = yahoo_scrape.find_item_deals(inline_item(), listings, set(), 0.0062)
     assert [d.title for d in deals] == ["Ramones A", "Ramones B", "Ramones C"]
 
 
 def test_rc15_c8_brand_comes_from_the_item_not_a_name_lookup(ramones_item, minimal_listings):
     item = dataclasses.replace(ramones_item, brand="Not In Database")
-    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set())
+    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062)
     assert [d.url for d in deals] == [URL_1, URL_4]
     assert {d.brand_id for d in deals} == {ramones_item.brand_id}
 
@@ -181,8 +192,8 @@ def test_rc15_c9_pure_functions_need_no_database(tmp_path):
         inline_item(2, "pod shorts", keywords=("pod short", "pod shorts"), price=300.0),
     ]
     listings = [inline_listing(1, yen=20000), inline_listing(2, "Rick Owens Pod Shorts", 10000)]
-    deals = yahoo_scrape.find_item_deals(items[0], listings, set())
-    sections = yahoo_scrape.build_sections(items, listings, set())
+    deals = yahoo_scrape.find_item_deals(items[0], listings, set(), 0.0062)
+    sections = yahoo_scrape.build_sections(items, listings, set(), 0.0062)
     assert [d.url for d in deals] == [f"{AUCTION}t1"]
     assert [s.item_name for s in sections] == ["rick owens ramones", "pod shorts"]
     assert not path.exists()
@@ -194,7 +205,7 @@ def test_rc15_c9_pure_functions_need_no_database(tmp_path):
 def test_rc15_c10_top_five_per_item_best_discount_first_with_not_shown_count():
     from digest import ItemDeals
 
-    sections = yahoo_scrape.build_sections([inline_item()], seven_ramones_listings(), set())
+    sections = yahoo_scrape.build_sections([inline_item()], seven_ramones_listings(), set(), 0.0062)
     assert len(sections) == 1
     sec = sections[0]
     assert isinstance(sec, ItemDeals)
@@ -206,7 +217,9 @@ def test_rc15_c10_top_five_per_item_best_discount_first_with_not_shown_count():
 
 def test_rc15_c10_default_limit_is_five_and_limit_is_adjustable():
     assert yahoo_scrape.TOP_DEALS_PER_ITEM == 5
-    sec = yahoo_scrape.build_sections([inline_item()], seven_ramones_listings(), set(), per_item_limit=2)[0]
+    sec = yahoo_scrape.build_sections(
+        [inline_item()], seven_ramones_listings(), set(), 0.0062, per_item_limit=2
+    )[0]
     assert len(sec.deals) == 2 and sec.not_shown == 5
 
 
@@ -214,7 +227,7 @@ def test_rc15_c11_a_listing_that_is_a_deal_for_two_items_appears_only_under_the_
     first = inline_item(1, "first", keywords=("ramones",))
     second = inline_item(2, "second", keywords=("ramones",))
     listings = [inline_listing(1, yen=20000)]
-    sections = yahoo_scrape.build_sections([first, second], listings, set())
+    sections = yahoo_scrape.build_sections([first, second], listings, set(), 0.0062)
     assert [s.item_name for s in sections] == ["first"]
 
 
@@ -225,7 +238,9 @@ def test_rc15_c11_claim_holds_even_when_the_first_section_cut_the_listing():
         inline_listing(1, "Rick Owens Ramones High", 10000),
         inline_listing(2, "Rick Owens Ramones Sneakers", 20000),
     ]
-    sections = yahoo_scrape.build_sections([first, second], listings, set(), per_item_limit=1)
+    sections = yahoo_scrape.build_sections(
+        [first, second], listings, set(), 0.0062, per_item_limit=1
+    )
     assert [s.item_name for s in sections] == ["first"]
     assert [d.url for d in sections[0].deals] == [f"{AUCTION}t1"]
     assert sections[0].not_shown == 1
@@ -235,7 +250,7 @@ def test_rc15_c11_second_item_keeps_its_other_deals():
     first = inline_item(1, "first", keywords=("ramones",))
     second = inline_item(2, "second", keywords=("ramones", "geobasket"))
     listings = [inline_listing(1, "Ramones A", 20000), inline_listing(2, "Geobasket B", 30000)]
-    sections = yahoo_scrape.build_sections([first, second], listings, set())
+    sections = yahoo_scrape.build_sections([first, second], listings, set(), 0.0062)
     assert [(s.item_name, [d.title for d in s.deals]) for s in sections] == [
         ("first", ["Ramones A"]), ("second", ["Geobasket B"]),
     ]
@@ -249,21 +264,194 @@ def test_rc15_c12_items_without_deals_or_price_make_no_section_and_order_is_inpu
         inline_item(4, "last", keywords=("geobasket",)),
     ]
     listings = [inline_listing(1, "Ramones A", 20000), inline_listing(2, "Geobasket B", 30000)]
-    sections = yahoo_scrape.build_sections(items, listings, set())
+    sections = yahoo_scrape.build_sections(items, listings, set(), 0.0062)
     assert [s.item_name for s in sections] == ["first", "last"]
 
 
 def test_rc15_c13_known_urls_are_in_no_section():
     listings = [inline_listing(1, yen=20000), inline_listing(2, yen=30000)]
-    sections = yahoo_scrape.build_sections([inline_item()], listings, {f"{AUCTION}t1"})
+    sections = yahoo_scrape.build_sections([inline_item()], listings, {f"{AUCTION}t1"}, 0.0062)
     assert [d.url for s in sections for d in s.deals] == [f"{AUCTION}t2"]
-    assert yahoo_scrape.build_sections([inline_item()], listings, {f"{AUCTION}t1", f"{AUCTION}t2"}) == []
+    assert yahoo_scrape.build_sections(
+        [inline_item()], listings, {f"{AUCTION}t1", f"{AUCTION}t2"}, 0.0062
+    ) == []
 
 
 def test_rc15_c13_known_urls_may_be_any_collection():
     listings = [inline_listing(1, yen=20000)]
     for known in ([f"{AUCTION}t1"], (f"{AUCTION}t1",), frozenset({f"{AUCTION}t1"})):
-        assert yahoo_scrape.build_sections([inline_item()], listings, known) == []
+        assert yahoo_scrape.build_sections([inline_item()], listings, known, 0.0062) == []
+
+
+# ---- RC-08 exchange-rate resolution and pure conversion ----------------------------
+
+
+def test_rc08_c1_fetches_one_valid_pair_with_status_check_and_ten_second_timeout(fake_http):
+    _add_rate_response(fake_http, rate=0.0067)
+    assert yahoo_scrape.fetch_yen_to_usd_rate(date(2026, 10, 27)) == pytest.approx(0.0067)
+    assert len(fake_http.calls) == 1
+    method, url, kwargs = fake_http.calls[0]
+    assert (method, url) == ("GET", FRANKFURTER_URL)
+    assert kwargs.get("timeout") == 10
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"date": "2026-10-27", "base": "JPY", "quote": "USD", "rate": None},
+        {"date": "2026-10-27", "base": "JPY", "quote": "USD", "rate": "0.0067"},
+        {"date": "2026-10-27", "base": "JPY", "quote": "USD", "rate": True},
+        {"date": "2026-10-27", "base": "JPY", "quote": "USD", "rate": 0},
+        {"date": "2026-10-27", "base": "JPY", "quote": "USD", "rate": -0.1},
+        {"date": "2026-10-27", "base": "JPY", "quote": "USD", "rate": float("nan")},
+        {"date": "2026-10-27", "base": "JPY", "quote": "USD", "rate": float("inf")},
+        {"date": "2026-10-27", "base": "JPY", "quote": "USD"},
+        {"date": "2026-10-27", "base": "USD", "quote": "JPY", "rate": 0.0067},
+        {"date": "2026-10-27", "quote": "USD", "rate": 0.0067},
+        {"date": "2026-10-27", "base": "JPY", "rate": 0.0067},
+        {"date": "not-a-date", "base": "JPY", "quote": "USD", "rate": 0.0067},
+        {"base": "JPY", "quote": "USD", "rate": 0.0067},
+        ["not", "an", "object"],
+    ],
+    ids=["null", "string", "boolean", "zero", "negative", "nan", "infinite", "missing-rate", "wrong-pair", "missing-base", "missing-quote", "bad-date", "missing-date", "non-object"],
+)
+def test_rc08_c4_c5_bad_exchange_data_uses_fallback_and_warns_once(body, fake_http, caplog):
+    import logging
+
+    fake_http.add("GET", FRANKFURTER_URL, json=body)
+    with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
+        rate = yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27))
+    assert rate == 0.0062
+    warnings = [record for record in caplog.records if record.name == "yahoo_scrape"]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage().lower()
+    assert "jpy" in message and "usd" in message and "0.0062" in message
+
+
+@pytest.mark.parametrize("published", ["2026-10-20", "2026-10-19", "2026-10-28"])
+def test_rc08_c4_freshness_boundary_is_seven_days_inclusive(published, fake_http):
+    _add_rate_response(fake_http, rate=0.0067, published=published)
+    rate = yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27))
+    assert rate == (0.0067 if published == "2026-10-20" else 0.0062)
+
+
+@pytest.mark.parametrize("failure", [requests.Timeout("slow"), requests.ConnectionError("offline")])
+def test_rc08_c6_provider_transport_failure_falls_back_and_warns(failure, monkeypatch, caplog):
+    import logging
+
+    def fail_get(url, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(requests, "get", fail_get)
+    with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
+        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.0062
+    warnings = [record for record in caplog.records if record.name == "yahoo_scrape"]
+    assert len(warnings) == 1
+    assert "0.0062" in warnings[0].getMessage()
+
+
+@pytest.mark.parametrize("rate", [None, True, False, 0, -1, float("nan"), float("inf"), "0.0067"])
+def test_rc08_c9_pure_deal_functions_reject_invalid_supplied_rates(rate):
+    listings = [inline_listing(1, yen=50000)]
+    with pytest.raises(ValueError):
+        yahoo_scrape.find_item_deals(inline_item(), listings, set(), rate)
+    with pytest.raises(ValueError):
+        yahoo_scrape.build_sections([inline_item()], listings, set(), rate)
+
+
+@pytest.mark.parametrize(
+    "rate,price,discount", [(0.0067, 335.0, 58.125), (0.0062, 310.0, 61.25)]
+)
+def test_rc08_c3_pure_conversion_uses_only_explicit_rate(rate, price, discount, monkeypatch):
+    def no_network(*args, **kwargs):
+        raise AssertionError("pure deal calculation attempted network access")
+
+    monkeypatch.setattr(requests, "get", no_network)
+    item = inline_item(price=800.0)
+    deals = yahoo_scrape.find_item_deals(item, [inline_listing(1, yen=50000)], set(), rate)
+    assert deals[0].price_usd == pytest.approx(price)
+    assert deals[0].discount_pct == pytest.approx(discount)
+    sections = yahoo_scrape.build_sections(
+        [item], [inline_listing(1, yen=50000)], set(), rate
+    )
+    assert sections[0].deals[0].price_usd == pytest.approx(price)
+
+
+def test_rc08_c10_rate_change_can_move_listing_across_deal_threshold():
+    item = inline_item(price=800.0)
+    listing = inline_listing(1, yen=120000)
+    assert yahoo_scrape.find_item_deals(item, [listing], set(), 0.0067) == []
+    deals_at_fallback = yahoo_scrape.find_item_deals(item, [listing], set(), 0.0062)
+    assert len(deals_at_fallback) == 1
+    assert deals_at_fallback[0].price_usd == pytest.approx(744.0)
+
+
+def test_rc08_c2_one_fetched_rate_drives_all_items_and_digest_values(
+    yahoo_http, seeded_db, sent_emails, monkeypatch, db_conn
+):
+    _add_rate_response(yahoo_http, rate=0.0067, published="2026-10-27")
+    monkeypatch.setattr(
+        yahoo_scrape,
+        "parse_listings",
+        lambda html: [
+            inline_listing(1, "Rick Owens Ramones High", 50000),
+            inline_listing(2, "Rick Owens Pod Shorts", 10000),
+        ],
+    )
+    observed_at = datetime(2026, 10, 27, tzinfo=timezone.utc)
+    _freeze_rc05_clock(monkeypatch, observed_at)
+
+    yahoo_scrape.main()
+
+    rate_calls = [call for call in yahoo_http.calls if call[1] == FRANKFURTER_URL]
+    assert len(rate_calls) == 1
+    assert len(sent_emails) == 1
+    html = sent_emails[0][1]
+    assert "$335.00" in html and "$67.00" in html
+    assert "58.1% off" in html and "77.7% off" in html
+    assert [row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")] == [
+        f"{AUCTION}t1", f"{AUCTION}t2"
+    ]
+
+
+def test_rc08_c6_provider_http_failure_warns_but_digest_and_records_still_happen(
+    yahoo_http, seeded_db, sent_emails, db_conn, caplog
+):
+    import logging
+
+    _add_rate_response(yahoo_http, status=503)
+    with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
+        yahoo_scrape.main()
+    warnings = [record for record in caplog.records if record.name == "yahoo_scrape"]
+    assert len(warnings) == 1
+    assert "0.0062" in warnings[0].getMessage()
+    assert len(sent_emails) == 1
+    assert "$310.00" in sent_emails[0][1]
+    assert [row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")] == [
+        URL_1, URL_4
+    ]
+    assert len([call for call in yahoo_http.calls if call[1] == FRANKFURTER_URL]) == 1
+
+
+@pytest.mark.parametrize("status", [400, 500])
+def test_rc08_c6_http_error_uses_fallback_without_traceback(status, fake_http, caplog):
+    import logging
+
+    fake_http.add("GET", FRANKFURTER_URL, status=status)
+    with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
+        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.0062
+    warnings = [record for record in caplog.records if record.name == "yahoo_scrape"]
+    assert len(warnings) == 1
+    assert warnings[0].exc_info is None
+
+
+def test_rc08_c5_invalid_json_uses_fallback(fake_http, caplog):
+    import logging
+
+    fake_http.add("GET", FRANKFURTER_URL, text="not json")
+    with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
+        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.0062
+    assert len([record for record in caplog.records if record.name == "yahoo_scrape"]) == 1
 
 
 # ---- Pipeline through main() (criteria 39-47) --------------------------------------
@@ -310,6 +498,7 @@ def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
     fake_http, fixtures_dir, seeded_db, sent_emails, db_conn
 ):
     fake_http.add("GET", RICK_OWENS_URL, text=_html(fixtures_dir, "brand_page_malformed.html"))
+    _add_rate_response(fake_http)
     yahoo_scrape.main()
     rows = {r["url"]: r for r in _rows(db_conn)}
     assert set(rows) == {X1, Z2, X3}
@@ -329,6 +518,7 @@ def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
     ]
     # 76.75 is exact in binary, and format() rounds the tie to even, so this is always 76.8
     assert discounts == ["84.5% off", "76.8% off", "69.0% off"]
+    assert len([call for call in fake_http.calls if call[1] == FRANKFURTER_URL]) == 1
 
 
 def test_rc07_c25_null_market_price_skips_item(
@@ -382,6 +572,7 @@ def test_rc04_digest_persists_deal_association_for_each_item(
         "Rick Owens Geobasket 43", "Rick Owens Pod Shorts 43"
     )
     fake_http.add("GET", RICK_OWENS_URL, text=html)
+    _add_rate_response(fake_http)
 
     yahoo_scrape.main()
 
@@ -458,6 +649,7 @@ def test_rc05_c1_and_c3_refreshes_known_row_before_email_and_records_only_sent_n
     fake_http.add(
         "GET", RICK_OWENS_URL, text=_html(fixtures_dir, "brand_page_minimal.html")
     )
+    _add_rate_response(fake_http, published="2035-04-05")
     _make_existing_rc05_listing(db_conn)
     existing_before = dict(
         db_conn.execute("SELECT * FROM listings WHERE url = ?", (URL_1,)).fetchone()
@@ -729,10 +921,12 @@ def test_c14_main_works_from_unrelated_cwd_and_emails_once_per_item(
         "rick owens ramones (market $800.00)"
     ]
     assert _row_urls(html) == [URL_1, URL_4]
-    assert len(yahoo_http.calls) == 1
-    method, url, kwargs = yahoo_http.calls[0]
+    yahoo_calls = [call for call in yahoo_http.calls if call[1] == RICK_OWENS_URL]
+    assert len(yahoo_calls) == 1
+    method, url, kwargs = yahoo_calls[0]
     assert (method, url) == ("GET", RICK_OWENS_URL)
     assert kwargs.get("timeout") == 30
+    assert len([call for call in yahoo_http.calls if call[1] == FRANKFURTER_URL]) == 1
 
 
 def test_rc15_c50_dry_run_end_to_end_prints_whole_digest_and_records(
@@ -769,6 +963,7 @@ def test_rc15_c41_empty_yahoo_page_sends_nothing(
     assert sent_emails == []
     assert "No new deals; no email sent." in capsys.readouterr().out
     assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+    assert all(call[1] != FRANKFURTER_URL for call in fake_http.calls)
 
 
 # ---- RC-03b item-based pure rules moved to find_item_deals: see criteria 3, 4, 8 ----
@@ -777,14 +972,14 @@ def test_rc15_c41_empty_yahoo_page_sends_nothing(
 def test_rc03b_c9_exclude_keywords_from_the_item_apply(ramones_item, minimal_listings):
     """RC-15 criterion 3."""
     item = dataclasses.replace(ramones_item, exclude_keywords=("high",))
-    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set())
+    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062)
     assert [d.url for d in deals] == [URL_4]
 
 
 def test_rc03b_c10_brand_comes_from_the_item_not_a_name_lookup(ramones_item, minimal_listings):
     """RC-15 criterion 8."""
     item = dataclasses.replace(ramones_item, brand="Not In Database")
-    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set())
+    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062)
     assert [d.url for d in deals] == [URL_1, URL_4]
     assert {d.brand_id for d in deals} == {ramones_item.brand_id}
 
@@ -796,7 +991,7 @@ def test_rc03b_c11_effective_price_of_the_item_drives_the_deal_math(
     db.update_market_price(ramones_item.id, 400.0)
     item = _item("rick owens ramones")
     assert item.effective_price_usd == 400.0
-    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set())
+    deals = yahoo_scrape.find_item_deals(item, minimal_listings, set(), 0.0062)
     assert [d.url for d in deals] == [URL_1]
     assert deals[0].discount_pct == pytest.approx(22.5)
 
@@ -862,6 +1057,7 @@ def test_rc07_c28_http_503_raises_with_no_email_and_no_rows(
         yahoo_scrape.main()
     assert sent_emails == []
     assert _rows(db_conn) == []
+    assert all(call[1] != FRANKFURTER_URL for call in fake_http.calls)
 
 
 def test_rc07_c29_old_layout_page_raises_with_no_email_and_no_rows(
@@ -873,6 +1069,7 @@ def test_rc07_c29_old_layout_page_raises_with_no_email_and_no_rows(
         yahoo_scrape.main()
     assert sent_emails == []
     assert _rows(db_conn) == []
+    assert all(call[1] != FRANKFURTER_URL for call in fake_http.calls)
 
 
 # ---- RC-03b main() reads the database (criteria 13-21) ------------------------------
@@ -899,15 +1096,16 @@ def test_rc03b_c14_main_skips_inactive_items(yahoo_http, seeded_db, sent_emails,
     real = yahoo_scrape.find_item_deals
     called_for = []
 
-    def spy(item, listings, skip_urls):
+    def spy(item, listings, skip_urls, yen_to_usd):
         called_for.append(item.name)
-        return real(item, listings, skip_urls)
+        return real(item, listings, skip_urls, yen_to_usd)
 
     monkeypatch.setattr(yahoo_scrape, "find_item_deals", spy)
     yahoo_scrape.main()
     assert called_for == ["rick owens ramones"]
     assert len(sent_emails) == 1
-    assert len(yahoo_http.calls) == 1
+    assert len([call for call in yahoo_http.calls if call[1] == RICK_OWENS_URL]) == 1
+    assert len([call for call in yahoo_http.calls if call[1] == FRANKFURTER_URL]) == 1
 
 
 def test_rc03b_c15_main_does_not_read_catalog_json(
@@ -1042,6 +1240,7 @@ def test_rc15_c57_lone_surrogate_makes_the_record_invalid(kwargs, caplog):
 )
 def test_rc15_c57_main_sends_one_digest_with_the_valid_deal(kwargs, fake_http, seeded_db, sent_emails):
     fake_http.add("GET", RICK_OWENS_URL, text=_surrogate_page(**kwargs))
+    _add_rate_response(fake_http)
     yahoo_scrape.main()
     assert len(sent_emails) == 1
     subject, html, text = sent_emails[0]
