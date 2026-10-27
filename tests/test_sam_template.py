@@ -438,6 +438,9 @@ def test_rc11c_criterion_23_runbook_uploads_and_verifies_exact_s3_object_version
     assert put_commands, "runbook must show the production S3 upload command"
     put_command = " ".join(put_commands)
     assert re.search(r"--server-side-encryption\s+aes256\b", put_command)
+    assert re.search(r"--if-none-match\s+(?:'\*'|\"\*\")", put_command), (
+        "initial upload must fail if the database object already exists"
+    )
     assert "version_id" in put_command
     assert re.search(r"--query\s+versionid\b", put_command)
     assert re.search(r"--output\s+text\b", put_command)
@@ -450,6 +453,20 @@ def test_rc11c_criterion_23_runbook_uploads_and_verifies_exact_s3_object_version
     get_command = " ".join(get_commands)
     assert "--version-id" in get_command
     assert "version_id" in get_command
+
+
+def test_rc11c_criterion_23_runbook_checks_foreign_key_sqlite_exit_status():
+    runbook = _runbook()
+    production_section = runbook.split("### production preflight", 1)[1].split(
+        "### isolated dry-run", 1
+    )[0]
+    continued_lines = re.sub(r"\\\n\s*", " ", production_section)
+    assert "foreign_key_check" in continued_lines
+    assert re.search(
+        r"if\s+!\s+sqlite3\b[^\n]*foreign_key_check"
+        r"|sqlite3\b[^\n]*foreign_key_check[^\n]*\|\|",
+        continued_lines,
+    ), "SQLite foreign-key check must fail on sqlite3 errors separately from its empty-result check"
 
 
 def test_rc11c_criterion_24_dry_run_is_isolated_synthetic_and_cannot_write_production_state():
