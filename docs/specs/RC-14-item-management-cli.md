@@ -7,6 +7,7 @@
 
 Replace the interactive `src/setup.py` catalog writer with commands that add, list, update, remove, and explicitly adopt catalog ownership for tracked items in the SQLite database.
 Protect those changes from later catalog seeding while preserving listing matches and eBay price history.
+An item is a tracked product, such as Rick Owens Pod Shorts; an individual Yahoo auction for that product is a separate listing.
 
 ## Motivation
 
@@ -32,9 +33,19 @@ Item identity is `(brand_id, name)`, and related tables refer to `items.id` (`sr
 - Renaming items or moving them between brands, which changes the identity used by seeding.
 - Permanently deleting items, listing matches, listings, or eBay price observations.
 - Setting eBay-derived `market_price_usd` manually, changing price algorithms, or adding size matching.
+- Editing the price of an individual Yahoo listing through the item management CLI.
 - A graphical interface, import/export format, or network calls.
 
 ## Design
+
+### Item and price model
+
+One `items` row defines a tracked product and its matching rules, so multiple individual Yahoo auctions can match the same item through `listing_matches`.
+Each Yahoo auction has its own `listings` row, URL, and yen price.
+For example, an item named `Pod Shorts` can match two separate Yahoo auctions, each with a different `price_yen`.
+`python3 src/setup.py update ID --manual-price 250` changes the fallback USD reference price for that one tracked item, not either auction's yen price.
+The eBay pricing job manages that item's `market_price_usd`; when that eBay price is usable, deal comparisons use it before the manual fallback.
+The CLI does not edit either a Yahoo listing's price or the eBay-derived market price.
 
 ### Files touched
 
@@ -116,6 +127,7 @@ Centralize keyword, query, and manual-price normalization with catalog validatio
 5. Adding an item with the same brand and name as an inactive row reuses its ID, activates it, replaces its item configuration, and preserves its eBay price and historical rows.
 6. Adding a duplicate active item exits 1 and leaves every table unchanged.
 7. Updating an item changes only the requested fields; omitted flags preserve their previous values, including the include and exclude sets.
+   Updating Pod Shorts with `--manual-price 250` changes only that item's `manual_price_usd`; two matched Yahoo listings retain their distinct `price_yen` values, and the item's `market_price_usd` remains unchanged.
 8. Repeated `--keyword` or `--exclude-keyword` flags replace their respective full set after normalization; clear flags store `NULL` or an empty exclude set as named.
 9. Removing an active item makes it disappear from `get_tracked_items()` and normal `list`, while `list --all` shows it inactive and all related rows and prices remain unchanged.
 10. Updating or removing an unknown ID exits 1 and leaves every table unchanged; a second remove is reported as already inactive without further writes.
@@ -157,6 +169,9 @@ If RC-13 lands first, start RC-14 from its merged schema and assign the next sch
 RC-13's upgrade procedure must not require `--seed` as a way to discover new brands because current seeding can overwrite or deactivate database-only items.
 
 ## Open questions
+
+**Resolved (2026-10-27):** The user confirmed that editing the tracked item's manual fallback price is sufficient; the eBay-derived estimate continues to take priority when available.
+This resolves the price-scope clarification only; the spec remains Draft pending the ownership and reactivation decisions below.
 
 1. **How should CLI edits survive a later `--seed`?**
    Recommend schema 4 `config_source` ownership as described above: all existing rows become unclaimed, so a later seed cannot silently overwrite or deactivate unknown-provenance data.
