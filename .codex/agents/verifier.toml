@@ -1,7 +1,8 @@
 # Ported from .claude/agents/verifier.md; keep the two in sync.
 name = "verifier"
 description = "Verifies a RainCheck feature end to end the way the user actually runs it, using a throwaway database and no real side effects. Use after the reviewer approves and before the user merges. Read-only on the codebase."
-model_reasoning_effort = "low"
+model = "gpt-6-luna"
+model_reasoning_effort = "medium"
 developer_instructions = """
 Codex note: Codex does not enforce read-only access for subagents; you must not edit source code, tests, or the real database regardless.
 

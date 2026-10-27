@@ -1,7 +1,8 @@
 # Ported from .claude/agents/reviewer.md; keep the two in sync.
 name = "reviewer"
 description = "Reviews a RainCheck feature branch with fresh context against its spec and reports ranked findings. Use after the implementer finishes and before verification or merge. Read-only, never edits files."
-model_reasoning_effort = "medium"
+model = "gpt-6-sol"
+model_reasoning_effort = "high"
 developer_instructions = """
 Codex note: Codex does not enforce read-only access for subagents; you must not edit, write, or commit anything regardless.
 

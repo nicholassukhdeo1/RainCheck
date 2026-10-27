@@ -24,7 +24,8 @@ It is Python 3 with a SQLite database.
 - `scripts/capture_fixtures.py` records live Yahoo and eBay fixtures; only a human runs it (it needs real credentials).
 - `docs/BACKLOG.md` is the prioritized feature list; `docs/specs/` holds one approved spec per feature.
 - `.codex/agents/` defines the Codex subagents `planner`, `test_writer`, `implementer`, `reviewer`, and `verifier`.
-  They are ported from `.claude/agents/` (the Claude Code versions); keep the two sets in sync when either changes.
+  They are ported from `.claude/agents/` (the Claude Code versions); keep their role instructions in sync when either changes.
+  Model names and effort settings are provider-specific.
 
 ## Setup and commands
 
@@ -58,6 +59,19 @@ Explain what each step does and why, suggest better alternatives, and flag trade
 The main session is the orchestrator: it runs each stage by asking the matching subagent by name (for example "Have planner write the spec for RC-04"), checks the result itself, and only advances when a stage actually passes.
 Codex does not enforce the subagents' read-only rules or isolate them in separate worktrees, so the orchestrator checks `git status` after each stage and keeps the implementer on the feature branch.
 
+Codex subagent defaults for the Plus plan are:
+
+| Agent | Model | Effort |
+| --- | --- | --- |
+| `planner` | `gpt-6-sol` | `medium` |
+| `test_writer` | `gpt-6-luna` | `high` |
+| `implementer` | `gpt-6-luna` | `high` |
+| `reviewer` | `gpt-6-sol` | `high` |
+| `verifier` | `gpt-6-luna` | `medium` |
+
+For complex implementation such as RC-03 or RC-11, explicitly invoke `implementer` with `gpt-6-sol` and `high` effort.
+The implementer agent file leaves its model settings unset so that this explicit choice overrides the project defaults in `.codex/config.toml`.
+
 Every backlog item goes through these stages in order:
 
 1. **Plan** (`planner`): write `docs/specs/<ID>-<slug>.md` from `docs/specs/TEMPLATE.md`, with testable acceptance criteria and an explicit out-of-scope list.
@@ -75,12 +89,12 @@ Every backlog item goes through these stages in order:
 
 After a merge that changes the database schema or untracks files, the user's real database needs a careful, backup-first step on their machine; follow the procedure in that feature's spec.
 
-## Where the project stands (2026-10-26)
+## Where the project stands (2026-10-27)
 
-- Merged: RC-01 (test foundation), RC-02 (database untracked), RC-07 (Yahoo `__NEXT_DATA__` parsing), RC-03a (schema v1, migration, validated seeding), RC-03b (jobs read the database), RC-15 (one digest email per run).
+- Merged: RC-01 (test foundation), RC-02 (database untracked), RC-07 (Yahoo `__NEXT_DATA__` parsing), RC-03a (schema v1, migration, validated seeding), RC-03b (jobs read the database), RC-15 (one digest email per run), RC-04 (record matched item for emailed listings).
 - The user's real database is already migrated to schema version 1 and seeded.
   Backups from each upgrade are in `~/RainCheck-backups`.
-- Suggested next items: RC-04 (record which item each listing matched), RC-10 (reliability and logging), RC-16 (auction-aware deals), RC-17 (word-aware matching).
+- Suggested next items: RC-10 (reliability and logging), RC-16 (auction-aware deals), RC-17 (word-aware matching).
   Read each item's "Depends on" and "Touches" lines in `docs/BACKLOG.md` first; items touching `src/schema.sql`, `src/db.py`, or `src/catalog.json` must not run in parallel.
 - The stored eBay price for Ramones (420.0) is stale; running `python3 src/ebay_pricing.py` with the user's credentials refreshes it.
 - AWS work (RC-11, RC-12) must use the project's single region, `us-east-2`.
