@@ -81,7 +81,7 @@ Do not run a full `--seed` for this amendment because it replaces each item's co
 Stop the scheduled jobs and run the following from the repository root on the user's machine after the merged code is in place.
 It explicitly opens `src/raincheck.db`, makes a unique SQLite backup in `~/RainCheck-backups`, requires schema version 1 and exactly one `Rick Owens` / `pod shorts` item, and inserts only one include row with bound SQL parameters.
 It refuses to overwrite an existing exclude keyword or proceed if keyword rows change between the backup and transaction.
-The final check reads the stored keyword sets and confirms that a plural title matches.
+It checks the stored keyword sets and confirms that the new keyword matches a plural title before committing, so a conflicting exclude rolls back the insert.
 
 ```sh
 python3 - <<'PY'
@@ -91,6 +91,9 @@ from pathlib import Path
 import os
 import sqlite3
 import sys
+
+sys.path.insert(0, str(Path("src").resolve()))
+from matching import title_matches
 
 db_path = Path("src/raincheck.db").resolve(strict=True)
 backup_dir = Path.home() / "RainCheck-backups"
@@ -142,23 +145,24 @@ with closing(sqlite3.connect(db_path.as_uri() + "?mode=rw", uri=True,
         after = set(conn.execute(all_keywords).fetchall())
         if after != before | {(item_id, keyword, "include")}:
             raise RuntimeError("Unexpected keyword change")
+        rows = conn.execute(
+            "SELECT keyword, kind FROM item_keywords WHERE item_id = ? ORDER BY keyword",
+            (item_id,),
+        ).fetchall()
+        includes = tuple(word for word, kind in rows if kind == "include")
+        excludes = tuple(word for word, kind in rows if kind == "exclude")
+        if keyword not in includes or not title_matches(
+            "Rick Owens Pod Shorts", (keyword,), excludes
+        ):
+            raise RuntimeError("Plural keyword is blocked by the stored excludes")
+        if not title_matches("Rick Owens Pod Shorts", includes, excludes):
+            raise RuntimeError("Plural title did not match stored keywords")
         conn.execute("COMMIT")
     except BaseException:
         if conn.in_transaction:
             conn.execute("ROLLBACK")
         raise
 
-    rows = conn.execute(
-        "SELECT keyword, kind FROM item_keywords WHERE item_id = ? ORDER BY keyword",
-        (item_id,),
-    ).fetchall()
-
-sys.path.insert(0, str(Path("src").resolve()))
-from matching import title_matches
-includes = tuple(word for word, kind in rows if kind == "include")
-excludes = tuple(word for word, kind in rows if kind == "exclude")
-assert keyword in includes
-assert title_matches("Rick Owens Pod Shorts", includes, excludes)
 print(f"Backup: {backup_path}")
 print(f"Verified pod shorts includes: {includes}")
 PY
@@ -247,6 +251,10 @@ The `ramone` keyword remains outside RC-17 despite the catalog file already bein
   The live fixture counts remain unchanged under the amended seed keywords.
 - 2026-10-27: Added `tests/fixtures/catalog.json` to the planned files because `seeded_db` loads this separate sample catalog through `tests/conftest.py`.
   Syncing only the approved plural keyword keeps database-backed matcher tests representative and requires updating their exact sample keyword counts and tuples.
+- 2026-10-27: Moved the post-merge plural-title match check inside the database transaction before `COMMIT`.
+  If an existing exclude blocks the new keyword after normalization, the targeted insert rolls back while the backup remains available.
+- 2026-10-27: Validate every supplied include and exclude value before matching, so short-circuiting cannot hide a later non-string keyword.
+  Added one-pass iterable regression cases for this contract.
 
 ## Rollback
 

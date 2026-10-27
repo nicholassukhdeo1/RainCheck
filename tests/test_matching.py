@@ -88,6 +88,22 @@ def test_rc17_edge_none_non_string_inputs_raise_type_error(title_matches, title,
         title_matches(title, includes, excludes)
 
 
+@pytest.mark.parametrize(
+    ("title", "includes", "excludes"),
+    [
+        ("Ramones", (value for value in ("ramones", None)), ()),
+        ("Ramones", (value for value in ("ramones", 7)), ()),
+        ("Ramones low", ("ramones",), (value for value in ("low", None))),
+        ("Ramones low", ("ramones",), (value for value in ("low", 7))),
+    ],
+)
+def test_rc17_edge_invalid_keyword_after_match_still_raises_type_error(
+    title_matches, title, includes, excludes
+):
+    with pytest.raises(TypeError):
+        title_matches(title, includes, excludes)
+
+
 def test_rc17_c9_exclude_precedence_and_duplicates(title_matches):
     assert title_matches("Ramones low", ("ramones", "ramones"), ("low", "low")) is False
     assert title_matches("Ramones", ("ramones", "ramones"), ("low", "low")) is True

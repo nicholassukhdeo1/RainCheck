@@ -42,10 +42,15 @@ def title_matches(title: str, keywords: Iterable[str], exclude_keywords: Iterabl
     Both jobs call this, so Yahoo and eBay always agree on what counts as the same item.
     """
     title_text = unicodedata.normalize("NFKC", title).lower()
+    # Consume each iterable once and validate every value before matching can short-circuit.
+    include_terms = tuple(keywords)
+    exclude_terms = tuple(exclude_keywords)
+    if any(not isinstance(keyword, str) for keyword in include_terms + exclude_terms):
+        raise TypeError("keywords must contain only strings")
 
     # exclude wins: a title with a bad word is dropped even if it also has a good one
-    if any(_contains_keyword(title_text, bad) for bad in exclude_keywords):
+    if any(_contains_keyword(title_text, bad) for bad in exclude_terms):
         return False
 
     # any() is True as soon as ONE include keyword is found; no keywords means no match
-    return any(_contains_keyword(title_text, keyword) for keyword in keywords)
+    return any(_contains_keyword(title_text, keyword) for keyword in include_terms)
