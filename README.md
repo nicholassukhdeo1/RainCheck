@@ -247,6 +247,7 @@ Check that the artifact contains only the nine runtime files from `src/`, with n
    check_sqlite "$BACKUP_PATH"
    VERSION_ID="$(aws s3api put-object --bucket "$BUCKET" --key "$KEY" --body "$BACKUP_PATH" --if-none-match '*' --server-side-encryption AES256 --region us-east-2 --query VersionId --output text)"
    case "$VERSION_ID" in ''|None|null) echo 'S3 did not return a version ID' >&2; exit 1;; esac
+   printf 'Initial database S3 VersionId: %s\n' "$VERSION_ID"
    DOWNLOAD_PATH="$(mktemp "${TMPDIR:-/tmp}/raincheck-s3-verify.XXXXXX")"
    trap 'rm -f "$DOWNLOAD_PATH"' EXIT
    aws s3api get-object --bucket "$BUCKET" --key "$KEY" --version-id "$VERSION_ID" --region us-east-2 "$DOWNLOAD_PATH" >/dev/null
