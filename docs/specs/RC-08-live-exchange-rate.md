@@ -1,6 +1,6 @@
 # RC-08: Live exchange rate
 
-**Status:** Draft
+**Status:** Approved
 **Backlog item:** RC-08 in `docs/BACKLOG.md`
 
 ## Summary
@@ -122,6 +122,10 @@ It does touch `src/yahoo_scrape.py`, so it should be sequenced after RC-07 and c
    Stopping avoids potentially inaccurate alerts but misses time-sensitive listings.
 2. Is seven calendar days the right maximum age for a published rate?
    Seven days accommodates weekends and short holidays while rejecting a feed that has stopped updating; a shorter limit catches stale data faster but invokes fallback more often.
+
+## Resolved
+
+- 2026-10-27: The user approved RC-08 with the recommended policy: use `0.0062` USD per JPY with one warning when the provider fails or its rate is more than seven calendar days old.
 
 ## Rollback
 
