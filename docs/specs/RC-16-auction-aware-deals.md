@@ -141,7 +141,7 @@ In HTML and plain text, label every watch row `Auction watch - current price (pr
 An immediate row uses the existing `X% off` wording for its buy-now comparison; a watch row uses `Potential discount at current price: X% (not guaranteed; bids may rise)`.
 When a buy-now auction also has a lower current price, show that current price and its own potential percentage separately as provisional, with the same `not guaranteed; bids may rise` warning.
 For an auction row, show `Scheduled end YYYY-MM-DD HH:MM JST (may change)` when `endTime` is valid, or `Scheduled end unavailable` otherwise.
-When any watch is displayed, the subject is the neutral `RainCheck: N listings to review - YYYY-MM-DD`, where `N` counts displayed rows of both kinds.
+When any watch is displayed, the subject is `RainCheck: 1 listing to review - YYYY-MM-DD` for one displayed row or `RainCheck: N listings to review - YYYY-MM-DD` for two or more rows, where `N` counts displayed rows of both kinds.
 For a digest containing no watches, retain the existing `RainCheck: N new deals - YYYY-MM-DD` subject.
 A digest containing only fixed-price deals keeps its existing row markup and plain-text format; an `auction_buy_now` row adds the provisional bid detail described above.
 The existing HTML escaping and safe-link rules remain in force.
@@ -188,7 +188,7 @@ Because this job reads only the newest page, it cannot promise to notice every l
 15. `isFleamarketItem` continues to select the existing URL prefix and does not bypass the format and price rules.
 16. Immediate deals sort by real discount descending; auction watches sort by earliest known scheduled end, with source-page order for ties, so a larger potential percentage does not outrank an earlier ending auction.
 17. Each item's digest section shows up to five immediate deals and five auction watches independently; a sixth of either kind increments neutral `more listings not shown` text in a mixed section without displacing the other kind.
-18. A page mixing fixed-price, buy-now, and bid-only matching listings sends one digest with the neutral `N listings to review` subject, correct row labels and prices in HTML and plain text, and exactly the displayed rows recorded in one post-send transaction.
+18. A page mixing fixed-price, buy-now, and bid-only matching listings sends one digest with the neutral `N listings to review` subject for multiple rows, correct row labels and prices in HTML and plain text, and exactly the displayed rows recorded in one post-send transaction.
 19. A digest containing only auction watches still sends one email and records those watches; a page with no qualifying opportunities sends no email or new listing rows.
 20. HTML and plain-text auction rows escape scraped titles and URLs under existing rules; the HTML price column stays visible at 375px and desktop widths with a long title and a scheduled end.
 21. A failed email send records no new listing, metadata, or match row, and an eligible opportunity can be offered on the next run.
@@ -201,6 +201,7 @@ Because this job reads only the newest page, it cannot promise to notice every l
 28. A missing, mismatched, or invalid `sources_by_url` entry raises `ValueError` before database access; the Yahoo job detects a missing or mismatched source before sending email.
 29. Direct callers that omit `sources_by_url` retain RC-10's insertion and deduplication behavior with `NULL` metadata, and legacy `record_listing_match` calls still work unchanged.
 30. A digest containing no watches retains RC-15's existing subject; a digest containing only fixed-price deals also retains its row markup, plain-text format, overflow wording, and extreme-fixture HTML size limit.
+31. A digest with one displayed watch has subject `RainCheck: 1 listing to review - YYYY-MM-DD`; a digest with two or more displayed rows and at least one watch uses `N listings to review` with the correct count.
 
 ## Edge cases
 
@@ -257,6 +258,9 @@ None.
 
 - 2026-10-27: Corrected criterion 11's arithmetic example from a ¥1 current price to ¥100; at $800 market and 0.0062 USD/JPY, ¥100 gives a 99.9% potential difference when rounded to one decimal.
   This changes no alert or labeling policy.
+- 2026-10-27: Clarified singular and plural grammar for digest subjects containing auction watches.
+  One displayed row uses `1 listing to review`; two or more use `N listings to review`.
+  This changes no alert policy.
 
 ## Rollback
 
