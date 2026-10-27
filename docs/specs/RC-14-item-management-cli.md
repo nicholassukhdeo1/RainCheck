@@ -1,6 +1,6 @@
 # RC-14: Item management command line tool
 
-**Status:** Draft
+**Status:** Approved
 **Backlog item:** RC-14 in `docs/BACKLOG.md`
 
 ## Summary
@@ -24,7 +24,7 @@ Item identity is `(brand_id, name)`, and related tables refer to `items.id` (`sr
 - Add database functions for listing all items, adding an item, replacing selected item fields, deactivating an item, and explicitly adopting one item from the catalog.
 - Reuse the catalog's keyword and query validation rules for command input, including lowercase, trimming, duplicate removal, and rejection of include/exclude overlap.
 - Keep `market_price_usd` and all history tables intact during every item operation.
-- Make catalog seeding coexist with CLI managed items, subject to Open question 1.
+- Make catalog seeding coexist with CLI managed items through explicit item ownership.
 - Document the commands, seed interaction, and backup-first upgrade steps.
 
 **Out of scope:**
@@ -52,13 +52,13 @@ The CLI does not edit either a Yahoo listing's price or the eBay-derived market 
 | File | Change |
 | --- | --- |
 | `src/setup.py` | Replace the import-time prompt loop with `main(argv=None)` and the commands below. |
-| `src/db.py` | Add item management helpers and shared single-item validation; update seeding to respect item ownership; add migration 4 if Open question 1 accepts the recommendation. |
-| `src/schema.sql` | Add item ownership for fresh databases if Open question 1 accepts the recommendation. |
+| `src/db.py` | Add item management helpers and shared single-item validation; update seeding to respect item ownership; add migration 4. |
+| `src/schema.sql` | Add item ownership for fresh databases. |
 | `tests/test_setup_cli.py` (new) | Exercise parsing, output, validation, item operations, and exit status through `setup.main`. |
 | `tests/test_db.py` | Exercise transactional database helpers and history preservation. |
 | `tests/test_seed_catalog.py` | Exercise ownership boundaries and repeated seeds. |
 | `tests/test_migration.py`, `tests/test_db_cli.py`, `tests/dbhelpers.py` | Exercise schema 4 migration and update assertions pinned to schema 3. |
-| `tests/fixtures/db/schema_v3.sql` (new) | Preserve the pre-RC-14 schema as a migration fixture if schema 4 is approved. |
+| `tests/fixtures/db/schema_v3.sql` (new) | Preserve the pre-RC-14 schema as a migration fixture. |
 | `README.md` | Replace the obsolete `setup.py` instructions and explain catalog ownership and database backup. |
 
 `src/catalog.json` remains unchanged and is still seed input.
@@ -66,7 +66,7 @@ The jobs in `src/ebay_pricing.py` and `src/yahoo_scrape.py` are unchanged becaus
 
 ### Schema changes and migration
 
-Recommended design, pending Open question 1: schema version 4 adds `items.config_source TEXT NOT NULL DEFAULT 'unclaimed' CHECK (config_source IN ('unclaimed', 'catalog', 'cli'))`.
+Schema version 4 adds `items.config_source TEXT NOT NULL DEFAULT 'unclaimed' CHECK (config_source IN ('unclaimed', 'catalog', 'cli'))`.
 Migration 4 uses `ALTER TABLE items ADD COLUMN` inside the existing versioned transaction, so every existing item becomes unclaimed and keeps its ID, active state, prices, keywords, and related rows.
 Existing databases do not record item provenance, so the migration must not assume that any old row was created from `catalog.json`.
 CLI add or update sets `config_source = 'cli'`; CLI remove sets `active = 0` and `config_source = 'cli'`.
@@ -162,26 +162,24 @@ No saved HTML or API JSON fixtures are needed because this feature makes no netw
 
 ## Shared-file conflicts
 
-This feature changes `src/db.py`, and the recommended ownership design also changes `src/schema.sql`.
+This feature changes `src/db.py` and `src/schema.sql`.
 It must not implement in parallel with RC-13 or any other feature touching `src/db.py` or `src/schema.sql`.
-The backlog currently lists only `src/setup.py` and `src/db.py`; update its `Touches` line when the ownership decision is approved.
+The backlog currently lists only `src/setup.py` and `src/db.py`; update its `Touches` line to include `src/schema.sql` before implementation.
 If RC-13 lands first, start RC-14 from its merged schema and assign the next schema version rather than reusing version 4.
 RC-13's upgrade procedure must not require `--seed` as a way to discover new brands because current seeding can overwrite or deactivate database-only items.
 
 ## Open questions
 
-**Resolved (2026-10-27):** The user confirmed that editing the tracked item's manual fallback price is sufficient; the eBay-derived estimate continues to take priority when available.
-This resolves the price-scope clarification only; the spec remains Draft pending the ownership and reactivation decisions below.
+None.
 
-1. **How should CLI edits survive a later `--seed`?**
-   Recommend schema 4 `config_source` ownership as described above: all existing rows become unclaimed, so a later seed cannot silently overwrite or deactivate unknown-provenance data.
-   The user can explicitly adopt selected rows after checking their catalog entries, and fresh seed rows retain the current catalog update behavior.
-   This requires a migration, one extra field, and a one-time reconciliation for older catalog rows that should keep following `catalog.json`.
-   A simpler schema-free alternative is to make `--seed` bootstrap-only and refuse it when a database already contains items; this avoids a migration but removes the existing reseed workflow and would change current tests and documentation.
-   Synchronizing CLI changes into `catalog.json` is another alternative, but gives the CLI two write targets and conflicts with the backlog's database-only direction.
-2. **Should an inactive item be reactivated by `add`?**
-   Recommend yes, using its original ID so listing matches and eBay history stay attached.
-   Refusing it would force a separate reactivation command or a destructive workaround.
+### Resolved decisions
+
+- **2026-10-27, price scope:** The user confirmed that editing the tracked item's manual fallback price is sufficient; the eBay-derived estimate continues to take priority when available.
+- **2026-10-27, catalog ownership:** The user approved schema 4 `config_source` ownership.
+  Existing rows become unclaimed, CLI managed rows survive later seeds, and the user can explicitly adopt selected rows into catalog management.
+  This adds one migration and requires one-time reconciliation for older catalog rows that should keep following `catalog.json`.
+- **2026-10-27, inactive items:** The user approved reactivating an inactive item through `add` under the same brand and name.
+  It keeps its original ID, listing matches, and eBay history.
 
 ## Rollback
 
