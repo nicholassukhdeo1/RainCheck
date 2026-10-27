@@ -1,0 +1,16 @@
+Capture date: 2026-10-27
+Source URL: https://auctions.yahoo.co.jp/brand/3538/
+Page role: Public Rick Owens brand results
+Reader crawl age: one day before study date. HTTP status was not surfaced.
+Confidence: medium for active category rows; insufficient for exact-ID item state.
+
+Visible listing-row examples include current/instant-buy prices, zero or positive bid counts, and remaining time.
+Representative row excerpt: Current 16,500 yen, 0 bids, 5 hours remaining.
+
+Representative item detail URLs requested:
+- https://auctions.yahoo.co.jp/jp/auction/b1249690167
+- https://auctions.yahoo.co.jp/jp/auction/q1248425007
+
+Both detail requests returned a reader cache miss; no HTTP status was received.
+This confirms that active rows are publicly listed.
+It is not an item-detail fixture: following representative item links returned reader cache misses, so an exact-ID detail response was not inspected.

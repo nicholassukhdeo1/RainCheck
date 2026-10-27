@@ -1,0 +1,19 @@
+Capture date: 2026-10-27
+Source URL: https://auctions.yahoo.co.jp/jp/auction/f1247065602
+Page role: Public completed auction item page
+Reader crawl age: prior week. HTTP status was not surfaced.
+Confidence: medium; the exact ID and time/amount are visible, but the outcome is only explicit in the linked search row and no timezone is shown.
+
+Visible fields:
+- Ended marker: このオークションは終了しています
+- Current-price label and amount: 現在 89,000 yen
+- Bid count: 42
+- Auction ID: f1247065602
+- Start datetime: 2026-10-05 07:00
+- End datetime: 2026-10-10 23:00
+- Timezone label: none visible
+- Winner/seller details: login required; not accessed
+
+The exact ID matches the completed-search result.
+The item page uses a current-price label and does not itself explicitly say sold.
+The completed-search row supplies the explicit sold label.

@@ -1,0 +1,16 @@
+Capture date: 2026-10-27
+Source URL: https://auctions.yahoo.co.jp/jp/auction/c1143076331
+Page role: Public ended item page with seller-authored description
+Reader crawl age: about three months before study date. HTTP status was not surfaced.
+Confidence: low; seller description may refer to an earlier auction cycle.
+
+Visible fields:
+- Ended marker: このオークションは終了しています
+- Auction ID: c1143076331
+- End datetime: 2024-07-10 23:31
+- Bid count: 1
+- Seller-authored description: ※落札されませんでしたので再出品になります
+
+Rejected as proof of a no-bid relisting.
+The visible one-bid count describes the current page, while the seller-authored claim may describe an earlier cycle.
+The earlier cycle's ID, bid count, and outcome cannot be verified from this page, and no preceding cycle key is exposed.

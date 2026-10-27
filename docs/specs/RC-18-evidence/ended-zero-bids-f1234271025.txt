@@ -1,0 +1,17 @@
+Capture date: 2026-10-27
+Source URL: https://auctions.yahoo.co.jp/jp/auction/f1234271025
+Page role: Public ended item page
+Reader crawl age: about four months before study date. HTTP status was not surfaced.
+Confidence: low for unsold status.
+
+Visible fields:
+- Ended marker: このオークションは終了しています
+- Displayed amount: 318,725 yen
+- Bid count: 0
+- Auction ID: f1234271025
+- Start datetime: 2026-06-20 19:32
+- End datetime: 2026-06-21 10:42
+- Explicit no-buyer/no-sale label: none visible
+
+Rejected as an unsold outcome fixture.
+The displayed amount may be a fixed-price amount, and zero bids alone does not establish that no buyer exists.
