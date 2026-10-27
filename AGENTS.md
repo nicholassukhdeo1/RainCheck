@@ -12,7 +12,7 @@ It is Python 3 with a SQLite database.
 
 ## Layout
 
-- `src/schema.sql` defines the tables (schema version 1, stored in `PRAGMA user_version`).
+- `src/schema.sql` defines the tables (schema version 2, stored in `PRAGMA user_version`).
 - `src/db.py` holds every database function, the versioned migrations (`MIGRATIONS`), catalog validation, and seeding.
 - `src/catalog.json` is seed input only: edit it, then run `python3 src/db.py --seed`.
   The jobs read item configuration from the database, never from `catalog.json`.
@@ -91,8 +91,8 @@ After a merge that changes the database schema or untracks files, the user's rea
 
 ## Where the project stands (2026-10-27)
 
-- Merged: RC-01 (test foundation), RC-02 (database untracked), RC-07 (Yahoo `__NEXT_DATA__` parsing), RC-03a (schema v1, migration, validated seeding), RC-03b (jobs read the database), RC-15 (one digest email per run), RC-04 (record matched item for emailed listings).
-- The user's real database is already migrated to schema version 1 and seeded.
+- Merged: RC-01 (test foundation), RC-02 (database untracked), RC-07 (Yahoo `__NEXT_DATA__` parsing), RC-03a (schema v1, migration, validated seeding), RC-03b (jobs read the database), RC-15 (one digest email per run), RC-04 (record matched item for emailed listings), and RC-06 (schema v2, distinct eBay listing-price history).
+- The user's real database is already migrated to schema version 2 and seeded.
   Backups from each upgrade are in `~/RainCheck-backups`.
 - Suggested next items: RC-10 (reliability and logging), RC-16 (auction-aware deals), RC-17 (word-aware matching).
   Read each item's "Depends on" and "Touches" lines in `docs/BACKLOG.md` first; items touching `src/schema.sql`, `src/db.py`, or `src/catalog.json` must not run in parallel.

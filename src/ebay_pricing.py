@@ -1,13 +1,35 @@
-import os, base64, requests, sys, math, re
+import os, base64, requests, math, re, sys
 from dataclasses import dataclass
 from db import get_tracked_items, record_ebay_listing_prices, SchemaVersionError
+import http_retry
 from matching import title_matches
+import logging
 
 from dotenv import load_dotenv
 load_dotenv()
 
 # timeout so a hung connection can't stall the run forever
 EBAY_TIMEOUT_SECONDS = 30
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RunResult:
+    succeeded_item_ids: tuple[int, ...]
+    failed_item_ids: tuple[int, ...]
+
+    @property
+    def had_failure(self):
+        return bool(self.failed_item_ids)
+
+
+def _configure_logging():
+    root = logging.getLogger()
+    if not root.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        root.addHandler(handler)
+        root.setLevel(logging.INFO)
 
 
 @dataclass(frozen=True)
@@ -30,7 +52,7 @@ def get_ebay_token():
 
     URL_ = "https://api.ebay.com/identity/v1/oauth2/token"
 
-    response = requests.post(URL_,headers={"Authorization": f"Basic {b64}", "Content-Type": "application/x-www-form-urlencoded"},
+    response = http_retry.request_with_retry("POST", URL_, headers={"Authorization": f"Basic {b64}", "Content-Type": "application/x-www-form-urlencoded"},
                             data={"grant_type": "client_credentials", "scope": "https://api.ebay.com/oauth/api_scope"},
                             timeout=EBAY_TIMEOUT_SECONDS)
 
@@ -68,7 +90,8 @@ def _canonical_listing_id(item):
 
 def ebay_listing_prices(query, keywords, exclude_keywords, token):
     """Fetch the first page and return validated fixed-price listing observations."""
-    response = requests.get(
+    response = http_retry.request_with_retry(
+        "GET",
         "https://api.ebay.com/buy/browse/v1/item_summary/search",
         headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"},
         params={"q": query, "limit": 50, "sort": "newlyListed"},
@@ -117,55 +140,80 @@ def ebay_listing_prices(query, keywords, exclude_keywords, token):
             fallback_count += 1
         listings.append(ListingPrice(listing_id, amount))
     if fallback_count:
-        print(f"eBay search used {fallback_count} opaque listing ID fallback(s).")
+        logger.warning("eBay search used %d opaque listing ID fallback(s)", fallback_count)
     return tuple(listings)
 
 def refresh_market_prices():
 
     # read the items before asking eBay for a token: opening the database checks its
     # schema version, so an outdated database fails before any network call
+    logger.info("eBay pricing job started")
     items = get_tracked_items()
     if not items:
-        print("No active items in the database. Add items to catalog.json, then run python3 src/db.py --seed.")
-        return
+        logger.info("No active items in the database")
+        logger.info("eBay pricing finished: 0 succeeded, 0 failed")
+        return RunResult((), ())
 
     my_token = get_ebay_token()
-
+    succeeded = []
+    failed = []
     for item in items:
         # search_query is the wording that finds this item on eBay; fall back to the name if it is missing
         query = item.search_query or item.name
-        print(f'Pricing {item.name} with eBay query "{query}"')
-
-        listings = ebay_listing_prices(query, item.keywords, item.exclude_keywords, my_token)
-        result = record_ebay_listing_prices(item.id, listings)
-        print(
-            f"{item.name}: {result.new_count} new, {result.duplicate_count} duplicate; "
-            f"{result.candidate_count} cumulative candidates, {result.outlier_count} outliers, "
-            f"{result.retained_count} retained."
+        logger.info("Pricing item %d (%s)", item.id, item.name)
+        try:
+            listings = ebay_listing_prices(query, item.keywords, item.exclude_keywords, my_token)
+            result = record_ebay_listing_prices(item.id, listings)
+        except SchemaVersionError:
+            raise
+        except Exception as exc:
+            failed.append(item.id)
+            response = getattr(exc, "response", None)
+            status = getattr(response, "status_code", None)
+            suffix = f" HTTP {status}" if status is not None else f" ({type(exc).__name__})"
+            logger.warning("eBay item %d failed%s", item.id, suffix)
+            if status == 429:
+                break
+            continue
+        succeeded.append(item.id)
+        logger.info(
+            "Item %d: %d new, %d duplicate; %d candidates, %d outliers, %d retained",
+            item.id, result.new_count, result.duplicate_count, result.candidate_count,
+            result.outlier_count, result.retained_count,
         )
         if result.price_updated:
-            print(f"Stored all-time eBay arithmetic mean for {item.name}: {result.mean_usd} USD.")
+            logger.info("Stored all-time eBay arithmetic mean for item %d: %.2f USD", item.id, result.mean_usd)
         elif result.new_count == 0 and result.candidate_count == 0:
-            print(f"No valid matching eBay listings for {item.name}; insufficient sample, market price preserved.")
+            logger.info("No valid matching eBay listings for item %d; insufficient sample, market price preserved", item.id)
         elif result.new_count == 0:
-            print(f"No new eBay listing IDs for {item.name}; current market price preserved.")
+            logger.info("No new eBay listing IDs for item %d; market price preserved", item.id)
         elif result.mean_usd is None:
-            print(f"Insufficient retained eBay listings for {item.name} (need 5); market price preserved.")
+            logger.info("Insufficient retained eBay listings for item %d (need 5); market price preserved", item.id)
         elif not result.item_found:
-            print(f"Item {item.name} no longer exists; market price not stored.")
+            logger.info("Item %d no longer exists; market price not stored", item.id)
         else:
-            print(f"No retained-price update for {item.name}; current market price preserved.")
+            logger.info("No retained-price update for item %d; market price preserved", item.id)
+
+    outcome = RunResult(tuple(succeeded), tuple(failed))
+    logger.info("eBay pricing finished: %d succeeded, %d failed", len(succeeded), len(failed))
+    return outcome
 
 
 def main():
+    _configure_logging()
     try:
         # refresh_market_prices fetches its own token, so we do not fetch one here too
-        refresh_market_prices()
-    except SchemaVersionError as e:
-        # the one error with a message written for you (it names the fix), so no traceback
-        print(f"Error: {e}", file=sys.stderr)
+        result = refresh_market_prices()
+        if result.had_failure:
+            raise SystemExit(1)
+        return 0
+    except SchemaVersionError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    except Exception as exc:
+        logger.error("eBay pricing failed (%s)", type(exc).__name__)
         raise SystemExit(1)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

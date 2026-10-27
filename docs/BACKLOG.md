@@ -146,10 +146,10 @@ RC-07 and RC-08 both touch `src/yahoo_scrape.py` and must run one after the othe
 
 - **Size:** M
 - **Depends on:** RC-01, and best done after Phase 1
-- **Touches:** all modules
-- **Why:** No network call has a timeout, so one hung request can stall a whole run, which matters even more once it runs unattended on Lambda.
-  Failures are reported with `print`, and one failing item can stop the run.
-- **Scope:** Add timeouts everywhere, retry with backoff on HTTP 429 and 5xx responses, switch from `print` to the `logging` module, and isolate per-item failures so one bad item does not stop the others.
+- **Touches:** `src/http_retry.py`, `src/ebay_pricing.py`, `src/yahoo_scrape.py`, `src/sendemail.py`, `src/db.py`, `README.md`, `AGENTS.md`, and `CLAUDE.md`
+- **Why:** Production HTTP and SMTP calls already have explicit timeouts, but transient HTTP 429 and 5xx responses are not retried.
+  Operational status still uses `print`, and one failing item can stop independent work.
+- **Scope:** Add bounded status-only HTTP retries, use Python logging for operational status, isolate per-item failures, and record one emailed digest in a single transaction.
 - **Resume angle:** Added fault tolerance and structured logging to an unattended data pipeline.
 
 ---

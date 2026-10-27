@@ -1,14 +1,15 @@
 from bs4 import BeautifulSoup
 from sendemail import send_email
+import db
 from db import (
     SchemaVersionError,
     TrackedItem,
     get_known_listing_urls,
     get_tracked_items,
-    record_listing_match,
     update_last_seen_at,
 )
 from digest import Deal, ItemDeals, build_digest
+import http_retry
 from matching import title_matches
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -38,6 +39,11 @@ NO_DEALS_LINE = "No new deals; no email sent."
 logger = logging.getLogger(__name__)
 
 
+def record_listing_matches(deals):
+    """Forward the digest batch to the database writer at the job boundary."""
+    return db.record_listing_matches(deals)
+
+
 class YahooPageError(Exception):
     """The page is not a results page we understand (layout drift), as opposed to 'no results'."""
 
@@ -59,7 +65,7 @@ def _validate_yen_to_usd(rate):
 
 def fetch_yen_to_usd_rate(today_utc: date) -> float:
     """Fetch one current JPY-to-USD reference rate from Frankfurter."""
-    response = requests.get(FRANKFURTER_RATE_URL, timeout=RATE_TIMEOUT_SECONDS)
+    response = http_retry.request_with_retry("GET", FRANKFURTER_RATE_URL, timeout=RATE_TIMEOUT_SECONDS)
     response.raise_for_status()
     try:
         data = response.json()
@@ -96,8 +102,11 @@ def resolve_yen_to_usd_rate(today_utc: date) -> float:
     """Use the provider's rate, or warn once and use the documented fallback."""
     try:
         return fetch_yen_to_usd_rate(today_utc)
-    except (requests.RequestException, RateDataError) as e:
-        logger.warning("Using fallback JPY-to-USD rate %.4f: %s", YEN_TO_USD, e)
+    except (requests.RequestException, RateDataError) as exc:
+        response = getattr(exc, "response", None)
+        status = getattr(response, "status_code", None)
+        detail = f"HTTP {status}" if status is not None else type(exc).__name__
+        logger.warning("Using fallback JPY-to-USD rate %.4f (%s)", YEN_TO_USD, detail)
         return YEN_TO_USD
 
 
@@ -114,7 +123,7 @@ class YahooListing:
 def fetch_yahoo_page(url):
     """Downloads a Yahoo results page and returns it as text."""
     # timeout so a hung connection can't stall the run forever
-    response = requests.get(url, timeout=YAHOO_TIMEOUT_SECONDS)
+    response = http_retry.request_with_retry("GET", url, timeout=YAHOO_TIMEOUT_SECONDS)
     # raise on 4xx/5xx so an error page is never parsed as if it were results
     response.raise_for_status()
     # decode explicitly: requests guesses ISO-8859-1 if the charset is missing, which garbles Japanese
@@ -298,53 +307,95 @@ def build_sections(
 
 
 def main():
+    root = logging.getLogger()
+    if not root.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        root.addHandler(handler)
+        root.setLevel(logging.INFO)
+    logger.info("Yahoo deals job started")
     try:
         # read the items first: opening the database checks its schema version,
         # so an outdated database fails before any network call
         items = get_tracked_items()
         if not items:
-            print(NO_ITEMS_LINE)
-            return
+            logger.info("No active items in the database")
+            logger.info("Yahoo deals job finished: 0 deals, 0 item failures")
+            return 0
         # fetch and parse once per run; errors propagate on purpose so a broken page
         # means no emails and a non-zero exit instead of looking like "no deals today"
         listings = parse_listings(fetch_yahoo_page(RICK_OWENS_URL))
         # A parsed page is a fresh observation even when it contains no new deals.
         update_last_seen_at((listing.url for listing in listings), datetime.now(timezone.utc))
         if not listings:
-            print(NO_DEALS_LINE)
-            return
+            logger.info(NO_DEALS_LINE)
+            logger.info("Yahoo deals job finished: 0 deals, 0 item failures")
+            return 0
         # Resolve once so all items and listings in this run share one conversion.
         yen_to_usd = resolve_yen_to_usd_rate(datetime.now(timezone.utc).date())
         for item in items:
             if item.effective_price_usd is None:
-                print(f"Skipping {item.name}: no usable market price.")
+                logger.info("Skipping item %d (%s): no usable market price", item.id, item.name)
         known = get_known_listing_urls(listing.url for listing in listings)
+        claimed = set()
+        sections = []
+        failed_item_count = 0
+        for item in items:
+            try:
+                deals = find_item_deals(item, listings, known | claimed, yen_to_usd)
+            except (ValueError, TypeError) as exc:
+                failed_item_count += 1
+                logger.warning("Yahoo deal calculation failed for item %d (%s)", item.id, type(exc).__name__)
+                continue
+            # Claim every match before the top-five cut to preserve section priority.
+            claimed.update(deal.url for deal in deals)
+            if deals:
+                sections.append(ItemDeals(
+                    item.name,
+                    item.effective_price_usd,
+                    tuple(deals[:TOP_DEALS_PER_ITEM]),
+                    max(0, len(deals) - TOP_DEALS_PER_ITEM),
+                ))
         digest = build_digest(
-            build_sections(items, listings, known, yen_to_usd),
+            sections,
             datetime.now().astimezone().date(),
         )
         if digest is None:
-            print(NO_DEALS_LINE)
-            return
+            logger.info(NO_DEALS_LINE)
+            if failed_item_count:
+                logger.info("Yahoo deals job finished: 0 deals, %d item failures", failed_item_count)
+                raise SystemExit(1)
+            logger.info("Yahoo deals job finished: 0 deals, 0 item failures")
+            return 0
         if not send_email(digest.subject, digest.html, digest.text):
             # nothing was recorded, so the same deals are offered again next run
             n = len(digest.deals)
-            print(
-                "Error: digest email not sent, so its deals were not recorded and will be "
-                f"offered again next run ({n} deal{'' if n == 1 else 's'}).",
-                file=sys.stderr,
-            )
+            logger.error("Digest email failed; %d deals remain eligible for the next run", n)
             raise SystemExit(1)
         # record only after a successful send, and only the deals that were shown
-        for deal in digest.deals:
-            record_listing_match(
-                deal.brand_id, deal.url, deal.title, deal.price_yen, deal.image_url, deal.item_id
+        try:
+            record_listing_matches(digest.deals)
+        except Exception as exc:
+            logger.error("Post-send listing batch recording failed (%s)", type(exc).__name__)
+            raise SystemExit(1)
+        logger.info("Yahoo digest sent and %d displayed deals recorded", len(digest.deals))
+        if failed_item_count:
+            logger.info(
+                "Yahoo deals job finished: %d deals, %d item failures",
+                len(digest.deals), failed_item_count,
             )
-    except SchemaVersionError as e:
-        # the one error with a message written for you (it names the fix), so no traceback
-        print(f"Error: {e}", file=sys.stderr)
+            raise SystemExit(1)
+        logger.info("Yahoo deals job finished: %d deals, 0 item failures", len(digest.deals))
+        return 0
+    except SchemaVersionError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        logger.error("Yahoo deals job failed (%s)", type(exc).__name__)
         raise SystemExit(1)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
