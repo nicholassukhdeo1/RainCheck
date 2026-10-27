@@ -114,10 +114,45 @@ def test_rc13_c1_fresh_schema_keeps_version_three_and_unique_yahoo_brand_id(temp
 def test_rc13_c2_real_and_fixture_catalogs_declare_rick_owens_id_in_order():
     real_entries = json.loads((Path(db.SRC_DIR) / "catalog.json").read_text(encoding="utf-8"))
     fixture_entries = json.loads(FIXTURE_CATALOG.read_text(encoding="utf-8"))
-    assert real_entries == fixture_entries
-    assert [entry["item name"] for entry in real_entries] == ["rick owens ramones", "pod shorts"]
-    assert [entry["yahoo_brand_id"] for entry in real_entries] == ["103538", "103538"]
-    assert all(entry["brand"] == "Rick Owens" for entry in real_entries)
+    for entries in (real_entries, fixture_entries):
+        assert [entry.get("yahoo_brand_id") for entry in entries] == ["103538", "103538"]
+
+    real_without_ids = [
+        {key: value for key, value in entry.items() if key != "yahoo_brand_id"}
+        for entry in real_entries
+    ]
+    fixture_without_ids = [
+        {key: value for key, value in entry.items() if key != "yahoo_brand_id"}
+        for entry in fixture_entries
+    ]
+    assert real_without_ids == [
+        {
+            "item name": "rick owens ramones", "brand": "Rick Owens", "size": 42,
+            "search_query": "rick owens ramones", "market_price": 800.0,
+            "exclude_keywords": ["drkshdw", "canvas", "low", "ローカット", "fake"],
+            "keywords": ["ramones", "ramon", "ラモーンズ"],
+        },
+        {
+            "item name": "pod shorts", "brand": "Rick Owens", "size": 42,
+            "search_query": "rick owens pod shorts", "market_price": 300.0,
+            "exclude_keywords": ["pants", "fake"],
+            "keywords": ["pod short", "ポッドショーツ", "pod shorts"],
+        },
+    ]
+    assert fixture_without_ids == [
+        {
+            "item name": "rick owens ramones", "brand": "Rick Owens", "size": 42,
+            "search_query": "rick owens ramones", "market_price": 800.0,
+            "exclude_keywords": ["drkshdw", "canvas", "low", "fake"],
+            "keywords": ["ramones", "ramon"],
+        },
+        {
+            "item name": "pod shorts", "brand": "Rick Owens", "size": 42,
+            "search_query": "pod shorts", "market_price": 300.0,
+            "exclude_keywords": ["pants", "fake"],
+            "keywords": ["pod short", "pod shorts"],
+        },
+    ]
 
 
 @pytest.mark.parametrize("bad", [
@@ -421,8 +456,8 @@ def test_rc13_c15_send_failure_records_no_listings_or_matches(temp_db, fake_http
     monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text: True)
     yahoo_scrape.main()
     assert rows(temp_db, "SELECT url FROM listings ORDER BY url") == [
-        "https://auctions.yahoo.co.jp/jp/auction/t7000000009",
-        "https://auctions.yahoo.co.jp/jp/auction/t7000000010",
+        ("https://auctions.yahoo.co.jp/jp/auction/t7000000009",),
+        ("https://auctions.yahoo.co.jp/jp/auction/t7000000010",),
     ]
 
 
