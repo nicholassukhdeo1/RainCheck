@@ -62,7 +62,7 @@ def test_rc03a_c13_seed_writes_expected_rows(seeded_db):
             "include": {"ramones", "ramon"},
             "exclude": {"drkshdw", "canvas", "low"},
         },
-        "pod shorts": {"include": {"pod short"}, "exclude": {"pants"}},
+        "pod shorts": {"include": {"pod short", "pod shorts"}, "exclude": {"pants"}},
     }
 
 
@@ -335,9 +335,22 @@ def test_rc03a_c28_real_catalog_has_the_resolved_values():
 
     by_name = {e.name: e for e in db.validate_catalog(parsed)}
 
-    assert by_name["pod shorts"].keywords == ("pod short", "ポッドショーツ")
+    assert by_name["pod shorts"].keywords == ("pod short", "ポッドショーツ", "pod shorts")
+    assert by_name["pod shorts"].exclude_keywords == ("pants",)
     assert by_name["pod shorts"].search_query == "rick owens pod shorts"
     assert by_name["rick owens ramones"].search_query == "rick owens ramones"
+
+
+def test_rc17_c15_seeded_database_has_three_pod_includes_and_existing_exclude(
+    temp_db, monkeypatch
+):
+    monkeypatch.setattr(db, "CATALOG_PATH", REPO_ROOT / "src" / "catalog.json")
+    db.seed_from_catalog()
+
+    assert keyword_sets(temp_db)["pod shorts"] == {
+        "include": {"pod short", "ポッドショーツ", "pod shorts"},
+        "exclude": {"pants"},
+    }
 
 
 def test_rc03a_c29_validate_catalog_returns_normalized_entries():
@@ -357,7 +370,7 @@ def test_rc03a_c29_validate_catalog_returns_normalized_entries():
             name="pod shorts",
             search_query="pod shorts",
             manual_price_usd=300.0,
-            keywords=("pod short",),
+            keywords=("pod short", "pod shorts"),
             exclude_keywords=("pants",),
         ),
     ]
@@ -395,7 +408,7 @@ def test_rc03a_c27_seeding_a_migrated_legacy_database_keeps_ids_and_prices(legac
             "include": {"ramones", "ramon"},
             "exclude": {"drkshdw", "canvas", "low"},
         },
-        "pod shorts": {"include": {"pod short"}, "exclude": {"pants"}},
+        "pod shorts": {"include": {"pod short", "pod shorts"}, "exclude": {"pants"}},
     }
     assert "high top" not in {r[0] for r in rows(legacy_db, "SELECT keyword FROM item_keywords")}
     assert dump_table(legacy_db, "listings") == legacy_before["listings"]

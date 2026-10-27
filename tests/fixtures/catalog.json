@@ -15,6 +15,6 @@
         "search_query": "pod shorts",
         "market_price": 300.0,
         "exclude_keywords": ["pants"],
-        "keywords": ["pod short"]
+        "keywords": ["pod short", "pod shorts"]
     }
 ]

@@ -176,7 +176,10 @@ def test_rc15_c8_brand_comes_from_the_item_not_a_name_lookup(ramones_item, minim
 def test_rc15_c9_pure_functions_need_no_database(tmp_path):
     path = tmp_path / "test.db"
     assert not path.exists()
-    items = [inline_item(1), inline_item(2, "pod shorts", keywords=("pod short",), price=300.0)]
+    items = [
+        inline_item(1),
+        inline_item(2, "pod shorts", keywords=("pod short", "pod shorts"), price=300.0),
+    ]
     listings = [inline_listing(1, yen=20000), inline_listing(2, "Rick Owens Pod Shorts", 10000)]
     deals = yahoo_scrape.find_item_deals(items[0], listings, set())
     sections = yahoo_scrape.build_sections(items, listings, set())
