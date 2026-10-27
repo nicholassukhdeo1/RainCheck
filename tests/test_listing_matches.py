@@ -89,6 +89,28 @@ def test_rc04_c7_integrity_error_closes_database_connection(seeded_db):
     assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
 
 
+def test_rc04_required_title_none_raises_integrity_error_without_partial_writes(seeded_db):
+    from dbhelpers import rows as sql_rows
+
+    brand_id = sql_rows(seeded_db, "SELECT id FROM brands WHERE name = ?", ("Rick Owens",))[0][0]
+    item_id = sql_rows(
+        seeded_db, "SELECT id FROM items WHERE name = ?", ("rick owens ramones",)
+    )[0][0]
+
+    def attempt():
+        with pytest.raises(sqlite3.IntegrityError):
+            db.record_listing_match(brand_id, "https://x/missing-title", None, 10000, None, item_id)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        attempt()
+        gc.collect()
+
+    assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
+    assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+    assert sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches") == []
+
+
 def test_rc04_c8_schema_v1_and_existing_listing_match_rows_are_preserved(seeded_db, db_conn):
     item_id = _ids(db_conn)["rick owens ramones"]
     brand_id = _brand_id(db_conn)
