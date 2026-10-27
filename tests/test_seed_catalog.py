@@ -396,24 +396,19 @@ def test_rc03a_c27_seeding_a_migrated_legacy_database_keeps_ids_and_prices(legac
     legacy_before = dump_all(legacy_db)
     db.init_db()
     assert_legacy_data_preserved(legacy_db, legacy_before)
+    unclaimed_items_before_seed = rows(
+        legacy_db,
+        "SELECT id, name, market_price_usd, manual_price_usd FROM items ORDER BY id",
+    )
+    unclaimed_keywords_before_seed = keyword_sets(legacy_db)
 
     db.seed_from_catalog(FIXTURE_CATALOG)
 
     assert rows(
         legacy_db,
         "SELECT id, name, market_price_usd, manual_price_usd FROM items ORDER BY id",
-    ) == [
-        (1, "rick owens ramones", 420.0, 800.0),
-        (2, "pod shorts", 300.0, 300.0),
-    ]
-    assert keyword_sets(legacy_db) == {
-        "rick owens ramones": {
-            "include": {"ramones", "ramon"},
-            "exclude": {"drkshdw", "canvas", "low", "fake"},
-        },
-        "pod shorts": {"include": {"pod short", "pod shorts"}, "exclude": {"pants", "fake"}},
-    }
-    assert "high top" not in {r[0] for r in rows(legacy_db, "SELECT keyword FROM item_keywords")}
+    ) == unclaimed_items_before_seed
+    assert keyword_sets(legacy_db) == unclaimed_keywords_before_seed
     listings = dump_table(legacy_db, "listings")
     before_listings = legacy_before["listings"]
     assert [row[:len(before_listings[0])] for row in listings] == before_listings

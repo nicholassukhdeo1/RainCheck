@@ -74,7 +74,11 @@ def _read_legacy_v2_rows(path):
     try:
         return {
             "brands": conn.execute("SELECT * FROM brands ORDER BY id").fetchall(),
-            "items": conn.execute("SELECT * FROM items ORDER BY id").fetchall(),
+            # Compare fields that existed before RC-14 added config_source.
+            "items": conn.execute(
+                "SELECT id, brand_id, name, market_price_usd, search_query, manual_price_usd, active "
+                "FROM items ORDER BY id"
+            ).fetchall(),
             "item_keywords": conn.execute("SELECT * FROM item_keywords ORDER BY item_id, keyword").fetchall(),
             "listings": conn.execute(
                 "SELECT id, brand_id, url, title, price_yen, image_url, first_seen_at, last_seen_at, "

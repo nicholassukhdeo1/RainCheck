@@ -246,6 +246,8 @@ def test_rc13_c7_deactivated_brand_keeps_brand_and_listing_history_but_is_not_ac
     temp_db, tmp_path
 ):
     prepare_database(temp_db, include_brand_b=True)
+    # This fixture represents a catalog-managed item that should follow seeding.
+    run(temp_db, "UPDATE items SET config_source='catalog' WHERE id=3")
     brand_id = rows(temp_db, "SELECT id FROM brands WHERE name='Brand B'")[0][0]
     db.insert_listing(brand_id, "https://example.test/old", "old listing", 1000, None)
     db.seed_from_catalog(write_catalog(tmp_path, catalog()))

@@ -104,6 +104,10 @@ def test_rc06_c2_version_one_migration_preserves_existing_rows(legacy_db):
             # RC-16 appends nullable metadata; the legacy columns and values remain intact.
             assert [row[:len(expected[0])] for row in actual] == expected
             assert all(row[len(expected[0]):] == (None, None, None) for row in actual)
+        elif table == "items":
+            # RC-14 appends ownership; legacy rows migrate as unclaimed.
+            assert [row[:len(expected[0])] for row in actual] == expected
+            assert all(row[len(expected[0]):] == ("unclaimed",) for row in actual)
         else:
             assert actual == expected
     assert rows(legacy_db, "SELECT COUNT(*) FROM ebay_listing_prices") == [(0,)]
@@ -675,6 +679,9 @@ def test_rc16_c2_v1_through_v2_to_v3_upgrade_keeps_backup_integrity_and_keywords
             assert columns(upgrade_db, table)[:len(before_columns)] == before_columns
             assert [row[:len(before_columns)] for row in actual] == expected
             assert all(row[len(before_columns):] == (None, None, None) for row in actual)
+        elif table == "items":
+            assert [row[:len(expected[0])] for row in actual] == expected
+            assert all(row[len(expected[0]):] == ("unclaimed",) for row in actual)
         else:
             assert actual == expected
     keyword_rows = set(rows(upgrade_db, "SELECT item_id, keyword, kind FROM item_keywords"))

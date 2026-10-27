@@ -1268,7 +1268,7 @@ def test_rc10_c26_yahoo_no_active_items_is_a_successful_no_work_run(
 def test_rc03b_c19_main_on_newer_schema_version_is_a_clean_error(
     temp_db, fake_http, sent_emails, capsys
 ):
-    set_user_version(temp_db, 4)
+    set_user_version(temp_db, 5)
     before = sha256(temp_db)
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
