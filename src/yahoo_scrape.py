@@ -39,9 +39,9 @@ NO_DEALS_LINE = "No new deals; no email sent."
 logger = logging.getLogger(__name__)
 
 
-def record_listing_matches(deals):
+def record_listing_matches(deals, *, sources_by_url=None):
     """Forward the digest batch to the database writer at the job boundary."""
-    return db.record_listing_matches(deals)
+    return db.record_listing_matches(deals, sources_by_url=sources_by_url)
 
 
 class YahooPageError(Exception):
@@ -118,6 +118,9 @@ class YahooListing:
     title: str
     price_yen: int
     image_url: str | None
+    is_fixed_price: bool | None = None
+    buy_now_price_yen: int | None = None
+    scheduled_end_at: datetime | None = None
 
 
 def fetch_yahoo_page(url):
@@ -149,6 +152,25 @@ def _parse_record(record):
     if not isinstance(price, int) or isinstance(price, bool) or price < 1:
         return None
 
+    fixed = record.get("isFixedPrice")
+    if type(fixed) is not bool:
+        fixed = None
+    buy_now = record.get("buyNowPrice")
+    if buy_now is not None and (
+        isinstance(buy_now, bool) or not isinstance(buy_now, int) or buy_now <= 0
+    ):
+        # An invalid immediate price must not turn a fixed listing into a false deal.
+        return None
+    end = record.get("endTime")
+    scheduled_end = None
+    if isinstance(end, str):
+        try:
+            parsed_end = datetime.fromisoformat(end)
+            if parsed_end.utcoffset() is not None:
+                scheduled_end = parsed_end.astimezone(timezone.utc)
+        except ValueError:
+            pass
+
     image_url = record.get("imageUrl")
     if not isinstance(image_url, str) or not image_url:
         image_url = None
@@ -165,7 +187,10 @@ def _parse_record(record):
     # only a literal True counts as a flea market item
     prefix = FLEAMARKET_URL_PREFIX if record.get("isFleamarketItem") is True else AUCTION_URL_PREFIX
 
-    return YahooListing(auction_id, prefix + auction_id, title.strip(), price, image_url)
+    return YahooListing(
+        auction_id, prefix + auction_id, title.strip(), price, image_url,
+        fixed, buy_now, scheduled_end,
+    )
 
 
 def parse_listings(html):
@@ -241,8 +266,8 @@ def find_item_deals(
     yen_to_usd: float,
 ) -> list[Deal]:
     """
-    Pure: returns the item's new deals (keyword match, below market, not in skip_urls),
-    best discount first. Nothing is written, so the caller decides when a deal counts as seen.
+    Pure: returns immediate deals followed by provisional auction watches.
+    Nothing is written, so the caller decides when a listing counts as seen.
     """
     _validate_yen_to_usd(yen_to_usd)
     # the item already carries its price (eBay first, catalog fallback), so no database read is needed
@@ -250,7 +275,8 @@ def find_item_deals(
     if market_price is None:
         return []
 
-    deals = []
+    immediate = []
+    watches = []
     for listing in listings:
         # only process listings that match the item's keywords and none of its exclude keywords
         # (the same rule the eBay job uses, so both halves of the comparison mean the same item)
@@ -259,24 +285,66 @@ def find_item_deals(
         if listing.url in skip_urls:
             continue
 
-        price_usd = listing.price_yen * yen_to_usd
-        pct_cheaper = ((market_price - price_usd) / market_price) * 100
-        if pct_cheaper > 0:
-            deals.append(Deal(
-                item_id=item.id,
-                brand_id=item.brand_id,
-                url=listing.url,
-                title=listing.title,
-                price_yen=listing.price_yen,
-                price_usd=price_usd,
-                market_price_usd=market_price,
-                discount_pct=pct_cheaper,
-                image_url=listing.image_url,
-            ))
+        kind = None
+        selected_yen = None
+        current_yen = None
+        potential_pct = None
+        if listing.is_fixed_price is True:
+            if listing.buy_now_price_yen is None or listing.buy_now_price_yen == listing.price_yen:
+                kind = "fixed_price"
+                selected_yen = listing.price_yen
+        elif listing.is_fixed_price is False:
+            buy_now = listing.buy_now_price_yen
+            if buy_now is not None and buy_now * yen_to_usd < market_price:
+                kind = "auction_buy_now"
+                selected_yen = buy_now
+                if listing.price_yen < buy_now:
+                    current_yen = listing.price_yen
+                    potential_pct = (
+                        (market_price - current_yen * yen_to_usd) / market_price * 100
+                    )
+            else:
+                kind = "auction_watch"
+                selected_yen = listing.price_yen
 
-    # sort is stable, so equal discounts keep page order (newest first)
-    deals.sort(key=lambda d: d.discount_pct, reverse=True)
-    return deals
+        if selected_yen is None:
+            continue
+        price_usd = selected_yen * yen_to_usd
+        pct_cheaper = ((market_price - price_usd) / market_price) * 100
+        if pct_cheaper <= 0:
+            continue
+        deal = Deal(
+            item_id=item.id,
+            brand_id=item.brand_id,
+            url=listing.url,
+            title=listing.title,
+            price_yen=selected_yen,
+            price_usd=price_usd,
+            market_price_usd=market_price,
+            discount_pct=pct_cheaper,
+            image_url=listing.image_url,
+            kind=kind,
+            current_price_yen=current_yen,
+            potential_discount_pct=potential_pct,
+            scheduled_end_at=listing.scheduled_end_at,
+        )
+        (watches if kind == "auction_watch" else immediate).append(deal)
+
+    # Stable sorts retain page order for ties, while unknown auction ends go last.
+    immediate.sort(key=lambda deal: deal.discount_pct, reverse=True)
+    watches.sort(key=lambda deal: (
+        deal.scheduled_end_at is None,
+        deal.scheduled_end_at or datetime.max.replace(tzinfo=timezone.utc),
+    ))
+    return immediate + watches
+
+
+def _shown_deals(deals, limit):
+    """Take separate per-item limits for immediate deals and auction watches."""
+    immediate = [deal for deal in deals if deal.kind != "auction_watch"]
+    watches = [deal for deal in deals if deal.kind == "auction_watch"]
+    shown = tuple(immediate[:limit] + watches[:limit])
+    return shown, len(deals) - len(shown)
 
 
 def build_sections(
@@ -297,11 +365,12 @@ def build_sections(
         deals = find_item_deals(item, listings, known | claimed, yen_to_usd)
         claimed.update(deal.url for deal in deals)
         if deals:
+            shown, not_shown = _shown_deals(deals, per_item_limit)
             sections.append(ItemDeals(
                 item.name,
                 item.effective_price_usd,
-                tuple(deals[:per_item_limit]),
-                max(0, len(deals) - per_item_limit),
+                shown,
+                not_shown,
             ))
     return sections
 
@@ -350,11 +419,12 @@ def main():
             # Claim every match before the top-five cut to preserve section priority.
             claimed.update(deal.url for deal in deals)
             if deals:
+                shown, not_shown = _shown_deals(deals, TOP_DEALS_PER_ITEM)
                 sections.append(ItemDeals(
                     item.name,
                     item.effective_price_usd,
-                    tuple(deals[:TOP_DEALS_PER_ITEM]),
-                    max(0, len(deals) - TOP_DEALS_PER_ITEM),
+                    shown,
+                    not_shown,
                 ))
         digest = build_digest(
             sections,
@@ -367,6 +437,11 @@ def main():
                 raise SystemExit(1)
             logger.info("Yahoo deals job finished: 0 deals, 0 item failures")
             return 0
+        # Every emailed row must have its original current bid and format available.
+        sources_by_url = {listing.url: listing for listing in listings}
+        if any(deal.url not in sources_by_url for deal in digest.deals):
+            logger.error("Yahoo digest has a displayed deal without a parsed source")
+            raise SystemExit(1)
         if not send_email(digest.subject, digest.html, digest.text):
             # nothing was recorded, so the same deals are offered again next run
             n = len(digest.deals)
@@ -374,7 +449,7 @@ def main():
             raise SystemExit(1)
         # record only after a successful send, and only the deals that were shown
         try:
-            record_listing_matches(digest.deals)
+            record_listing_matches(digest.deals, sources_by_url=sources_by_url)
         except Exception as exc:
             logger.error("Post-send listing batch recording failed (%s)", type(exc).__name__)
             raise SystemExit(1)
