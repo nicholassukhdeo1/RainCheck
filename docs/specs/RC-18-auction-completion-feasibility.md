@@ -1,13 +1,13 @@
 # RC-18: Auction completion and final-price source feasibility
 
-**Status:** Draft
+**Status:** Approved
 **Backlog item:** RC-18 in `docs/BACKLOG.md`
 
 ## Summary
 
 Establish whether Yahoo's public pages can identify the completed state, sale outcome, actual end time, and final sale price of a stored RainCheck auction by its exact auction ID.
 The verified yen amounts in this study are individual Yahoo Auctions Japan sale observations, not a market-value estimate.
-The current evidence supports a sold example but does not pass the unsold and relisting gate, so this draft specifies a no-go for production completion writes until that evidence is captured.
+The current evidence supports a sold example but does not pass the unsold and relisting gate, so production completion writes remain no-go until that evidence is captured.
 
 ## Motivation
 
@@ -136,15 +136,16 @@ Any future RC-18 implementation touching `src/db.py` or `src/schema.sql` cannot 
 
 ## Open questions
 
-1. Is a limited, public-page feasibility study acceptable before any code change?
-   Recommendation: yes, and keep production writes gated on inspectable sold, unsold, active, and relisted evidence.
-   Tradeoff: final-price capture is delayed, but the database will not claim a sale that cannot be verified.
-2. If Yahoo reuses one URL for no-bid relistings, should RainCheck track every auction cycle or only the latest visible state?
-   Recommendation: track cycles only if Yahoo exposes a stable public cycle key; otherwise leave completion unknown for that URL.
-   Tradeoff: a cycle table adds schema and migration work, while using only the latest state can erase a prior unsold completion.
-3. Should a later buyer cancellation revise a previously captured sale outcome?
+1. Should a later buyer cancellation revise a previously captured sale outcome?
    Recommendation: defer this decision until public examples show what Yahoo exposes and how it changes.
    Tradeoff: an immutable first result is simpler, while a revisable status better reflects a canceled transaction.
+
+### Resolved 2026-10-27
+
+- The user approved the public-page feasibility study and its sold, unsold, active, and relisted evidence gate before any production completion writer.
+- If a no-bid relisting reuses an auction ID and URL, RainCheck may track a completed cycle only when Yahoo exposes a stable public cycle key; otherwise completion remains unknown for that URL.
+- This approved feasibility scope studies exact sale outcomes and observed yen prices only.
+  Computing a Yahoo Japan market-value estimate requires a separate spec and explicit label, distinct from the existing eBay-based US market estimate.
 
 ## Rollback
 
