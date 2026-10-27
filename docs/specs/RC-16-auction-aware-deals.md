@@ -172,7 +172,7 @@ fake_sql = (
     "SELECT COUNT(*) FROM item_keywords k "
     "JOIN items i ON i.id = k.item_id "
     "JOIN brands b ON b.id = i.brand_id "
-    "WHERE b.name = ? AND i.name = ? AND k.keyword = 'fake' AND k.kind = 'exclude'"
+    "WHERE b.name = ? AND i.name = ? AND k.keyword = ? AND k.kind = ?"
 )
 
 with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as live:
@@ -182,7 +182,7 @@ with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as live:
         raise RuntimeError("Source database failed quick_check")
     if live.execute("PRAGMA foreign_key_check").fetchone() is not None:
         raise RuntimeError("Source database has broken foreign keys")
-    if any(live.execute(fake_sql, pair).fetchone()[0] != 1 for pair in targets):
+    if any(live.execute(fake_sql, (*pair, "fake", "exclude")).fetchone()[0] != 1 for pair in targets):
         raise RuntimeError("Both exact fake excludes must exist before RC-16")
     counts = tuple(live.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables)
     fd = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -198,7 +198,7 @@ with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as live:
         )
         if backed_up_counts != counts:
             raise RuntimeError("Backup row counts differ from source")
-        if any(backup.execute(fake_sql, pair).fetchone()[0] != 1 for pair in targets):
+        if any(backup.execute(fake_sql, (*pair, "fake", "exclude")).fetchone()[0] != 1 for pair in targets):
             raise RuntimeError("Backup is missing a fake exclude")
 print(f"Verified RC-16 backup: {target}")
 PY
@@ -414,6 +414,8 @@ None.
 - 2026-10-27: Staged the backup-first upgrade so a version 1 database completes RC-06's version 2 migration and targeted `fake` update before RC-16 migration 3, and a version 2 database completes the targeted update before migration 3.
   Added a pinned version 2 checkout fallback, explicit path handling, SQLite online backup, and full preexisting-row, integrity, and foreign-key checks.
   This changes no auction alert policy.
+- 2026-10-27: Parameterized the `fake` keyword and `exclude` kind in the backup verification example to follow the project's SQL convention.
+  This changes no upgrade or auction alert policy.
 
 ## Rollback
 
