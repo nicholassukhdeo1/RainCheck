@@ -740,16 +740,10 @@ def test_rc12_criterion_15_alert_resources_and_outputs_are_production_only():
     production_conditions = {
         name
         for name, expression in conditions.items()
-        if any(
-            isinstance(node, dict)
-            and any(key in node for key in ("Equals", "Fn::Equals"))
-            and len(node.get("Equals", node.get("Fn::Equals", []))) == 2
-            and {"Ref": "DryRun"} in node.get("Equals", node.get("Fn::Equals", []))
-            and any(
-                str(operand) == "0"
-                for operand in node.get("Equals", node.get("Fn::Equals", []))
-            )
-            for node in _walk(expression)
+        if expression
+        in (
+            {"Equals": [{"Ref": "DryRun"}, "0"]},
+            {"Fn::Equals": [{"Ref": "DryRun"}, "0"]},
         )
     }
     assert production_conditions, "template must define a condition that is true only when DryRun=0"
