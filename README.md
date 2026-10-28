@@ -216,14 +216,18 @@ Check that the artifact contains only the nine runtime files from `src/`, with n
    Keep the local backup separately from S3 version retention.
 4. Set `MONTHLY_BUDGET_AMOUNT_USD` to the chosen monthly account budget and enter the alert address without echoing it.
    Do not enable shell tracing or capture these values in shared terminal logs.
+   The prompts below work in Bash and zsh.
    ```bash
-   read -r -p 'Monthly budget amount in USD: ' MONTHLY_BUDGET_AMOUNT_USD
-   read -r -s -p 'Alert email: ' ALERT_EMAIL
+   printf 'Monthly budget amount in USD: '
+   IFS= read -r MONTHLY_BUDGET_AMOUNT_USD
+   printf 'Alert email: '
+   IFS= read -r -s ALERT_EMAIL
    printf '\n'
    ```
+   Do not prepare this deployment until the user has explicitly authorized SAM artifact preparation, which can create an artifact bucket and upload the package even though the application change set will not execute.
    Build and prepare the production change set using `sam deploy --template-file .aws-sam/build/template.yaml --stack-name raincheck --region us-east-2 --capabilities CAPABILITY_IAM --resolve-s3 --parameter-overrides "MonthlyBudgetAmountUsd=$MONTHLY_BUDGET_AMOUNT_USD" "AlertEmail=$ALERT_EMAIL" --no-execute-changeset`.
    `--resolve-s3` lets SAM create and use a deployment artifact bucket on a first non-guided deploy.
-   Review the production change set in CloudFormation, then execute that exact change set from the console after authorization.
+   Review the production change set in CloudFormation, then obtain approval for that exact application change set before executing it from the console.
    Always deploy the built template so the explicit Makefile allowlist, rather than the repository root, becomes the Lambda package.
    The S3 bucket is retained if the stack is deleted, and its name is available from the `DatabaseBucketName` stack output.
 5. Upload the verified snapshot to the stack's bucket at the configured `DatabaseKey` using an HTTPS S3 request with SSE-S3 (`AES256`).
@@ -268,13 +272,16 @@ Stop the schedule before any manual object replacement; the handler's ETag condi
 
 ### Isolated dry-run and schedule enablement
 
+The required `MonthlyBudgetAmountUsd` and `AlertEmail` parameters are still supplied because CloudFormation validates required parameters even when `DryRun=1`.
+The production-only condition omits the budget, SNS topic, email subscription, topic policy, error alarm, and alert outputs from this throwaway stack.
+Do not prepare its change set until the user has explicitly authorized SAM artifact preparation, which can create an artifact bucket and upload the package.
 Prepare the separate throwaway stack's change set using `sam deploy --template-file .aws-sam/build/template.yaml --stack-name raincheck-dry-run --region us-east-2 --capabilities CAPABILITY_IAM --resolve-s3 --parameter-overrides DryRun=1 "MonthlyBudgetAmountUsd=$MONTHLY_BUDGET_AMOUNT_USD" "AlertEmail=$ALERT_EMAIL" --no-execute-changeset`.
-Review the throwaway stack's change set in CloudFormation, then execute that exact change set from the console after authorization.
+Review the throwaway stack's change set in CloudFormation, then obtain approval for that exact application change set before executing it from the console.
 The separate stack creates a separate database bucket and keeps its schedule disabled.
 Upload a separate database containing only synthetic listings and no active items; `DryRun=1` sets `RAINCHECK_DRY_RUN=1` in that stack's Lambda configuration.
 The empty active watchlist avoids live listing acquisition while exercising S3 download, schema checks, SSM access, the runner, and the conditional upload.
 Invoke only that throwaway function with an empty event after the separate bucket and database have been verified.
-The dry-run sends no email; the handler suppresses the complete printed digest before CloudWatch receives stdout.
+The dry-run stack creates no RC-12 budget or alert email subscription, and the handler suppresses the complete printed digest before CloudWatch receives stdout.
 Inspect its logs for success and confirm they contain no digest HTML, synthetic listing title, or recipient address.
 Check that the production bucket's current S3 object version is unchanged.
 The dry-run can never write the production S3 object because its execution role and environment point to the throwaway bucket.
@@ -293,6 +300,7 @@ Because the budget has no cost filters, unrelated charges in the underlying AWS 
 The required `MonthlyBudgetAmountUsd` and `AlertEmail` inputs have no defaults, and `AlertEmail` is marked `NoEcho` in CloudFormation.
 CloudFormation can still store the email as the budget recipient and SNS subscription endpoint, so keep the input private.
 Supply both values for every new stack or stack update, including the production and isolated dry-run commands above.
+The `DryRun=1` stack still requires both parameters for CloudFormation validation, while its production-only condition omits all RC-12 budget and alert resources.
 
 ### Alert deployment preflight
 

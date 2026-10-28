@@ -53,6 +53,7 @@ Rules:
 
 Conditions:
   HasReceiverEmail: !Not [!Equals [!Ref ReceiverEmailParameterName, '']]
+  IsProductionDeployment: !Equals [!Ref DryRun, '0']
 
 Resources:
   DatabaseBucket:
@@ -194,6 +195,7 @@ Resources:
 
   MonthlyCostBudget:
     Type: AWS::Budgets::Budget
+    Condition: IsProductionDeployment
     Properties:
       Budget:
         BudgetName: !Sub '${AWS::StackName}-monthly-cost'
@@ -214,9 +216,11 @@ Resources:
 
   AlertTopic:
     Type: AWS::SNS::Topic
+    Condition: IsProductionDeployment
 
   AlertEmailSubscription:
     Type: AWS::SNS::Subscription
+    Condition: IsProductionDeployment
     Properties:
       Protocol: email
       Endpoint: !Ref AlertEmail
@@ -224,6 +228,7 @@ Resources:
 
   AlertTopicPolicy:
     Type: AWS::SNS::TopicPolicy
+    Condition: IsProductionDeployment
     Properties:
       Topics:
         - !Ref AlertTopic
@@ -244,6 +249,7 @@ Resources:
 
   LambdaErrorAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: IsProductionDeployment
     Properties:
       AlarmName: !Sub '${AWS::StackName}-lambda-errors'
       AlarmDescription: RainCheck Lambda invocation errors in us-east-2.
@@ -273,6 +279,8 @@ Outputs:
   ScheduleName:
     Value: !Sub '${AWS::StackName}-daily'
   AlertTopicArn:
+    Condition: IsProductionDeployment
     Value: !Ref AlertTopic
   ErrorAlarmName:
+    Condition: IsProductionDeployment
     Value: !Ref LambdaErrorAlarm
