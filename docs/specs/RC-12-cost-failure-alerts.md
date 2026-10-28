@@ -70,7 +70,7 @@ None.
   Use a stack-scoped alarm name so the SNS policy can constrain `sns:Publish` to its exact ARN and `aws:SourceAccount`.
   Neither the Lambda execution role nor the Scheduler role needs SNS publishing permission.
 - Keep the existing `SelectedRegion` CloudFormation rule and disabled daily schedule.
-  These resources are deployed through the same `us-east-2` stack; do not create a second-region stack for Budgets even though billing data is account-wide.
+   These resources are deployed through the same `us-east-2` production stack; do not create a second-region stack for Budgets even though billing data is account-wide.
   AWS publishes a [budget CloudFormation quickstart with a US East (Ohio) launch link](https://startups.aws.com/learn/why-every-startup-should-set-up-a-budget-and-how-aws-budgets-makes-it-easy?lang=en-US), which supports this design.
   The [Budgets API endpoint list](https://docs.aws.amazon.com/general/latest/gr/billing.html) describes direct API endpoints, not the Region of a CloudFormation stack.
   As a deployment preflight, check that the current [us-east-2 CloudFormation resource specification](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/cfn-resource-specification.html) includes `AWS::Budgets::Budget`.
@@ -103,7 +103,7 @@ Each criterion is checked offline until the user separately authorizes an AWS de
 7. The alarm's `AlarmActions` contains only the topic ARN and its action is enabled; no OK or insufficient-data action sends mail.
 8. The `SelectedRegion` rule still rejects other Regions, and `DailySchedule.State` remains `DISABLED` after this change.
    The runbook includes a pre-deployment check of `AWS::Budgets::Budget` in the current `us-east-2` CloudFormation resource specification, with a stop condition if the resource is absent.
-9. The runbook requires explicit budget amount and alert email input, review of the CloudFormation change set, and approval before any resource creation.
+9. The runbook requires explicit budget amount and alert email input, authorization before SAM's artifact upload or bucket creation, then review and approval of the CloudFormation application change set before its execution.
    It gives a way to check the resulting budget, alarm, SNS topic policy, and subscription without showing credentials or the alert email in shared logs.
 10. The runbook requires the recipient to verify the direct AWS Budgets email and separately confirm the SNS subscription, then check each status before depending on alerts.
 11. After separately authorized deployment, a verification procedure uses CloudWatch `SetAlarmState` to move the alarm temporarily to `ALARM`, confirms one alarm email reaches the recipient, checks the alarm history, and confirms metric evaluation returns it to its measured state without invoking the production job or changing the production database.
@@ -111,6 +111,7 @@ Each criterion is checked offline until the user separately authorizes an AWS de
 12. The runbook lists Lambda, S3 database versions and deployment artifacts, SSM, EventBridge Scheduler, CloudWatch alarm and log storage, SNS, and Budgets as cost categories, tells the user to check current AWS pricing and existing budget count, and explains that notifications do not stop charges.
 13. The runbook states that disabled schedules, undelivered Scheduler events, and missing invocations do not trigger this `Errors` alarm; budget alerts follow delayed billing data.
 14. The existing offline test suite and new semantic tests pass without AWS calls, network access, SMTP, or the real database.
+15. All RC-12 resources and their outputs use a `DryRun=0` condition, so the documented `DryRun=1` isolated stack creates no account-wide budget or alert email subscription.
 
 ## Edge cases
 
@@ -127,8 +128,10 @@ Each criterion is checked offline until the user separately authorizes an AWS de
 ## Test plan
 
 - Parse `template.yaml` with the existing CloudFormation-aware YAML loader in `tests/test_sam_template.py` and inspect resource types, intrinsics, exact metric dimensions, policy principals and conditions, Region rule, and disabled schedule.
+- Check that every RC-12 alert resource and output is conditional on the production `DryRun=0` path and is absent from an isolated `DryRun=1` stack.
 - Assert required parameters have no defaults and reject representative invalid amount and email inputs by inspecting constraints.
 - Inspect `README.md` for distinct budget verification and SNS confirmation procedures, a documented `SetAlarmState` test, explicit cost categories, delay and non-cap language, and rollback.
+- Check the runbook's separate authorization before SAM artifact preparation and before executing the reviewed application change set, plus a Bash and zsh compatible input prompt.
 - No saved HTML, API JSON, or database seed fixture is needed because RC-12 changes infrastructure definitions and documentation only.
 - If SAM CLI and `cfn-lint` are available locally, validate the template without deploying or contacting AWS.
 - The AWS CloudFormation resource specification for `us-east-2` is the authoritative pre-deployment availability check; the official AWS quickstart for Ohio supports this approach, while the Budgets direct API endpoint list alone does not determine CloudFormation stack support.
@@ -160,6 +163,16 @@ The recipient should be an address the user monitors and can verify; the applica
 The user approved the recommended account-wide monthly budget with no Region, service, or tag filter.
 The user approved one actual-cost email alert at 80% of the selected monthly amount.
 The dollar amount and alert recipient remain required deployment inputs to be supplied when AWS deployment is separately authorized.
+
+## Amendment (2026-10-27)
+
+The independent review found that the existing isolated `DryRun=1` stack uses the same SAM template.
+All RC-12 budget, topic, subscription, policy, alarm, and alert outputs must therefore be conditional on `DryRun=0` so the isolated stack creates no duplicate account-wide budget or alert subscription.
+The required amount and recipient parameters remain necessary when preparing either stack because CloudFormation validates all required parameters.
+The runbook must use an input prompt that works in the user's zsh shell as well as Bash.
+Preparing a first deployment with `sam deploy --resolve-s3 --no-execute-changeset` can create an artifact bucket and upload a package before the application change set is executed.
+The runbook must require separate authorization before that preparation command, followed by review and approval of the exact application change set before executing it.
+Offline tests must check the alert resource conditions, conditional outputs, and both authorization boundaries.
 
 ## Rollback
 
