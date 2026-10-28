@@ -812,3 +812,25 @@ def test_rc12_criterion_13_runbook_distinguishes_absent_invocation_and_delayed_b
     assert "errors alarm" in runbook
     assert "delayed" in runbook and "billing" in runbook
     assert "real-time" in runbook or "real time" in runbook
+
+
+def test_rc12_criterion_16_budget_excludes_credits_only():
+    template = _template()
+    budgets = _resources(template, "AWS::Budgets::Budget")
+    assert len(budgets) == 1
+    budget = budgets[0]["Properties"]["Budget"]
+
+    assert budget.get("CostTypes") == {"IncludeCredit": False}, (
+        "the budget must exclude credits and leave every other CostTypes field at its AWS default"
+    )
+
+
+def test_rc12_criterion_16_runbook_explains_pre_credit_budget_limits():
+    runbook = _runbook()
+
+    assert "before free tier credits" in runbook
+    assert "after applicable always free allowances" in runbook
+    assert "raw request" in runbook
+    assert "payable bill" in runbook
+    assert "delayed" in runbook
+    assert "hard cap" in runbook
