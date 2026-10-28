@@ -294,9 +294,11 @@ The schedule uses a fixed 09:00 Tokyo time, no flexible delivery window, and bou
 
 The template adds one monthly, account-wide USD cost budget and one Lambda invocation error alarm in `us-east-2`.
 The budget sends a direct AWS Budgets email after actual cost exceeds 80% of the chosen amount.
+The budget measures AWS service cost before Free Tier credits are applied and after applicable Always Free allowances.
+Its estimate is based on cost, not raw request counts, and it may differ from the payable bill amount.
+The budget can include unrelated charges in the underlying AWS account because it has no cost filters.
 The alarm sends email through an SNS topic when the RainCheck Lambda `Errors` metric is greater than zero in a five-minute period.
-The budget amount is a notification threshold and does not cap spending.
-Because the budget has no cost filters, unrelated charges in the underlying AWS account contribute to it.
+The budget notification is delayed and does not impose a hard cap on spending.
 The required `MonthlyBudgetAmountUsd` and `AlertEmail` inputs have no defaults, and `AlertEmail` is marked `NoEcho` in CloudFormation.
 CloudFormation can still store the email as the budget recipient and SNS subscription endpoint, so keep the input private.
 Supply both values for every new stack or stack update, including the production and isolated dry-run commands above.

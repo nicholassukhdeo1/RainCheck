@@ -201,6 +201,8 @@ Resources:
         BudgetName: !Sub '${AWS::StackName}-monthly-cost'
         BudgetType: COST
         TimeUnit: MONTHLY
+        CostTypes:
+          IncludeCredit: false
         BudgetLimit:
           Amount: !Ref MonthlyBudgetAmountUsd
           Unit: USD
