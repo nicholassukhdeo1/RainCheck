@@ -565,8 +565,19 @@ def test_rc12_criterion_4_alert_email_is_secret_parameter_for_single_sns_email_s
     assert "Default" not in email
     assert email.get("Type") == "String"
     pattern = email.get("AllowedPattern", "")
-    assert "@" in pattern and "." in pattern
-    assert int(email.get("MinLength", 0)) > 0 or pattern
+    assert pattern
+    assert int(email.get("MinLength", 0)) > 0
+    assert re.fullmatch(pattern, "alerts@example.com")
+    for invalid_email in (
+        "",
+        "   ",
+        "alerts.example.com",
+        "alerts@",
+        "@example.com",
+        "alerts@example",
+        "alerts@.com",
+    ):
+        assert not re.fullmatch(pattern, invalid_email), f"email pattern accepted {invalid_email!r}"
 
     topics = _rc12_named_resources(template, "AWS::SNS::Topic")
     subscriptions = _rc12_resources(template, "AWS::SNS::Subscription")
