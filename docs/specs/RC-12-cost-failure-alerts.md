@@ -60,6 +60,8 @@ None.
   Keep the address out of committed examples, resource names, descriptions, logs, and outputs.
   `NoEcho` masks the parameter in CloudFormation parameter displays, but AWS still stores the address as the budget recipient and SNS subscription endpoint.
 - The budget uses `AWS::Budgets::Budget`, `BudgetType: COST`, `TimeUnit: MONTHLY`, `BudgetLimit` in USD, and a user-approved actual-cost percentage threshold.
+  Set `Budget.CostTypes.IncludeCredit` to `false` so the budget estimates service cost before AWS Free Tier credits are applied.
+  Leave all other `CostTypes` fields unspecified, retaining AWS defaults for discounts, refunds, taxes, and other cost categories.
   A direct email subscriber avoids a second SNS publishing policy for AWS Budgets.
   Do not set a `CostFilters` region or service restriction by default because storage, monitoring, notification, deployment artifacts, and billing charges may not all appear under the Lambda service or selected Region.
   Without filters, this is a budget for charges in the underlying AWS account, not a boundary around RainCheck or an AWS project label.
@@ -82,6 +84,7 @@ None.
   For an authorized delivery check, use CloudWatch `SetAlarmState` to temporarily set this metric alarm to `ALARM` and inspect the alarm history and email; this does not invoke RainCheck.
 
 AWS documents [CloudFormation budget resources](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-budgets-budget.html), [budget threshold properties](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-budgets-budget-notification.html), and [direct budget email verification](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-email-recipients.html).
+AWS documents [`IncludeCredit` as `true` by default](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-properties-budgets-budget-costtypes.html) and explains that [Free Tier credits cover eligible costs beyond monthly Always Free allowances](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier.html).
 Lambda's [Errors metric](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics-types.html) is a count of failed function invocations, including exceptions and timeouts, and AWS recommends the `Sum` statistic.
 CloudWatch documents [missing-data treatment](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/alarms-and-missing-data.html) and [scoped SNS publish policies for alarm actions](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Notify_Users_Alarm_Changes.html).
 SNS [requires email confirmation](https://docs.aws.amazon.com/sns/latest/dg/sns-email-notifications.html), and AWS says [Budgets uses refreshed billing data](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-best-practices.html), so neither path is a real-time or hard-limit guarantee.
@@ -112,6 +115,9 @@ Each criterion is checked offline until the user separately authorizes an AWS de
 13. The runbook states that disabled schedules, undelivered Scheduler events, and missing invocations do not trigger this `Errors` alarm; budget alerts follow delayed billing data.
 14. The existing offline test suite and new semantic tests pass without AWS calls, network access, SMTP, or the real database.
 15. All RC-12 resources and their outputs use a `DryRun=0` condition, so the documented `DryRun=1` isolated stack creates no account-wide budget or alert email subscription.
+16. The monthly `COST` budget sets `Budget.CostTypes` to exactly `{IncludeCredit: false}` and leaves all other cost-type fields unspecified.
+    The runbook says the 80% actual-cost notification measures AWS service cost before Free Tier credits, after applicable Always Free allowances, and can include unrelated account charges.
+    It distinguishes that estimate from raw request counts and the amount payable on a bill, and states that the budget is a delayed alert rather than a hard cap.
 
 ## Edge cases
 
@@ -131,6 +137,7 @@ Each criterion is checked offline until the user separately authorizes an AWS de
 - Check that every RC-12 alert resource and output is conditional on the production `DryRun=0` path and is absent from an isolated `DryRun=1` stack.
 - Assert required parameters have no defaults and reject representative invalid amount and email inputs by inspecting constraints.
 - Inspect `README.md` for distinct budget verification and SNS confirmation procedures, a documented `SetAlarmState` test, explicit cost categories, delay and non-cap language, and rollback.
+- Inspect the parsed budget for `CostTypes` containing only `IncludeCredit: false` and check the runbook's explanation of pre-credit cost, Always Free allowances, bill amount, and alert limits.
 - Check the runbook's separate authorization before SAM artifact preparation and before executing the reviewed application change set, plus a Bash and zsh compatible input prompt.
 - No saved HTML, API JSON, or database seed fixture is needed because RC-12 changes infrastructure definitions and documentation only.
 - If SAM CLI and `cfn-lint` are available locally, validate the template without deploying or contacting AWS.
@@ -163,6 +170,8 @@ The recipient should be an address the user monitors and can verify; the applica
 The user approved the recommended account-wide monthly budget with no Region, service, or tag filter.
 The user approved one actual-cost email alert at 80% of the selected monthly amount.
 The dollar amount and alert recipient remain required deployment inputs to be supplied when AWS deployment is separately authorized.
+The user also approved tracking a monthly USD 10 reference amount against AWS service cost before Free Tier credits.
+This amount is a deployment input and is not committed as a CloudFormation default.
 
 ## Amendment (2026-10-27)
 
@@ -173,6 +182,16 @@ The runbook must use an input prompt that works in the user's zsh shell as well 
 Preparing a first deployment with `sam deploy --resolve-s3 --no-execute-changeset` can create an artifact bucket and upload a package before the application change set is executed.
 The runbook must require separate authorization before that preparation command, followed by review and approval of the exact application change set before executing it.
 Offline tests must check the alert resource conditions, conditional outputs, and both authorization boundaries.
+
+## Amendment (2026-10-27): Cost before credits
+
+The merged RC-12 budget omitted `CostTypes`, so AWS's documented `IncludeCredit: true` default can reduce the budget's cost estimate when Free Tier credits are applied.
+The user approved an alert against a USD 10 monthly reference amount before those credits, while retaining the existing account-wide scope and 80% actual-cost threshold.
+Set only `Budget.CostTypes.IncludeCredit: false` in `template.yaml`; do not change the defaults for any other cost type.
+Explain in `README.md` that this measures chargeable service cost before credits, after applicable Always Free allowances, and may include unrelated account charges.
+It is neither raw request usage nor the payable bill, and delayed AWS Budgets notifications do not impose a hard cap.
+Add an offline semantic assertion in `tests/test_sam_template.py` for the exact `CostTypes` mapping and the runbook explanation.
+The user's decision is resolved, with no further question for this amendment.
 
 ## Rollback
 
