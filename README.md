@@ -313,7 +313,7 @@ AWS project spend limits are configured separately in AWS Settings and are not c
 
 The amount and recipient are deployment inputs, not committed examples.
 Use the hidden email prompt above and avoid shell tracing, shared terminal recording, screenshots, or copied command output containing parameter values.
-Review the CloudFormation change set and approve it before executing any resource creation.
+After separately authorizing SAM artifact preparation, review the generated CloudFormation application change set and approve that exact change set before executing it.
 The change set should contain the budget, SNS topic, email subscription, topic policy, and CloudWatch alarm, while keeping `DailySchedule` disabled.
 After deployment, use the stack outputs `AlertTopicArn` and `ErrorAlarmName` to inspect the resources without printing the email address.
 Check the budget and its notification configuration in AWS Billing and Cost Management, and inspect its subscriber privately.
