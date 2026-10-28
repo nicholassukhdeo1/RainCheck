@@ -492,3 +492,251 @@ def test_rc11c_criterion_25_offline_verification_and_rollback_are_documented():
     assert "rollback" in runbook
     assert "disable" in runbook and "schedule" in runbook
     assert "prior" in runbook and "version" in runbook
+
+
+def _rc12_resources(template, resource_type):
+    return _resources(template, resource_type)
+
+
+def _rc12_parameter(template, name):
+    return template.get("Parameters", {}).get(name, {})
+
+
+def _rc12_named_resources(template, resource_type):
+    return {
+        name: resource
+        for name, resource in template.get("Resources", {}).items()
+        if resource.get("Type") == resource_type
+    }
+
+
+def test_rc12_criterion_1_monthly_account_budget_uses_required_positive_usd_parameter():
+    template = _template()
+    budgets = _rc12_resources(template, "AWS::Budgets::Budget")
+    assert len(budgets) == 1
+    budget = budgets[0]["Properties"]["Budget"]
+    assert budget["BudgetType"] == "COST"
+    assert budget["TimeUnit"] == "MONTHLY"
+    assert budget["BudgetLimit"]["Unit"] == "USD"
+    assert budget["BudgetLimit"]["Amount"] == {"Ref": "MonthlyBudgetAmountUsd"}
+
+    amount = _rc12_parameter(template, "MonthlyBudgetAmountUsd")
+    assert amount.get("Type") == "Number"
+    assert "Default" not in amount
+    assert float(amount.get("MinValue", 0)) > 0
+    assert "monthly" in amount.get("Description", "").lower()
+    assert "usd" in amount.get("Description", "").lower()
+
+
+def test_rc12_criterion_2_budget_sends_one_actual_cost_80_percent_email_without_actions():
+    template = _template()
+    budgets = _rc12_resources(template, "AWS::Budgets::Budget")
+    assert len(budgets) == 1
+    properties = budgets[0]["Properties"]
+    notifications = properties["NotificationsWithSubscribers"]
+    assert len(notifications) == 1
+    notification = notifications[0]["Notification"]
+    assert notification["NotificationType"] == "ACTUAL"
+    assert notification["ComparisonOperator"] == "GREATER_THAN"
+    assert notification["ThresholdType"] == "PERCENTAGE"
+    assert notification["Threshold"] == 80
+    subscribers = notifications[0]["Subscribers"]
+    assert subscribers == [
+        {"SubscriptionType": "EMAIL", "Address": {"Ref": "AlertEmail"}}
+    ]
+    assert "BudgetActions" not in properties
+
+
+def test_rc12_criterion_3_budget_is_account_wide_and_runbook_explains_unrelated_charges():
+    template = _template()
+    budgets = _rc12_resources(template, "AWS::Budgets::Budget")
+    assert len(budgets) == 1
+    budget = budgets[0]["Properties"]["Budget"]
+    assert not budget.get("CostFilters"), "account-wide budget must not restrict cost filters"
+    runbook = _runbook()
+    assert "account-wide" in runbook or "underlying aws account" in runbook
+    assert "unrelated" in runbook and "charges" in runbook
+
+
+def test_rc12_criterion_4_alert_email_is_secret_parameter_for_single_sns_email_subscription():
+    template = _template()
+    email = _rc12_parameter(template, "AlertEmail")
+    assert email.get("NoEcho") is True
+    assert "Default" not in email
+    assert email.get("Type") == "String"
+    pattern = email.get("AllowedPattern", "")
+    assert "@" in pattern and "." in pattern
+    assert int(email.get("MinLength", 0)) > 0 or pattern
+
+    topics = _rc12_named_resources(template, "AWS::SNS::Topic")
+    subscriptions = _rc12_resources(template, "AWS::SNS::Subscription")
+    assert len(topics) == 1
+    assert len(subscriptions) == 1
+    subscription = subscriptions[0]["Properties"]
+    assert subscription["Protocol"] == "email"
+    assert subscription["Endpoint"] == {"Ref": "AlertEmail"}
+    assert subscription["TopicArn"] == {"Ref": next(iter(topics))}
+
+    resource_names = list(template.get("Resources", {}))
+    outputs = template.get("Outputs", {})
+    output_values = _all_strings(outputs)
+    assert all("@" not in name for name in resource_names)
+    assert not any("@" in value for value in output_values)
+    assert not any(
+        node == {"Ref": "AlertEmail"}
+        for node in _walk(outputs)
+        if isinstance(node, dict)
+    )
+
+
+def test_rc12_criterion_5_sns_publish_policy_is_limited_to_alarm_and_account():
+    template = _template()
+    policies = _rc12_resources(template, "AWS::SNS::TopicPolicy")
+    assert len(policies) == 1
+    policy = policies[0]["Properties"]
+    topics = _rc12_named_resources(template, "AWS::SNS::Topic")
+    assert policy["Topics"] == [{"Ref": next(iter(topics))}]
+    statements = policy["PolicyDocument"].get("Statement", [])
+    publish_statements = [
+        statement
+        for statement in statements
+        if "sns:Publish" in (
+            statement["Action"]
+            if isinstance(statement.get("Action"), list)
+            else [statement.get("Action")]
+        )
+    ]
+    assert len(publish_statements) == 1
+    statement = publish_statements[0]
+    assert statement["Effect"] == "Allow"
+    assert statement["Principal"] == {"Service": "cloudwatch.amazonaws.com"}
+    condition = statement["Condition"]
+    alarms = _rc12_named_resources(template, "AWS::CloudWatch::Alarm")
+    assert len(alarms) == 1
+    source_arn = condition.get("ArnEquals", {}).get("aws:SourceArn")
+    assert source_arn == {"Fn::GetAtt": [next(iter(alarms)), "Arn"]}
+    assert "*" not in str(source_arn)
+    assert condition.get("StringEquals", {}).get("aws:SourceAccount") == {"Ref": "AWS::AccountId"}
+    assert statement.get("Resource") == {"Ref": next(iter(topics))}
+    assert not any(
+        resource.get("Type") == "AWS::IAM::Policy"
+        and "sns:Publish" in str(resource.get("Properties", {}).get("PolicyDocument", {}))
+        for resource in template.get("Resources", {}).values()
+    )
+    for function in _rc12_resources(template, "AWS::Serverless::Function"):
+        assert "sns:Publish" not in str(function.get("Properties", {}).get("Policies", []))
+
+
+def test_rc12_criterion_6_alarm_counts_function_errors_over_one_five_minute_period():
+    template = _template()
+    alarms = _rc12_named_resources(template, "AWS::CloudWatch::Alarm")
+    assert len(alarms) == 1
+    alarm = next(iter(alarms.values()))["Properties"]
+    assert alarm["Namespace"] == "AWS/Lambda"
+    assert alarm["MetricName"] == "Errors"
+    assert alarm["Dimensions"] == [
+        {"Name": "FunctionName", "Value": {"Ref": "RainCheckFunction"}}
+    ]
+    assert alarm["Statistic"] == "Sum"
+    assert alarm["Period"] == 300
+    assert alarm["EvaluationPeriods"] == 1
+    assert alarm["DatapointsToAlarm"] == 1
+    assert alarm["Threshold"] == 0
+    assert alarm["ComparisonOperator"] == "GreaterThanThreshold"
+    assert alarm["TreatMissingData"] == "notBreaching"
+
+
+def test_rc12_criterion_7_alarm_only_notifies_topic_on_alarm_transition():
+    template = _template()
+    alarms = _rc12_resources(template, "AWS::CloudWatch::Alarm")
+    topics = _rc12_named_resources(template, "AWS::SNS::Topic")
+    assert len(alarms) == 1
+    properties = alarms[0]["Properties"]
+    assert properties["AlarmActions"] == [{"Ref": next(iter(topics))}]
+    assert properties.get("ActionsEnabled") is True
+    assert not properties.get("OKActions")
+    assert not properties.get("InsufficientDataActions")
+
+
+def test_rc12_criterion_8_region_guard_and_disabled_schedule_remain_with_budget_preflight():
+    template = _template()
+    rules = template.get("Rules", {})
+    assert "SelectedRegion" in rules
+    assert any("us-east-2" in _all_strings(assertion) for assertion in rules["SelectedRegion"]["Assertions"])
+    functions = _rc12_resources(template, "AWS::Serverless::Function")
+    schedules = [
+        event["Properties"]
+        for function in functions
+        for event in function.get("Properties", {}).get("Events", {}).values()
+        if event.get("Type") == "ScheduleV2"
+    ]
+    assert len(schedules) == 1 and schedules[0]["State"] == "DISABLED"
+
+    runbook = _runbook()
+    assert "us-east-2" in runbook
+    assert "aws::budgets::budget" in runbook
+    assert "resource specification" in runbook
+    assert "stop" in runbook and "absent" in runbook
+
+
+def test_rc12_criterion_9_runbook_requires_inputs_change_set_review_and_private_status_checks():
+    runbook = _runbook()
+    for required in (
+        "monthlybudgetamountusd",
+        "alertemail",
+        "change set",
+        "review",
+        "approve",
+        "budget",
+        "alarm",
+        "topic policy",
+        "subscription",
+    ):
+        assert required in runbook
+    assert any(term in runbook for term in ("noecho", "masked", "redact"))
+    assert any(term in runbook for term in ("shared logs", "logs", "credentials"))
+
+
+def test_rc12_criterion_10_runbook_verifies_budget_email_and_confirms_sns_subscription_separately():
+    runbook = _runbook()
+    assert "budgets" in runbook and "email" in runbook and "verify" in runbook
+    assert "sns" in runbook and "subscription" in runbook and "confirm" in runbook
+    assert any(term in runbook for term in ("subscriptionconfirmed", "subscription status", "confirmed"))
+    assert any(term in runbook for term in ("budget notification", "notification status", "subscriber"))
+
+
+def test_rc12_criterion_11_runbook_tests_alarm_email_without_invoking_production_or_changing_database():
+    runbook = _runbook()
+    assert "setalarmstate" in runbook
+    assert "alarm history" in runbook
+    assert "alarm email" in runbook or "email" in runbook
+    assert "without invoking" in runbook or "does not invoke" in runbook
+    assert "production database" in runbook
+    assert "budget" in runbook and any(term in runbook for term in ("without artificially creating charges", "without creating charges"))
+
+
+def test_rc12_criterion_12_runbook_lists_cost_categories_and_says_alerts_do_not_stop_charges():
+    runbook = _runbook()
+    for category in (
+        "lambda",
+        "s3",
+        "ssm",
+        "eventbridge scheduler",
+        "cloudwatch",
+        "sns",
+        "budgets",
+    ):
+        assert category in runbook
+    assert "pricing" in runbook
+    assert "existing budget" in runbook or "budget count" in runbook
+    assert "do not stop charges" in runbook or "does not stop charges" in runbook
+
+
+def test_rc12_criterion_13_runbook_distinguishes_absent_invocation_and_delayed_billing():
+    runbook = _runbook()
+    assert "missing invocation" in runbook or "no invocation" in runbook
+    assert "disabled schedule" in runbook or "schedule is disabled" in runbook
+    assert "undelivered" in runbook and "scheduler" in runbook
+    assert "errors alarm" in runbook
+    assert "delayed" in runbook and "billing" in runbook
+    assert "real-time" in runbook or "real time" in runbook
