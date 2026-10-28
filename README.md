@@ -8,7 +8,7 @@ I built this to get hands-on with web scraping, HTTP requests, and automating a 
 
 - Lets me build a watchlist of items to track, each with a market price and keywords
 - Sets each item's market price from matching active eBay listings in the first 50 eBay Browse API search results
-- Scrapes the Rick Owens brand page on Yahoo Auctions Japan (sorted newest-first)
+- Scrapes the newest Yahoo Auctions Japan listings for each active tracked brand
 - Filters listings by keyword, converts prices from JPY to USD, and keeps only those below market
 - Ranks the remaining listings by discount and remembers which ones it has already seen
 - Sends one digest email per run with the top 5 new deals per item (an HTML table plus a plain-text version), and no email when there are no new deals
@@ -85,7 +85,7 @@ Both can be run from any directory.
 
 - Both jobs read the items only from the database, never from `catalog.json`, so a `catalog.json` edit takes effect only after you seed.
 - Both jobs ignore listings whose title contains an exclude keyword.
-- Matching is case-insensitive substring matching, so `low` also matches `yellow` (until RC-17 makes it word-aware).
+- Matching normalizes Unicode (NFKC), ignores case, and requires boundaries around ASCII letters and digits at a keyword's edges, so `low` does not match `yellow`.
 - eBay is searched with the item's `search_query`, or with the item name when it has none.
 - eBay searches the newest-first first 50 results and stores each distinct fixed-price listing's first observed USD ask for that item.
   Variations that share a legacy listing ID count once, and a later asking-price change never rewrites the first observation.
@@ -183,6 +183,105 @@ From the repository root:
 pip install -r requirements-dev.txt
 python3 -m pytest
 ```
+
+## AWS daily run (RC-11)
+
+The SAM template is limited to `us-east-2` and rejects a deployment in another selected Region.
+The schedule starts disabled and is set for 09:00 `Asia/Tokyo` each day.
+No AWS deployment, production database upload, or schedule enablement is part of local development.
+Review the proposed CloudFormation change set and the cost categories in [the RC-11 spec](docs/specs/RC-11-aws-daily-run.md) before an authorized deployment.
+
+### Offline preflight
+
+Run `python3 -m pytest` to check the handler and template without AWS, network, SMTP, or the production database.
+Run `sam validate --template-file template.yaml --lint` when the SAM CLI and linter are available.
+Run `sam build --use-container --template-file template.yaml` with the Python 3.12 Lambda build container before deployment.
+The `build-RainCheckFunction` Makefile target copies an explicit source allowlist and installs the pinned production dependencies, including `boto3`, into the Lambda artifact.
+For an offline source-only package check, run `make build-RainCheckFunction ARTIFACTS_DIR=/tmp/raincheck-package-check PIP=true` using a fresh output directory.
+Check that the artifact contains only the nine runtime files from `src/`, with no `.env`, `.db`, test, or fixture file.
+
+### Production preflight and initial upload
+
+1. Confirm that the selected Region is `us-east-2`.
+   Review the recorded AWS CloudShell gate for every active Yahoo brand: each brand needs HTTP 200, the expected `__NEXT_DATA__` listing path, and at least one valid listing record.
+   The current gate passed only for Rick Owens brand ID `103538`; probe each future brand using the command in the RC-11 spec before including it in an AWS run.
+2. Create the required standard-tier SSM `SecureString` parameters in `us-east-2` with the AWS-managed `aws/ssm` key.
+   The default names are `/raincheck/ebay/client-id`, `/raincheck/ebay/client-secret`, `/raincheck/sender/email`, and `/raincheck/sender/password`.
+   Set the optional receiver parameter name when mail should go to a different address.
+   Check parameter names, types, and presence without printing or exporting their values.
+   The template stores only parameter names in Lambda environment variables.
+3. Stop local jobs and make a timestamped SQLite `.backup` of `src/raincheck.db` outside the repository, following the Database section above.
+   If the database needs migration, follow its backup-first upgrade procedure before taking the final upload snapshot.
+   On that snapshot, require `PRAGMA integrity_check` to return `ok`, `PRAGMA foreign_key_check` to return no rows, and `PRAGMA user_version` to equal `db.SCHEMA_VERSION` in this release.
+   Keep the local backup separately from S3 version retention.
+4. Build and prepare the production change set using `sam deploy --template-file .aws-sam/build/template.yaml --stack-name raincheck --region us-east-2 --capabilities CAPABILITY_IAM --resolve-s3 --no-execute-changeset`.
+   `--resolve-s3` lets SAM create and use a deployment artifact bucket on a first non-guided deploy.
+   Review the production change set in CloudFormation, then execute that exact change set from the console after authorization.
+   Always deploy the built template so the explicit Makefile allowlist, rather than the repository root, becomes the Lambda package.
+   The S3 bucket is retained if the stack is deleted, and its name is available from the `DatabaseBucketName` stack output.
+5. Upload the verified snapshot to the stack's bucket at the configured `DatabaseKey` using an HTTPS S3 request with SSE-S3 (`AES256`).
+   Record the returned S3 `VersionId`, download that exact version to a separate temporary file, and repeat the SQLite integrity, foreign-key, and schema-version checks on the downloaded bytes.
+   Confirm the bucket and key in the Lambda configuration match this object before the schedule is enabled.
+
+   Set `BUCKET` and `KEY` from the production stack outputs, and set `BACKUP_PATH` to the verified SQLite backup outside the repository.
+   The commands stop if any of these values is missing or a database check fails, and the downloaded copy is removed when the shell exits.
+   The first upload creates the object only when its key is absent.
+   An S3 412 response means an object already exists at that key; stop and inspect it, and do not retry with an unconditional upload.
+
+   ```bash
+   set -eu
+   : "${BUCKET:?Set BUCKET from DatabaseBucketName}"
+   : "${KEY:?Set KEY from DatabaseKey}"
+   : "${BACKUP_PATH:?Set BACKUP_PATH to the verified backup outside this repository}"
+   test -f "$BACKUP_PATH"
+   EXPECTED_SCHEMA="$(PYTHONPATH=src python3 -c 'import db; print(db.SCHEMA_VERSION)')"
+   check_sqlite() {
+       local result
+       result="$(sqlite3 "$1" 'PRAGMA integrity_check;')" || return 1
+       test "$result" = ok || return 1
+       result="$(sqlite3 "$1" 'PRAGMA foreign_key_check;')" || return 1
+       test -z "$result" || return 1
+       result="$(sqlite3 "$1" 'PRAGMA user_version;')" || return 1
+       test "$result" = "$EXPECTED_SCHEMA"
+   }
+   check_sqlite "$BACKUP_PATH"
+   VERSION_ID="$(aws s3api put-object --bucket "$BUCKET" --key "$KEY" --body "$BACKUP_PATH" --if-none-match '*' --server-side-encryption AES256 --region us-east-2 --query VersionId --output text)"
+   case "$VERSION_ID" in ''|None|null) echo 'S3 did not return a version ID' >&2; exit 1;; esac
+   printf 'Initial database S3 VersionId: %s\n' "$VERSION_ID"
+   DOWNLOAD_PATH="$(mktemp "${TMPDIR:-/tmp}/raincheck-s3-verify.XXXXXX")"
+   trap 'rm -f "$DOWNLOAD_PATH"' EXIT
+   aws s3api get-object --bucket "$BUCKET" --key "$KEY" --version-id "$VERSION_ID" --region us-east-2 "$DOWNLOAD_PATH" >/dev/null
+   check_sqlite "$DOWNLOAD_PATH"
+   ```
+
+   Keep the recorded `VERSION_ID` with the deployment notes and enable the schedule only after the downloaded copy passes all three checks.
+
+The execution role can access only that exact S3 object and the named SSM parameters, so a changed key or parameter name requires a reviewed stack update.
+Stop the schedule before any manual object replacement; the handler's ETag condition rejects changed content, but equal-content replacements can share an ETag.
+
+### Isolated dry-run and schedule enablement
+
+Prepare the separate throwaway stack's change set using `sam deploy --template-file .aws-sam/build/template.yaml --stack-name raincheck-dry-run --region us-east-2 --capabilities CAPABILITY_IAM --resolve-s3 --parameter-overrides DryRun=1 --no-execute-changeset`.
+Review the throwaway stack's change set in CloudFormation, then execute that exact change set from the console after authorization.
+The separate stack creates a separate database bucket and keeps its schedule disabled.
+Upload a separate database containing only synthetic listings and no active items; `DryRun=1` sets `RAINCHECK_DRY_RUN=1` in that stack's Lambda configuration.
+The empty active watchlist avoids live listing acquisition while exercising S3 download, schema checks, SSM access, the runner, and the conditional upload.
+Invoke only that throwaway function with an empty event after the separate bucket and database have been verified.
+The dry-run sends no email; the handler suppresses the complete printed digest before CloudWatch receives stdout.
+Inspect its logs for success and confirm they contain no digest HTML, synthetic listing title, or recipient address.
+Check that the production bucket's current S3 object version is unchanged.
+The dry-run can never write the production S3 object because its execution role and environment point to the throwaway bucket.
+
+After the CloudShell, parameter, backup, upload, and isolated dry-run checks pass, change only the production `DailySchedule` `State` in `template.yaml` from `DISABLED` to `ENABLED` in a reviewed deployment and inspect its change set before applying it.
+Keep the default checked-in template disabled until that explicit enablement decision.
+The schedule uses a fixed 09:00 Tokyo time, no flexible delivery window, and bounded Scheduler delivery attempts and event age.
+
+### Rollback
+
+Disable the schedule first by setting its template `State` back to `DISABLED` and deploying the reviewed change.
+If the current database object is bad, inspect a prior S3 version, verify its SQLite integrity and schema version, then restore that version while retaining the bad version for investigation.
+Redeploy the prior Lambda code and SAM template if the code or infrastructure caused the failure.
+Keep the local backup and retained bucket until a replacement has been verified; decide whether to retain or remove billable resources before deleting the stack.
 
 ## Notes
 
