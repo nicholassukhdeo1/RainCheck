@@ -696,6 +696,73 @@ def test_rc12_criterion_9_runbook_requires_inputs_change_set_review_and_private_
     assert any(term in runbook for term in ("noecho", "masked", "redact"))
     assert any(term in runbook for term in ("shared logs", "logs", "credentials"))
 
+    production_section = runbook.split("### production preflight", 1)[1].split(
+        "### isolated dry-run", 1
+    )[0]
+    sam_command = next(
+        line
+        for line in production_section.splitlines()
+        if "sam deploy" in line and "--resolve-s3" in line and "--no-execute-changeset" in line
+    )
+    command_position = production_section.index(sam_command)
+    before_artifact_preparation = production_section[:command_position]
+    assert "authorize" in before_artifact_preparation or "authorization" in before_artifact_preparation
+    assert "artifact" in before_artifact_preparation and "bucket" in before_artifact_preparation
+
+    after_command = production_section[command_position:]
+    review_position = after_command.index("review")
+    approval_position = after_command.index("approv", review_position)
+    execution_position = after_command.index("execut", approval_position)
+    assert review_position < approval_position < execution_position
+
+    assert not re.search(r"\bread\s+-[^\n]*\s-p(?:\s|\b)", production_section), (
+        "the prompt must not use Bash-only read -p syntax; support the user's zsh shell"
+    )
+
+
+def test_rc12_criterion_15_alert_resources_and_outputs_are_production_only():
+    template = _template()
+    alert_resource_types = {
+        "AWS::Budgets::Budget",
+        "AWS::SNS::Topic",
+        "AWS::SNS::Subscription",
+        "AWS::SNS::TopicPolicy",
+        "AWS::CloudWatch::Alarm",
+    }
+    alert_resources = [
+        (name, resource)
+        for name, resource in template.get("Resources", {}).items()
+        if resource.get("Type") in alert_resource_types
+    ]
+    assert len(alert_resources) == len(alert_resource_types)
+
+    conditions = template.get("Conditions", {})
+    production_conditions = {
+        name
+        for name, expression in conditions.items()
+        if any(
+            isinstance(node, dict)
+            and any(key in node for key in ("Equals", "Fn::Equals"))
+            and len(node.get("Equals", node.get("Fn::Equals", []))) == 2
+            and {"Ref": "DryRun"} in node.get("Equals", node.get("Fn::Equals", []))
+            and any(
+                str(operand) == "0"
+                for operand in node.get("Equals", node.get("Fn::Equals", []))
+            )
+            for node in _walk(expression)
+        )
+    }
+    assert production_conditions, "template must define a condition that is true only when DryRun=0"
+    assert all(resource.get("Condition") in production_conditions for _, resource in alert_resources)
+
+    alert_output_names = {"AlertTopicArn", "ErrorAlarmName"}
+    outputs = template.get("Outputs", {})
+    assert alert_output_names.issubset(outputs)
+    assert all(
+        outputs[name].get("Condition") in production_conditions
+        for name in alert_output_names
+    )
+
 
 def test_rc12_criterion_10_runbook_verifies_budget_email_and_confirms_sns_subscription_separately():
     runbook = _runbook()
