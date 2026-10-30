@@ -55,6 +55,21 @@ def _block_network(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _stub_daily_listing_images(monkeypatch):
+    """Give legacy job tests deterministic photos without exercising image HTTP."""
+    import yahoo_scrape
+    from listing_images import PreparedImage
+
+    def prepared_photo(listing_url, image_url):
+        if not image_url:
+            return None
+        listing_id = listing_url.rsplit("/", 1)[-1]
+        return PreparedImage(f"test-photo-{listing_id}", "image/jpeg", b"test thumbnail")
+
+    monkeypatch.setattr(yahoo_scrape, "prepare_listing_image", prepared_photo)
+
+
+@pytest.fixture(autouse=True)
 def _disable_http_retry_waits(monkeypatch):
     """Keep all job integration tests offline in time as well as network."""
     try:
@@ -228,7 +243,7 @@ def sent_emails(monkeypatch):
 
     emails = []
 
-    def fake_send_email(subject, html_body, text_body):
+    def fake_send_email(subject, html_body, text_body, **kwargs):
         emails.append((subject, html_body, text_body))
         return True
 

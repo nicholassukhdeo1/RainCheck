@@ -247,3 +247,98 @@ def test_rc10_c25_real_smtp_logs_outcome_without_credentials_or_message(
         "password-private", "private subject", "private html", "private text",
     ):
         assert private not in rendered
+
+
+# ---- RC-19 inline image MIME --------------------------------------------------------
+
+
+def test_rc19_c1_c2_sends_related_html_and_matching_inline_photo(monkeypatch):
+    from email import policy
+    from email.parser import Parser
+    from dataclasses import dataclass
+
+    @dataclass(frozen=True)
+    class PreparedImage:
+        cid: str
+        content_type: str
+        data: bytes
+
+    photo_bytes = b"normalized jpeg thumbnail bytes"
+    photo = PreparedImage("opaque-photo-id", "image/jpeg", photo_bytes)
+    sent = _recording_smtp(monkeypatch)
+
+    assert sendemail.send_email(
+        "Subj", '<img src="cid:opaque-photo-id">', "plain alternative",
+        inline_images=(photo,),
+    ) is True
+    assert len(sent) == 1
+    msg = Parser(policy=policy.default).parsestr(sent[0])
+    assert msg.get_content_type() == "multipart/alternative"
+    alternatives = list(msg.iter_parts())
+    assert [part.get_content_type() for part in alternatives] == [
+        "text/plain", "multipart/related",
+    ]
+    assert alternatives[0].get_content() == "plain alternative"
+
+    related = alternatives[1]
+    related_parts = list(related.iter_parts())
+    assert [part.get_content_type() for part in related_parts] == [
+        "text/html", "image/jpeg",
+    ]
+    assert related_parts[0].get_content() == '<img src="cid:opaque-photo-id">'
+    image_part = related_parts[1]
+    assert image_part["Content-ID"] == "<opaque-photo-id>"
+    assert image_part["Content-Disposition"].startswith("inline")
+    assert image_part.get_payload(decode=True) == photo_bytes
+    assert "opaque-photo-id" not in msg["From"]
+    assert "opaque-photo-id" not in msg["To"]
+
+
+def test_rc19_c2_cid_is_referenced_once_and_has_no_orphan_image_parts(monkeypatch):
+    from email import policy
+    from email.parser import Parser
+    from dataclasses import dataclass
+    import re
+
+    @dataclass(frozen=True)
+    class PreparedImage:
+        cid: str
+        content_type: str
+        data: bytes
+
+    images = (
+        PreparedImage("first-cid", "image/jpeg", b"one"),
+        PreparedImage("second-cid", "image/png", b"two"),
+    )
+    sent = _recording_smtp(monkeypatch)
+    html = '<img src="cid:first-cid"><img src="cid:second-cid">'
+    sendemail.send_email("S", html, "T", inline_images=images)
+    msg = Parser(policy=policy.default).parsestr(sent[0])
+    related = list(msg.iter_parts())[1]
+    parts = list(related.iter_parts())
+    html_body = parts[0].get_content()
+    referenced = re.findall(r'src="cid:([^"]+)"', html_body)
+    attached = [part["Content-ID"].strip("<>") for part in parts[1:]]
+    assert referenced == ["first-cid", "second-cid"]
+    assert attached == referenced
+
+
+def test_rc19_c21_dry_run_prints_markup_without_image_bytes_or_base64(monkeypatch, capsys):
+    from dataclasses import dataclass
+
+    @dataclass(frozen=True)
+    class PreparedImage:
+        cid: str
+        content_type: str
+        data: bytes
+
+    monkeypatch.setenv("RAINCHECK_DRY_RUN", "1")
+    _no_smtp(monkeypatch)
+    image = PreparedImage("safe-cid", "image/jpeg", b"DO-NOT-PRINT-IMAGE-BYTES")
+    assert sendemail.send_email(
+        "Subj", '<img src="cid:safe-cid">', "text", inline_images=(image,),
+    ) is True
+    output = capsys.readouterr().out
+    assert '<img src="cid:safe-cid">' in output
+    assert "DO-NOT-PRINT-IMAGE-BYTES" not in output
+    assert "RE8tTk9ULVBSSU5ULUlNQUdFLUJZVEVT" not in output

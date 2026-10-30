@@ -38,6 +38,7 @@ class Digest:
     html: str
     text: str
     deals: tuple[Deal, ...]  # every shown deal, in display order; main() records exactly these
+    inline_images: tuple = ()  # exact MIME parts for the rows above
 
 
 def is_safe_http_url(url):
@@ -107,13 +108,14 @@ def _potential_line(pct):
     return f"Potential discount at current price: {_pct(pct)} (not guaranteed; bids may rise)"
 
 
-def _html_row(deal, show_buy_now_label=False):
+def _html_row(deal, show_buy_now_label=False, prepared_image=None):
     title = _display_title(deal.title)
     safe_url = is_safe_http_url(deal.url)
 
-    if is_safe_http_url(deal.image_url):
+    image_source = f"cid:{prepared_image.cid}" if prepared_image is not None else deal.image_url
+    if prepared_image is not None or is_safe_http_url(deal.image_url):
         img = (
-            f'<img src="{_e(deal.image_url)}" alt="{_e(title)}" width="100" height="100" '
+            f'<img src="{_e(image_source)}" alt="{_e(title)}" width="100" height="100" '
             f'style="display:block;border:0;width:100px;height:100px;">'
         )
         image_cell = f'<a href="{_e(deal.url)}">{img}</a>' if safe_url else img
@@ -160,8 +162,13 @@ def _html_row(deal, show_buy_now_label=False):
     )
 
 
-def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None:
+def build_digest(sections: Sequence[ItemDeals], run_date: date, *, inline_images=None, preview=False) -> Digest | None:
     """Returns the subject, HTML, and text for the shown deals, or None when there are none."""
+    # Image-aware callers provide only verified parts; missing rows cannot appear in either body.
+    if inline_images is not None:
+        sections = [ItemDeals(s.item_name, s.market_price_usd,
+                              tuple(d for d in s.deals if d.url in inline_images), s.not_shown)
+                    for s in sections]
     # sections with no shown deal are ignored, even if they have a not_shown count
     sections = [s for s in sections if s.deals]
     if not sections:
@@ -176,6 +183,8 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
         subject = f"RainCheck: {count} to review - {run_date.isoformat()}"
     else:
         subject = f"RainCheck: {_deal_count(len(all_deals))} - {run_date.isoformat()}"
+    if preview:
+        subject = "RainCheck PREVIEW:" + subject.removeprefix("RainCheck:")
     safe_subject = _e(subject)
 
     html_parts = [
@@ -192,6 +201,11 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
         f'<h1 style="font-size:18px;">{safe_subject}</h1>',
     ]
     text_lines = [subject, ""]
+    if preview:
+        notice = ("One-time live search. May include previously seen listings. "
+                  "Has not changed RainCheck listing history.")
+        html_parts.append(f"<p><strong>{_e(notice)}</strong></p>")
+        text_lines.extend((notice, ""))
 
     for section in sections:
         market = _e("market " + _usd(section.market_price_usd))
@@ -226,7 +240,10 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
         text_lines.append("")
 
         for number, deal in enumerate(section.deals, start=1):
-            html_parts.append(_html_row(deal, show_buy_now_label=has_watch))
+            html_parts.append(_html_row(
+                deal, show_buy_now_label=has_watch,
+                prepared_image=inline_images.get(deal.url) if inline_images is not None else None,
+            ))
             text_lines.append(f"{number}. {_display_title(deal.title)}")
             if deal.kind == "auction_watch":
                 text_lines.append("   Auction watch - current price (provisional)")
@@ -264,4 +281,5 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date) -> Digest | None
 
     # drop the trailing blank line so the text ends with exactly one newline
     text = "\n".join(text_lines).rstrip("\n") + "\n"
-    return Digest(subject, "\n".join(html_parts) + "\n", text, all_deals)
+    parts = tuple(inline_images[deal.url] for deal in all_deals) if inline_images is not None else ()
+    return Digest(subject, "\n".join(html_parts) + "\n", text, all_deals, parts)

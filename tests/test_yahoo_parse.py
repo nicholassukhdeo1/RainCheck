@@ -52,13 +52,13 @@ def test_rc07_c1_minimal_fixture_returns_four_listings_in_order(minimal_html):
     got = [(l.auction_id, l.url, l.title, l.price_yen, l.image_url) for l in listings]
     assert got == [
         ("t1000000001", AUCTION + "t1000000001", "Rick Owens Ramones High Top 42", 50000,
-         "https://auc-pctr.c.yimg.jp/i/test/1.jpg"),
+         "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-1.jpg"),
         ("t1000000002", AUCTION + "t1000000002", "Rick Owens Ramones Leather 44", 200000,
-         "https://auc-pctr.c.yimg.jp/i/test/2.jpg"),
+         "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-2.jpg"),
         ("t1000000003", AUCTION + "t1000000003", "Rick Owens Geobasket 43", 10000,
-         "https://auc-pctr.c.yimg.jp/i/test/3.jpg"),
+         "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-3.jpg"),
         ("t1000000004", AUCTION + "t1000000004", "Rick Owens Ramon Sneakers", 100000,
-         "https://auc-pctr.c.yimg.jp/i/test/4.jpg"),
+         "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-4.jpg"),
     ]
 
 
@@ -105,7 +105,7 @@ def test_rc07_c7_missing_or_null_image_becomes_none(malformed_html):
     by_id = {l.auction_id: l for l in yahoo_scrape.parse_listings(malformed_html)}
     assert by_id["x1000000003"].image_url is None
     assert by_id["x1000000004"].image_url is None
-    assert by_id["x1000000001"].image_url == "https://auc-pctr.c.yimg.jp/i/test/m1.jpg"
+    assert by_id["x1000000001"].image_url == "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-m1.jpg"
 
 
 def test_rc07_c8_escaped_script_tag_and_japanese_decode(malformed_html):

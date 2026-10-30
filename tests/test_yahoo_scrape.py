@@ -6,7 +6,12 @@ RC-15 replaced report_item_deals with find_item_deals / build_sections and made 
 send one digest; the superseded tests keep their names and now run main().
 """
 import dataclasses
+import runpy
 import re
+import sqlite3
+import sys
+from types import SimpleNamespace
+from pathlib import Path
 from datetime import date, datetime, timezone
 
 from bs4 import BeautifulSoup
@@ -26,6 +31,13 @@ X1 = "https://auctions.yahoo.co.jp/jp/auction/x1000000001"
 X3 = "https://auctions.yahoo.co.jp/jp/auction/x1000000003"
 Z2 = "https://paypayfleamarket.yahoo.co.jp/item/z1000000002"
 FRANKFURTER_URL = "https://api.frankfurter.dev/v2/rate/jpy/usd"
+
+
+@dataclasses.dataclass(frozen=True)
+class _PreparedImage:
+    cid: str
+    content_type: str = "image/jpeg"
+    data: bytes = b"thumbnail"
 
 
 def _add_rate_response(fake_http, rate=0.0062, published="2026-10-27", status=200):
@@ -85,7 +97,9 @@ def inline_item(item_id=1, name="rick owens ramones", keywords=("ramones", "ramo
     )
 
 
-def inline_listing(n, title=None, yen=10000, image=None):
+def inline_listing(n, title=None, yen=10000, image="auto"):
+    if image == "auto":
+        image = f"https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-t{n}.jpg"
     listing = yahoo_scrape.YahooListing(
         auction_id=f"t{n}", url=f"{AUCTION}t{n}", title=title or f"Rick Owens Ramones {n}",
         price_yen=yen, image_url=image,
@@ -99,7 +113,9 @@ def inline_listing(n, title=None, yen=10000, image=None):
     return listing
 
 
-def _fixed_listing(auction_id, url, title, price_yen, image_url=None):
+def _fixed_listing(auction_id, url, title, price_yen, image_url="auto"):
+    if image_url == "auto":
+        image_url = f"https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-{auction_id}.jpg"
     listing = yahoo_scrape.YahooListing(auction_id, url, title, price_yen, image_url)
     if "is_fixed_price" in {field.name for field in dataclasses.fields(listing)}:
         listing = dataclasses.replace(
@@ -149,7 +165,7 @@ def test_rc15_c1_find_item_deals_returns_both_deals_best_first_with_full_fields(
     assert first.kind == "auction_buy_now"
     assert first.current_price_yen == 50000
     assert first.potential_discount_pct == pytest.approx(61.25)
-    assert first.image_url == "https://auc-pctr.c.yimg.jp/i/test/1.jpg"
+    assert first.image_url == "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-1.jpg"
     assert second.discount_pct == pytest.approx(22.5)
 
 
@@ -455,7 +471,11 @@ def test_rc08_c10_main_leaves_same_listing_unrecorded_then_sends_it_after_rate_c
     assert sql_rows(seeded_db, "SELECT url FROM listings") == []
     assert sql_rows(seeded_db, "SELECT listing_id FROM listing_matches") == []
     assert sent_emails == []
-    assert any("no new deals" in record.getMessage().lower() for record in caplog.records)
+    assert any(
+        phrase in record.getMessage().lower()
+        for record in caplog.records
+        for phrase in ("no new deals", "no image-backed deals")
+    )
 
     yahoo_scrape.main()
     assert len(rate_calls) == 2
@@ -577,7 +597,11 @@ def test_c47_second_run_inserts_no_new_rows(yahoo_http, seeded_db, sent_emails, 
     assert len(first) == 2
     assert len(sent_emails) == 1
     assert yahoo_scrape.NO_DEALS_LINE == "No new deals; no email sent."
-    assert any("no new deals" in record.getMessage().lower() for record in caplog.records)
+    assert any(
+        phrase in record.getMessage().lower()
+        for record in caplog.records
+        for phrase in ("no new deals", "no image-backed deals")
+    )
 
 
 def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
@@ -587,25 +611,22 @@ def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
     _add_rate_response(fake_http)
     yahoo_scrape.main()
     rows = {r["url"]: r for r in _rows(db_conn)}
-    assert set(rows) == {X1, Z2, X3}
+    assert set(rows) == {X1, Z2}
     assert rows[Z2]["price_yen"] == 40000
-    assert rows[X3]["image_url"] is None
+    assert X3 not in rows
     assert len(sent_emails) == 1
     html = sent_emails[0][1]
     # The fixed-price flea-market row and the auction's buy-now price are
     # immediately purchasable; the bid-only auction is shown after them as a watch.
-    assert _row_urls(html) == [Z2, X1, X3]
+    assert _row_urls(html) == [Z2, X1]
     soup = _soup(html)
     assert len(soup.find_all("img")) == 2
     first_cells = [tr.find_all("td")[0] for tr in soup.find_all("tr") if tr.find("td")]
     assert first_cells[0].find("img") is not None and first_cells[1].find("img") is not None
-    assert first_cells[2].get_text(strip=True) == "No image"
-    assert first_cells[2].find("img") is None
+    assert len(first_cells) == 2
     rendered = soup.get_text(" ", strip=True)
     assert "69.0% off" in rendered and "65.1% off" in rendered
-    assert "76.8% (not guaranteed; bids may rise)" in rendered
-    assert "84.5% (not guaranteed; bids may rise)" in rendered
-    assert "Auction watch - current price (provisional)" in rendered
+    assert "Auction watch - current price (provisional)" not in rendered
     assert len([call for call in fake_http.calls if call[1] == FRANKFURTER_URL]) == 1
 
 
@@ -624,13 +645,13 @@ def test_rc07_c25_null_market_price_skips_item(
     assert sent_emails == []
     out = "\n".join(record.getMessage() for record in caplog.records)
     assert "rick owens ramones" in out and "no usable market price" in out.lower()
-    assert "no new deals" in out.lower()
+    assert "no new deals" in out.lower() or "no image-backed deals" in out.lower()
 
 
 def test_rc15_c42_deals_are_recorded_only_after_the_send(yahoo_http, seeded_db, monkeypatch):
     seen_during_send = []
 
-    def inspecting_send(subject, html_body, text_body):
+    def inspecting_send(subject, html_body, text_body, **kwargs):
         seen_during_send.append(sql_rows(seeded_db, "SELECT url FROM listings"))
         return True
 
@@ -706,6 +727,284 @@ def test_rc04_c5_and_c6_non_deal_is_not_stored_and_later_deal_is_sent(
     assert len(sql_rows(seeded_db, "SELECT listing_id FROM listing_matches")) == 2
 
 
+# ---- RC-19 image-backed daily selection and read-only preview -----------------------
+
+
+@pytest.mark.parametrize("mode", ["preview", "send_preview"])
+def test_rc19_c12_c13_direct_main_preview_rejects_default_database_before_io(
+    monkeypatch, mode
+):
+    monkeypatch.delenv("RAINCHECK_DB_PATH", raising=False)
+    monkeypatch.setenv("RAINCHECK_DRY_RUN", "0")
+    calls = []
+
+    def unexpected_io(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("preview preflight must run before database or network access")
+
+    monkeypatch.setattr(yahoo_scrape, "get_tracked_items", unexpected_io)
+    monkeypatch.setattr(yahoo_scrape, "fetch_yahoo_page", unexpected_io)
+    with pytest.raises(ValueError, match="preview.*RAINCHECK_DB_PATH"):
+        yahoo_scrape.main(**{mode: True})
+    assert calls == []
+
+
+def test_rc19_c8_unpictured_deal_is_not_in_either_body_or_recorded_and_reappears_later(
+    yahoo_http, seeded_db, monkeypatch, db_conn
+):
+    images = {
+        URL_1: _PreparedImage("photo-one"),
+        URL_4: None,
+    }
+    monkeypatch.setattr(
+        yahoo_scrape, "prepare_listing_image",
+        lambda listing_url, image_url: images[listing_url],
+        raising=False,
+    )
+    sent = []
+
+    def record_send(subject, html, text, **kwargs):
+        sent.append((subject, html, text, kwargs))
+        return True
+
+    monkeypatch.setattr(yahoo_scrape, "send_email", record_send)
+    yahoo_scrape.main()
+
+    assert len(sent) == 1
+    subject, html, text, kwargs = sent[0]
+    assert _row_urls(html) == [URL_1]
+    assert [image.cid for image in kwargs["inline_images"]] == ["photo-one"]
+    assert "cid:photo-one" in html and URL_4 not in html and URL_4 not in text
+    assert sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url") == [(URL_1,)]
+    assert sql_rows(seeded_db, "SELECT l.url FROM listing_matches m JOIN listings l ON l.id=m.listing_id") == [(URL_1,)]
+
+    images[URL_4] = _PreparedImage("photo-four")
+    yahoo_scrape.main()
+    assert len(sent) == 2
+    assert _row_urls(sent[1][1]) == [URL_4]
+    assert set(sql_rows(seeded_db, "SELECT url FROM listings")) == {(URL_1,), (URL_4,)}
+
+
+def test_rc19_c9_photo_failure_is_replaced_by_next_ranked_candidate_before_five_limit(
+    yahoo_http, seeded_db, monkeypatch
+):
+    listings = [inline_listing(n, yen=10000 * n) for n in range(1, 7)]
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda _html: listings)
+    monkeypatch.setattr(
+        yahoo_scrape, "prepare_listing_image",
+        lambda url, _image_url: None if url.endswith("t1") else _PreparedImage(f"cid-{url[-1]}"),
+        raising=False,
+    )
+    sent = []
+
+    def record_send(subject, html, text, **kwargs):
+        sent.append((subject, html, text, kwargs))
+        return True
+
+    monkeypatch.setattr(yahoo_scrape, "send_email", record_send)
+    yahoo_scrape.main()
+
+    assert len(sent) == 1
+    assert _row_urls(sent[0][1]) == [f"{AUCTION}t{n}" for n in range(2, 7)]
+    assert [image.cid for image in sent[0][3]["inline_images"]] == [
+        f"cid-{n}" for n in range(2, 7)
+    ]
+
+
+def test_rc19_c10_all_unpictured_candidates_send_nothing_and_record_no_matches(
+    yahoo_http, seeded_db, monkeypatch, db_conn, caplog
+):
+    monkeypatch.setattr(
+        yahoo_scrape, "prepare_listing_image", lambda _url, _image_url: None, raising=False
+    )
+    sent = []
+
+    def record_send(*args, **kwargs):
+        sent.append(args)
+        return True
+
+    monkeypatch.setattr(yahoo_scrape, "send_email", record_send)
+    yahoo_scrape.main()
+    assert sent == []
+    assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+    assert sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches") == []
+    assert any("no image-backed deals" in record.getMessage().lower() for record in caplog.records)
+
+
+def test_rc19_c11_failed_image_digest_send_records_no_listings(
+    yahoo_http, seeded_db, monkeypatch
+):
+    monkeypatch.setattr(
+        yahoo_scrape, "prepare_listing_image",
+        lambda url, _image_url: _PreparedImage("photo-" + url[-1]), raising=False,
+    )
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda *args, **kwargs: False)
+    with pytest.raises(SystemExit):
+        yahoo_scrape.main()
+    assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+    assert sql_rows(seeded_db, "SELECT listing_id, item_id FROM listing_matches") == []
+
+
+def test_rc19_c20_image_request_budget_stops_at_sixty_and_defers_remaining_candidates(
+    yahoo_http, seeded_db, monkeypatch, caplog
+):
+    listings = [inline_listing(n, yen=10000) for n in range(1, 62)]
+    monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda _html: listings)
+    attempts = []
+
+    def unavailable_photo(url, _image_url):
+        attempts.append(url)
+        return None
+
+    monkeypatch.setattr(yahoo_scrape, "prepare_listing_image", unavailable_photo, raising=False)
+    yahoo_scrape.main()
+
+    assert len(attempts) == 60
+    assert len(set(attempts)) == 60
+    assert all(url not in attempts for url in (f"{AUCTION}t{n}" for n in range(61, 62)))
+    assert sql_rows(seeded_db, "SELECT url FROM listings") == []
+    assert any("image" in record.getMessage().lower() for record in caplog.records)
+
+
+def _snapshot_database(path):
+    conn = sqlite3.connect(path)
+    try:
+        tables = [
+            row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )
+        ]
+        return {
+            table: tuple(tuple(row) for row in conn.execute(f'SELECT * FROM "{table}"'))
+            for table in tables
+        }
+    finally:
+        conn.close()
+
+
+def _run_preview_cli(monkeypatch, mode):
+    monkeypatch.setattr("sys.argv", ["src/yahoo_scrape.py", mode])
+    with pytest.raises(SystemExit) as outcome:
+        runpy.run_path("src/yahoo_scrape.py", run_name="__main__")
+    assert outcome.value.code == 0
+
+
+def _preview_dependencies(fake_http, fixtures_dir, monkeypatch, *, sent):
+    fake_http.add("GET", RICK_OWENS_URL, text=_html(fixtures_dir, "brand_page_minimal.html"))
+    _add_rate_response(fake_http)
+    import sendemail
+
+    monkeypatch.setitem(
+        sys.modules,
+        "listing_images",
+        SimpleNamespace(
+            prepare_listing_image=lambda url, _image_url: _PreparedImage("preview-" + url[-1])
+        ),
+    )
+
+    def fake_send(subject, html, text, **kwargs):
+        sent.append((subject, html, text, kwargs))
+        return True
+
+    monkeypatch.setattr(sendemail, "send_email", fake_send)
+
+
+def test_rc19_c12_preview_cli_prints_cid_digest_without_sending_or_mutating_database(
+    fake_http, fixtures_dir, seeded_db, db_conn, monkeypatch, capsys
+):
+    _preview_dependencies(fake_http, fixtures_dir, monkeypatch, sent=[])
+    _make_existing_rc05_listing(db_conn)
+    before = _snapshot_database(seeded_db)
+    sends = []
+    import sendemail
+    def record_preview_send(*args, **kwargs):
+        sends.append((args, kwargs))
+        return True
+
+    monkeypatch.setattr(sendemail, "send_email", record_preview_send)
+
+    _run_preview_cli(monkeypatch, "--preview")
+
+    printed = capsys.readouterr().out
+    assert "RainCheck PREVIEW:" in printed
+    assert "cid:preview-1" in printed
+    assert URL_1 in printed  # previously stored listing is eligible in preview
+    assert sends == []
+    assert _snapshot_database(seeded_db) == before
+
+
+def test_rc19_c13_send_preview_sends_once_with_cids_and_keeps_database_read_only(
+    fake_http, fixtures_dir, seeded_db, monkeypatch
+):
+    monkeypatch.setenv("RAINCHECK_DRY_RUN", "0")
+    sent = []
+    _preview_dependencies(fake_http, fixtures_dir, monkeypatch, sent=sent)
+    before = _snapshot_database(seeded_db)
+    _run_preview_cli(monkeypatch, "--send-preview")
+
+    assert len(sent) == 1
+    subject, html, text, kwargs = sent[0]
+    assert subject.startswith("RainCheck PREVIEW:")
+    assert "cid:preview-1" in html and URL_1 in text
+    assert kwargs["inline_images"]
+    assert _snapshot_database(seeded_db) == before
+
+
+@pytest.mark.parametrize("path_kind", ["unset", "default", "invalid"])
+def test_rc19_c16_preview_rejects_unsafe_database_path_before_access_or_network(
+    path_kind, tmp_path, fake_http, monkeypatch
+):
+    import db
+    import sendemail
+
+    monkeypatch.setattr("sys.argv", ["src/yahoo_scrape.py", "--preview"])
+    if path_kind == "unset":
+        monkeypatch.delenv("RAINCHECK_DB_PATH", raising=False)
+    elif path_kind == "default":
+        real_db = Path(yahoo_scrape.__file__).resolve().parents[1] / "src" / "raincheck.db"
+        monkeypatch.setenv("RAINCHECK_DB_PATH", str(real_db.resolve()))
+    else:
+        invalid_db = tmp_path / "invalid-schema.db"
+        invalid_db.write_text("not a sqlite database", encoding="utf-8")
+        monkeypatch.setenv("RAINCHECK_DB_PATH", str(invalid_db))
+
+    accesses = []
+    sends = []
+    monkeypatch.setattr(db, "get_tracked_items", lambda: accesses.append("items") or [])
+    monkeypatch.setattr(db, "get_active_brands", lambda: accesses.append("brands") or [])
+    monkeypatch.setattr(sendemail, "send_email", lambda *args, **kwargs: sends.append(args) or True)
+    with pytest.raises(SystemExit) as outcome:
+        runpy.run_path("src/yahoo_scrape.py", run_name="__main__")
+
+    assert outcome.value.code != 0
+    assert accesses == []
+    assert fake_http.calls == []
+    assert sends == []
+
+
+def test_rc19_c17_send_preview_refuses_dry_run_before_database_network_or_email(
+    seeded_db, fake_http, monkeypatch
+):
+    import db
+    import sendemail
+
+    monkeypatch.setenv("RAINCHECK_DB_PATH", str(seeded_db))
+    monkeypatch.setenv("RAINCHECK_DRY_RUN", "1")
+    monkeypatch.setattr("sys.argv", ["src/yahoo_scrape.py", "--send-preview"])
+    accesses = []
+    sends = []
+    monkeypatch.setattr(db, "get_tracked_items", lambda: accesses.append("items") or [])
+    monkeypatch.setattr(db, "get_active_brands", lambda: accesses.append("brands") or [])
+    monkeypatch.setattr(sendemail, "send_email", lambda *args, **kwargs: sends.append(args) or True)
+    with pytest.raises(SystemExit) as outcome:
+        runpy.run_path("src/yahoo_scrape.py", run_name="__main__")
+
+    assert outcome.value.code != 0
+    assert accesses == []
+    assert fake_http.calls == []
+    assert sends == []
+
+
 # ---- RC-05 listing lifecycle tracking (criteria 1-5, 9, 11) -------------------------
 
 
@@ -753,7 +1052,7 @@ def test_rc05_c1_and_c3_refreshes_known_row_before_email_and_records_only_sent_n
     _freeze_rc05_clock(monkeypatch, observed_at)
     state_during_send = []
 
-    def inspecting_send(subject, html_body, text_body):
+    def inspecting_send(subject, html_body, text_body, **kwargs):
         state_during_send.append(
             db_conn.execute(
                 "SELECT last_seen_at FROM listings WHERE url = ?", (URL_1,)
@@ -822,7 +1121,7 @@ def test_rc05_c4_failed_send_refreshes_known_rows_but_leaves_new_deals_for_retry
     _make_existing_rc05_listing(db_conn)
     observed_at = datetime(2035, 4, 5, 6, 7, 8, tzinfo=timezone.utc)
     _freeze_rc05_clock(monkeypatch, observed_at)
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text: False)
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text, **kwargs: False)
 
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
@@ -836,7 +1135,7 @@ def test_rc05_c4_failed_send_refreshes_known_rows_but_leaves_new_deals_for_retry
     ] == [URL_1]
     assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 1
 
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text: True)
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text, **kwargs: True)
     yahoo_scrape.main()
     assert [
         row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")
@@ -912,7 +1211,7 @@ def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
 ):
     calls = []
 
-    def failing_send(subject, html_body, text_body):
+    def failing_send(subject, html_body, text_body, **kwargs):
         calls.append(subject)
         return False
 
@@ -927,7 +1226,7 @@ def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
 
     delivered = []
 
-    def ok_send(subject, html_body, text_body):
+    def ok_send(subject, html_body, text_body, **kwargs):
         delivered.append((subject, html_body))
         return True
 
@@ -943,7 +1242,7 @@ def test_rc15_c43_failed_send_message_uses_singular_for_one_deal(
     yahoo_http, seeded_db, monkeypatch, caplog
 ):
     sql_run(seeded_db, "UPDATE items SET manual_price_usd = 400.0 WHERE name = ?", ("rick owens ramones",))
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda s, h, t: False)
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda s, h, t, **kwargs: False)
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
     assert exc.value.code == 1
@@ -1034,7 +1333,11 @@ def test_rc15_c50_dry_run_end_to_end_prints_whole_digest_and_records(
     assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")] == [URL_1, URL_4]
 
     yahoo_scrape.main()
-    assert any("no new deals" in record.getMessage().lower() for record in caplog.records)
+    assert any(
+        phrase in record.getMessage().lower()
+        for record in caplog.records
+        for phrase in ("no new deals", "no image-backed deals")
+    )
 
 
 def test_rc15_c41_empty_yahoo_page_sends_nothing(
@@ -1305,9 +1608,9 @@ def _surrogate_page(bad_title=None, bad_image=None):
 
     good = {"auctionId": "t1000000001", "title": "Rick Owens Ramones High Top 42",
             "price": 50000, "isFixedPrice": True, "buyNowPrice": 50000,
-            "imageUrl": "https://auc-pctr.c.yimg.jp/i/test/1.jpg"}
+            "imageUrl": "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-1.jpg"}
     bad = {"auctionId": "t1000000002", "title": bad_title or "Rick Owens Ramones Bad 44",
-           "price": 20000, "imageUrl": bad_image or "https://auc-pctr.c.yimg.jp/i/test/2.jpg"}
+           "price": 20000, "imageUrl": bad_image or "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-2.jpg"}
     data = {"props": {"pageProps": {"initialState": {"search": {"items": {"listing": {
         "items": [good, bad]}}}}}}}
     raw = json.dumps(data)
@@ -1362,7 +1665,7 @@ def test_rc10_c21_c22_batch_failure_rolls_back_then_next_run_resends_all_deals(
 ):
     delivered = []
 
-    def ok_send(subject, html_body, text_body):
+    def ok_send(subject, html_body, text_body, **kwargs):
         delivered.append(html_body)
         return True
 
@@ -1598,7 +1901,9 @@ def test_rc10_c20_unsuccessful_send_records_no_deals_and_exits_failure(
     yahoo_http, seeded_db, monkeypatch, db_conn, caplog
 ):
     sent = []
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda *args: sent.append(args) or False)
+    monkeypatch.setattr(
+        yahoo_scrape, "send_email", lambda *args, **kwargs: sent.append(args) or False
+    )
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
     assert exc.value.code == 1

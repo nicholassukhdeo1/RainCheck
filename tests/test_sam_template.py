@@ -13,6 +13,7 @@ RUNTIME_ARTIFACT_FILES = {
     "ebay_pricing.py",
     "http_retry.py",
     "lambda_handler.py",
+    "listing_images.py",
     "matching.py",
     "schema.sql",
     "sendemail.py",
@@ -293,6 +294,7 @@ def test_rc11c_criterion_22_package_is_pinned_and_excludes_local_or_sensitive_fi
     assert pinned_requirements
     assert all("==" in requirement for requirement in pinned_requirements)
     assert any(requirement.lower().startswith("boto3==") for requirement in pinned_requirements)
+    assert any(requirement.lower().startswith("pillow==") for requirement in pinned_requirements)
 
     artifact_path = tmp_path / "sam-source-only"
     result = subprocess.run(

@@ -12,12 +12,18 @@ from db import (
 from digest import Deal, ItemDeals, build_digest
 import http_retry
 from matching import title_matches
+import listing_images
+from listing_images import prepare_listing_image
+from contextlib import closing, nullcontext
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Collection, Sequence
 import json
 import logging
 import math
+import os
+from pathlib import Path
+import sqlite3
 import requests
 import sys
 
@@ -391,7 +397,107 @@ def build_sections(
     return sections
 
 
-def main():
+def _preview_database_preflight(send_preview):
+    """Check the explicit temp database read-only before any job or network access."""
+    from sendemail import is_dry_run
+    if send_preview and is_dry_run():
+        raise ValueError("--send-preview requires RAINCHECK_DRY_RUN to be off")
+    configured = os.environ.get("RAINCHECK_DB_PATH")
+    if not configured:
+        raise ValueError("preview requires RAINCHECK_DB_PATH")
+    path = Path(configured).resolve()
+    real_path = db.DEFAULT_DB_PATH.resolve()
+    same_file = real_path.exists() and path.is_file() and os.path.samefile(path, real_path)
+    if path == real_path or same_file or not path.is_file():
+        raise ValueError("preview requires an existing nonproduction database")
+    try:
+        # SQLite's read-only URI prevents accidental creation or migration here.
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as conn:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version != db.SCHEMA_VERSION:
+                raise ValueError("preview database has the wrong schema version")
+            required = {"brands", "items", "item_keywords", "listings", "listing_matches"}
+            found = {row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )}
+            if not required <= found:
+                raise ValueError("preview database is missing RainCheck tables")
+    except sqlite3.DatabaseError as exc:
+        raise ValueError("preview database is invalid") from exc
+
+
+def _image_backed_sections(items, brands, listings_by_brand, known, yen_to_usd):
+    """Fill each ranked slot from listings whose own photos were retrieved."""
+    claimed = set()
+    sections = []
+    images = {}
+    attempted = {}
+    failed_item_count = 0
+    candidate_attempts = 0
+    matched_count = 0
+    deferred_count = 0
+    total_image_bytes = 0
+    budget_context = getattr(listing_images, "image_budget", None)
+    with (budget_context() if budget_context else nullcontext()) as budget:
+        for item in items:
+            try:
+                deals = find_item_deals(
+                    item, listings_by_brand.get(item.brand_id, ()), known | claimed, yen_to_usd
+                )
+            except (ValueError, TypeError) as exc:
+                failed_item_count += 1
+                logger.warning("Yahoo deal calculation failed for item %d (%s)", item.id, type(exc).__name__)
+                continue
+            # The first matching item owns a URL even when the photo is unavailable.
+            matched_count += len(deals)
+            claimed.update(deal.url for deal in deals)
+            shown = []
+            immediate_count = watch_count = 0
+            overflow_count = 0
+            for deal in deals:
+                if candidate_attempts >= 60 or (budget is not None and not budget.usable()):
+                    logger.warning("Image request budget exhausted; remaining listings deferred")
+                    break
+                if deal.url not in attempted:
+                    candidate_attempts += 1
+                    attempted[deal.url] = prepare_listing_image(deal.url, deal.image_url)
+                photo = attempted[deal.url]
+                if photo is None:
+                    deferred_count += 1
+                    logger.info("Listing %s deferred: image unavailable", deal.url.rsplit("/", 1)[-1])
+                    continue
+                slot_full = (watch_count >= TOP_DEALS_PER_ITEM if deal.kind == "auction_watch"
+                             else immediate_count >= TOP_DEALS_PER_ITEM)
+                if slot_full:
+                    overflow_count += 1
+                    continue
+                if total_image_bytes + len(photo.data) > 8 * 1024 * 1024:
+                    logger.warning("Image payload budget exhausted; remaining listings deferred")
+                    break
+                images[deal.url] = photo
+                total_image_bytes += len(photo.data)
+                shown.append(deal)
+                if deal.kind == "auction_watch":
+                    watch_count += 1
+                else:
+                    immediate_count += 1
+            if shown:
+                sections.append(ItemDeals(
+                    f"{item.brand} / {item.name}" if len(brands) > 1 else item.name,
+                    item.effective_price_usd,
+                    tuple(shown),
+                    overflow_count,  # only verified photos omitted by the display limit
+                ))
+    if deferred_count:
+        logger.info("Deferred %d listings without verified photos", deferred_count)
+    return sections, images, failed_item_count, matched_count
+
+
+def main(*, preview=False, send_preview=False):
+    if preview or send_preview:
+        _preview_database_preflight(send_preview)
+    if send_preview and not preview:
+        raise ValueError("send_preview requires preview=True")
     root = logging.getLogger()
     if not root.handlers:
         handler = logging.StreamHandler()
@@ -427,7 +533,8 @@ def main():
             listings_by_brand[brand.id] = owned_listings
 
         # A valid page is a fresh observation even when it has no new deals.
-        update_last_seen_at((listing.url for listing in listings), datetime.now(timezone.utc))
+        if not preview:
+            update_last_seen_at((listing.url for listing in listings), datetime.now(timezone.utc))
         if not listings:
             logger.info(NO_DEALS_LINE)
             logger.info("Yahoo deals job finished: 0 deals, 0 item failures")
@@ -437,35 +544,20 @@ def main():
         for item in items:
             if item.effective_price_usd is None:
                 logger.info("Skipping item %d (%s): no usable market price", item.id, item.name)
-        known = get_known_listing_urls(listing.url for listing in listings)
-        claimed = set()
-        sections = []
-        failed_item_count = 0
-        for item in items:
-            try:
-                deals = find_item_deals(
-                    item, listings_by_brand.get(item.brand_id, ()), known | claimed, yen_to_usd
-                )
-            except (ValueError, TypeError) as exc:
-                failed_item_count += 1
-                logger.warning("Yahoo deal calculation failed for item %d (%s)", item.id, type(exc).__name__)
-                continue
-            # Claim every match before the top-five cut to preserve section priority.
-            claimed.update(deal.url for deal in deals)
-            if deals:
-                shown, not_shown = _shown_deals(deals, TOP_DEALS_PER_ITEM)
-                sections.append(ItemDeals(
-                    f"{item.brand} / {item.name}" if len(brands) > 1 else item.name,
-                    item.effective_price_usd,
-                    shown,
-                    not_shown,
-                ))
+        known = set() if preview else get_known_listing_urls(listing.url for listing in listings)
+        sections, images, failed_item_count, matched_count = _image_backed_sections(
+            items, brands, listings_by_brand, known, yen_to_usd
+        )
         digest = build_digest(
             sections,
             datetime.now().astimezone().date(),
+            inline_images=images, preview=preview,
         )
         if digest is None:
-            logger.info(NO_DEALS_LINE)
+            if matched_count:
+                logger.warning("No image-backed deals; no email sent.")
+            else:
+                logger.info(NO_DEALS_LINE)
             if failed_item_count:
                 logger.error("Yahoo deals job failed: 0 deals, %d item failures", failed_item_count)
                 raise SystemExit(1)
@@ -475,11 +567,19 @@ def main():
         if any(deal.url not in sources_by_url for deal in digest.deals):
             logger.error("Yahoo digest has a displayed deal without a parsed source")
             raise SystemExit(1)
-        if not send_email(digest.subject, digest.html, digest.text):
+        if preview and not send_preview:
+            print(digest.subject)
+            print(digest.text)
+            print(digest.html)
+            return 0
+        if not send_email(digest.subject, digest.html, digest.text, inline_images=digest.inline_images):
             # nothing was recorded, so the same deals are offered again next run
             n = len(digest.deals)
             logger.error("Digest email failed; %d deals remain eligible for the next run", n)
             raise SystemExit(1)
+        if preview:
+            logger.info("Preview email sent with %d displayed deals", len(digest.deals))
+            return 0
         # record only after a successful send, and only the deals that were shown
         try:
             record_listing_matches(digest.deals, sources_by_url=sources_by_url)
@@ -506,4 +606,15 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    import argparse
+    parser = argparse.ArgumentParser(description="Find Yahoo deals and send the daily digest")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--preview", action="store_true", help="print a read-only live preview")
+    mode.add_argument("--send-preview", action="store_true", help="email a read-only live preview")
+    args = parser.parse_args()
+    try:
+        result = main(preview=args.preview or args.send_preview, send_preview=args.send_preview)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    raise SystemExit(result)

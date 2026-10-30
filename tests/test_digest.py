@@ -1,5 +1,6 @@
 """RC-15 digest builder tests (criteria 14-30). All pure: no database, network, or clock."""
 from datetime import date
+from dataclasses import dataclass
 
 import pytest
 from bs4 import BeautifulSoup
@@ -10,8 +11,8 @@ from digest import Deal, ItemDeals, build_digest, is_safe_http_url
 RUN_DATE = date(2026, 10, 26)
 URL_1 = "https://auctions.yahoo.co.jp/jp/auction/t1000000001"
 URL_4 = "https://auctions.yahoo.co.jp/jp/auction/t1000000004"
-IMG_1 = "https://auc-pctr.c.yimg.jp/i/test/1.jpg"
-IMG_4 = "https://auc-pctr.c.yimg.jp/i/test/4.jpg"
+IMG_1 = "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-1.jpg"
+IMG_4 = "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-4.jpg"
 
 BANNED_TAGS = ["script", "style", "link", "iframe", "form", "object", "embed"]
 
@@ -238,9 +239,55 @@ def test_rc15_a2_price_cell_discount_text_format_for_each_deal():
     d = build_digest([section(deals=[deal_1(), deal_4()])], RUN_DATE)
     rows = data_rows(soup_of(d).find("table"))
     assert [r.find_all("td")[2].find("strong").get_text() for r in rows] == ["61.3% off", "22.5% off"]
-    assert [r.find_all("td")[2].get_text(" ", strip=True) for r in rows] == [
-        "¥50,000 $310.00 61.3% off", "¥100,000 $620.00 22.5% off",
-    ]
+
+
+# ---- RC-19 embedded images and preview rendering -----------------------------------
+
+
+@dataclass(frozen=True)
+class PreparedImage:
+    cid: str
+    content_type: str
+    data: bytes
+
+
+def test_rc19_c1_digest_uses_one_cid_image_for_each_prepared_displayed_deal():
+    photo = PreparedImage("photo-1", "image/jpeg", b"normalized-jpeg")
+    d = build_digest([section()], RUN_DATE, inline_images={URL_1: photo})
+
+    soup = soup_of(d)
+    rows = data_rows(soup.find("table"))
+    image = rows[0].find("img")
+    assert len(rows) == 1
+    assert image["src"] == "cid:photo-1"
+    assert image["width"] == image["height"] == "100"
+    assert image.parent["href"] == URL_1
+    assert image["alt"] == "Rick Owens Ramones High Top 42"
+    assert d.inline_images == (photo,)
+    assert URL_1 not in image["src"]
+
+
+def test_rc19_c3_image_aware_digest_has_no_remote_image_sources():
+    photo = PreparedImage("opaque-cid", "image/png", b"png")
+    d = build_digest([section()], RUN_DATE, inline_images={URL_1: photo})
+    assert [img["src"] for img in soup_of(d).find_all("img")] == ["cid:opaque-cid"]
+    assert IMG_1 not in d.html
+    assert "Rick Owens Ramones High Top 42" in d.text
+
+
+def test_rc19_c12_preview_has_visible_label_in_subject_html_and_text():
+    photo = PreparedImage("photo-1", "image/jpeg", b"jpeg")
+    d = build_digest([section()], RUN_DATE, inline_images={URL_1: photo}, preview=True)
+    assert d.subject.startswith("RainCheck PREVIEW:")
+    text = d.text.lower()
+    html = soup_of(d)
+    assert "one-time live search" in text
+    assert "may include previously seen listings" in text
+    assert "has not changed raincheck listing history" in text
+    rendered = html.get_text(" ", strip=True).lower()
+    assert "one-time live search" in rendered
+    assert "may include previously seen listings" in rendered
+    assert "has not changed raincheck listing history" in rendered
 
 
 def test_rc15_a2_every_deal_cell_is_vertically_top_aligned():

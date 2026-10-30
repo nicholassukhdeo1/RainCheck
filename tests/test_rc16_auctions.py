@@ -34,7 +34,7 @@ def _listing(
         url=f"https://auctions.yahoo.co.jp/jp/auction/t{number}",
         title=title or f"Rick Owens Ramones {number}",
         price_yen=price,
-        image_url=None,
+        image_url=f"https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-t{number}.jpg",
         is_fixed_price=fixed,
         buy_now_price_yen=buy_now,
         scheduled_end_at=datetime.fromisoformat(end) if end else None,
@@ -559,7 +559,8 @@ def test_rc16_c28_yahoo_rejects_missing_source_before_sending(fake_http, seeded_
     item_id = db.get_tracked_items()[0].id
     brand_id = db.get_tracked_items()[0].brand_id
     missing = digest.Deal(item_id, brand_id, "https://auctions.yahoo.co.jp/jp/auction/not-on-page",
-                          "Rick Owens Ramones", 1000, 6.2, MARKET, 99.0, None,
+                          "Rick Owens Ramones", 1000, 6.2, MARKET, 99.0,
+                          "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-missing.jpg",
                           kind="auction_watch")
     monkeypatch.setattr(yahoo_scrape, "parse_listings", lambda _html: [source])
     monkeypatch.setattr(

@@ -54,6 +54,7 @@ def page(*records):
 def listing(auction_id, title, price=10000):
     return {
         "auctionId": auction_id, "title": title, "price": price,
+        "imageUrl": f"https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-{auction_id}.jpg",
         "isFixedPrice": True, "buyNowPrice": price, "isFleamarketItem": False,
     }
 
@@ -444,7 +445,10 @@ def test_rc13_c15_send_failure_records_no_listings_or_matches(temp_db, fake_http
     fake_http.add("GET", SECOND_BRAND_URL, text=page(listing("t7000000010", "Brand B Ramones", 10000)))
     add_rate(fake_http)
     shown = []
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text: shown.append(html) or False)
+    monkeypatch.setattr(
+        yahoo_scrape, "send_email",
+        lambda subject, html, text, **kwargs: shown.append(html) or False,
+    )
 
     with pytest.raises(SystemExit):
         yahoo_scrape.main()
@@ -455,7 +459,7 @@ def test_rc13_c15_send_failure_records_no_listings_or_matches(temp_db, fake_http
     assert rows(temp_db, "SELECT * FROM listings") == []
     assert rows(temp_db, "SELECT * FROM listing_matches") == []
 
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text: True)
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text, **kwargs: True)
     yahoo_scrape.main()
     assert rows(temp_db, "SELECT url FROM listings ORDER BY url") == [
         ("https://auctions.yahoo.co.jp/jp/auction/t7000000009",),
