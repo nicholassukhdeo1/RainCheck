@@ -103,6 +103,32 @@ Both can be run from any directory.
 - eBay item failures leave that item's prior data intact and do not stop later item searches, except a final HTTP 429 stops further eBay searches.
 - Yahoo sends at most one digest per run and records all displayed deals together only after a successful send.
   If SMTP accepts a message and the later database transaction fails, the deals can be emailed again on a later run.
+- The digest embeds a verified photo from each shown Yahoo listing as an inline image.
+  A listing whose photo is unavailable is deferred and can be offered again on a later run.
+
+### Read-only live email preview
+
+Create a separate database outside `src/raincheck.db`, then use it for either preview command.
+The preview reads the current Yahoo pages and your tracked item prices without changing listing history.
+It can show listings already seen in the daily job.
+
+```bash
+preview_dir=$(mktemp -d)
+RAINCHECK_DB_PATH="$preview_dir/preview.db" python3 src/db.py --seed
+RAINCHECK_DB_PATH="$preview_dir/preview.db" python3 src/yahoo_scrape.py --preview
+```
+
+`--preview` prints the subject, plain text, and CID-based HTML without sending email.
+To email the same kind of one-time preview to `RECEIVER_EMAIL` (or `SENDER_EMAIL` when unset), explicitly turn off dry run:
+
+```bash
+RAINCHECK_DB_PATH="$preview_dir/preview.db" RAINCHECK_DRY_RUN=0 python3 src/yahoo_scrape.py --send-preview
+```
+
+The send-preview command rejects dry-run mode, a missing or invalid database, and any path resolving to `src/raincheck.db` before fetching Yahoo or sending email.
+Both modes use verified listing photos and omit rows whose photos cannot be retrieved.
+The photo fallback only uses a Yahoo detail page whose canonical listing identity matches the requested listing.
+
 
 From the repository root, use the item CLI to manage one tracked product at a time:
 

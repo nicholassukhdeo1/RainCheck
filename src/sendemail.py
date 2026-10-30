@@ -2,6 +2,7 @@ import os
 import logging
 import smtplib
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 
 from dotenv import load_dotenv
@@ -23,7 +24,7 @@ def is_dry_run():
     return value not in ("", "0", "false", "no", "off")
 
 
-def send_email(subject, html_body, text_body):
+def send_email(subject, html_body, text_body, *, inline_images=()):
     """Sends a text + HTML email. Returns True if sent (or dry run), False if sending failed."""
     # dry run returns before we touch SMTP or SENDER_PASSWORD, so it works with no credentials
     if is_dry_run():
@@ -55,7 +56,18 @@ def send_email(subject, html_body, text_body):
     # plain text first, HTML last: the last alternative is the preferred one (RFC 2046).
     # utf-8 is explicit because listing titles are Japanese
     msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
-    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+    if inline_images:
+        # The HTML alternative owns exactly the images its CID references use.
+        related = MIMEMultipart('related')
+        related.attach(MIMEText(html_body, 'html', 'utf-8'))
+        for image in inline_images:
+            part = MIMEImage(image.data, _subtype=image.content_type.split('/', 1)[1])
+            part.add_header('Content-ID', f'<{image.cid}>')
+            part.add_header('Content-Disposition', 'inline')
+            related.attach(part)
+        msg.attach(related)
+    else:
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
 
     try:
         # timeout so a hung mail server can't stall the run forever
