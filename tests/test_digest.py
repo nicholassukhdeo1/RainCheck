@@ -11,8 +11,8 @@ from digest import Deal, ItemDeals, build_digest, is_safe_http_url
 RUN_DATE = date(2026, 10, 26)
 URL_1 = "https://auctions.yahoo.co.jp/jp/auction/t1000000001"
 URL_4 = "https://auctions.yahoo.co.jp/jp/auction/t1000000004"
-IMG_1 = "https://auc-pctr.c.yimg.jp/i/test/1.jpg"
-IMG_4 = "https://auc-pctr.c.yimg.jp/i/test/4.jpg"
+IMG_1 = "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-1.jpg"
+IMG_4 = "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-4.jpg"
 
 BANNED_TAGS = ["script", "style", "link", "iframe", "form", "object", "embed"]
 
@@ -273,15 +273,6 @@ def test_rc19_c3_image_aware_digest_has_no_remote_image_sources():
     assert [img["src"] for img in soup_of(d).find_all("img")] == ["cid:opaque-cid"]
     assert IMG_1 not in d.html
     assert "Rick Owens Ramones High Top 42" in d.text
-
-
-def test_rc19_c6_portrait_thumbnail_is_rendered_without_stretching():
-    photo = PreparedImage("portrait-cid", "image/jpeg", b"normalized-portrait")
-    d = build_digest([section()], RUN_DATE, inline_images={URL_1: photo})
-    image = soup_of(d).find("img")
-    assert image["src"] == "cid:portrait-cid"
-    assert "object-fit:contain" in image.get("style", "").replace(" ", "")
-    assert URL_1 in d.text
 
 
 def test_rc19_c12_preview_has_visible_label_in_subject_html_and_text():

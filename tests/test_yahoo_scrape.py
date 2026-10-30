@@ -99,7 +99,7 @@ def inline_item(item_id=1, name="rick owens ramones", keywords=("ramones", "ramo
 
 def inline_listing(n, title=None, yen=10000, image="auto"):
     if image == "auto":
-        image = f"https://auc-pctr.c.yimg.jp/i/test/t{n}.jpg"
+        image = f"https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-t{n}.jpg"
     listing = yahoo_scrape.YahooListing(
         auction_id=f"t{n}", url=f"{AUCTION}t{n}", title=title or f"Rick Owens Ramones {n}",
         price_yen=yen, image_url=image,
@@ -115,7 +115,7 @@ def inline_listing(n, title=None, yen=10000, image="auto"):
 
 def _fixed_listing(auction_id, url, title, price_yen, image_url="auto"):
     if image_url == "auto":
-        image_url = f"https://auc-pctr.c.yimg.jp/i/test/{auction_id}.jpg"
+        image_url = f"https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-{auction_id}.jpg"
     listing = yahoo_scrape.YahooListing(auction_id, url, title, price_yen, image_url)
     if "is_fixed_price" in {field.name for field in dataclasses.fields(listing)}:
         listing = dataclasses.replace(
@@ -165,7 +165,7 @@ def test_rc15_c1_find_item_deals_returns_both_deals_best_first_with_full_fields(
     assert first.kind == "auction_buy_now"
     assert first.current_price_yen == 50000
     assert first.potential_discount_pct == pytest.approx(61.25)
-    assert first.image_url == "https://auc-pctr.c.yimg.jp/i/test/1.jpg"
+    assert first.image_url == "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-1.jpg"
     assert second.discount_pct == pytest.approx(22.5)
 
 
@@ -1608,9 +1608,9 @@ def _surrogate_page(bad_title=None, bad_image=None):
 
     good = {"auctionId": "t1000000001", "title": "Rick Owens Ramones High Top 42",
             "price": 50000, "isFixedPrice": True, "buyNowPrice": 50000,
-            "imageUrl": "https://auc-pctr.c.yimg.jp/i/test/1.jpg"}
+            "imageUrl": "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-1.jpg"}
     bad = {"auctionId": "t1000000002", "title": bad_title or "Rick Owens Ramones Bad 44",
-           "price": 20000, "imageUrl": bad_image or "https://auc-pctr.c.yimg.jp/i/test/2.jpg"}
+           "price": 20000, "imageUrl": bad_image or "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-2.jpg"}
     data = {"props": {"pageProps": {"initialState": {"search": {"items": {"listing": {
         "items": [good, bad]}}}}}}}
     raw = json.dumps(data)

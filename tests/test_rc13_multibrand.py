@@ -54,7 +54,7 @@ def page(*records):
 def listing(auction_id, title, price=10000):
     return {
         "auctionId": auction_id, "title": title, "price": price,
-        "imageUrl": f"https://auc-pctr.c.yimg.jp/i/test/{auction_id}.jpg",
+        "imageUrl": f"https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-{auction_id}.jpg",
         "isFixedPrice": True, "buyNowPrice": price, "isFleamarketItem": False,
     }
 

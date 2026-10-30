@@ -62,11 +62,11 @@ class ImageSession:
 
 def test_rc19_c4_rejects_unsafe_schemes_hosts_credentials_ports_and_whitespace_without_requests():
     unsafe_urls = [
-        "http://auc-pctr.c.yimg.jp/i/test/photo.jpg",
-        "https://evil.example/i/test/photo.jpg",
-        "https://user@auc-pctr.c.yimg.jp/i/test/photo.jpg",
-        "https://auc-pctr.c.yimg.jp:444/i/test/photo.jpg",
-        "https://auc-pctr.c.yimg.jp/i/test/photo.jpg\n.evil",
+        "http://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-photo.jpg",
+        "https://evil.example/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-photo.jpg",
+        "https://user@auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-photo.jpg",
+        "https://auc-pctr.c.yimg.jp:444/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-photo.jpg",
+        "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-photo.jpg\n.evil",
     ]
     for url in unsafe_urls:
         session = ImageSession({})
@@ -134,9 +134,47 @@ def test_rc19_c6_valid_png_becomes_bounded_raster_thumbnail_with_opaque_cid():
     assert response.closed
 
 
+def test_rc19_c6_portrait_photo_keeps_its_ratio_in_encoded_image_or_html():
+    from datetime import date
+    from io import BytesIO
+
+    from PIL import Image
+    from bs4 import BeautifulSoup
+
+    from digest import Deal, ItemDeals, build_digest
+
+    photo = prepare_listing_image(
+        LISTING_URL, IMAGE_URL,
+        session=ImageSession({IMAGE_URL: ImageResponse(_png(2, 4))}),
+    )
+    assert photo is not None
+    with Image.open(BytesIO(photo.data)) as prepared:
+        prepared_width, prepared_height = prepared.size
+
+    deal = Deal(
+        1, 1, LISTING_URL, "Rick Owens Ramones portrait", 1000, 6.2,
+        100.0, 93.8, IMAGE_URL,
+    )
+    digest = build_digest(
+        [ItemDeals("rick owens ramones", 100.0, (deal,))], date(2026, 10, 27),
+        inline_images={LISTING_URL: photo},
+    )
+    image = BeautifulSoup(digest.html, "html.parser").find("img")
+    assert image["src"] == f"cid:{photo.cid}"
+    if prepared_width == prepared_height == 100:
+        # A square encoded canvas is the approved padding strategy.
+        assert image.get("width") == image.get("height") == "100"
+    else:
+        # Otherwise the markup must use natural dimensions or preserve height.
+        style = image.get("style", "").replace(" ", "").lower()
+        width = int(image.get("width", prepared_width))
+        height = int(image.get("height", prepared_height))
+        assert width * prepared_height == height * prepared_width or "height:auto" in style
+
+
 @pytest.mark.parametrize("bad_url", [
     "https://auc-pctr.c.yimg.jp/i/na_170x170.png",
-    "https://auc-pctr.c.yimg.jp/i/test/na_170x170.png?nf=1",
+    "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/i-img100x100-1792990662638j63eeo-na_170x170.png?nf=1",
 ])
 def test_rc19_c6_known_yahoo_fallback_art_is_rejected(bad_url):
     session = ImageSession({})
