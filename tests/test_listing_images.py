@@ -9,7 +9,11 @@ from listing_images import prepare_listing_image
 
 
 LISTING_URL = "https://auctions.yahoo.co.jp/jp/auction/t1234567890"
-IMAGE_URL = "https://auc-pctr.c.yimg.jp/i/test/t1234567890.jpg"
+IMAGE_URL = (
+    "https://auc-pctr.c.yimg.jp/i/auctions.c.yimg.jp/images.auctions.yahoo.co.jp/"
+    "image/dr000/auc0210/users/45a6ce28d3cf2f865f425e68b2890ed9a088ceac/"
+    "i-img1200x1200-1792990662638j63eeo.jpg"
+)
 
 
 def _png(width=1, height=1, color=(30, 80, 120)):
@@ -68,6 +72,18 @@ def test_rc19_c4_rejects_unsafe_schemes_hosts_credentials_ports_and_whitespace_w
         session = ImageSession({})
         assert prepare_listing_image(LISTING_URL, url, session=session) is None
         assert session.calls == []
+
+
+def test_rc19_c4_rejects_stock_path_but_accepts_fixture_observed_listing_photo_path():
+    stock_url = "https://auc-pctr.c.yimg.jp/i/stock/photo.jpg"
+    session = ImageSession({})
+    assert prepare_listing_image(LISTING_URL, stock_url, session=session) is None
+    assert session.calls == []
+
+    # This path structure is present in the saved Yahoo results-page capture.
+    session = ImageSession({IMAGE_URL: ImageResponse(_png())})
+    assert prepare_listing_image(LISTING_URL, IMAGE_URL, session=session) is not None
+    assert [call[0] for call in session.calls] == [IMAGE_URL]
 
 
 def test_rc19_c4_redirect_is_rejected_without_contacting_redirect_destination():
@@ -166,3 +182,74 @@ def test_rc19_c7_detail_redirect_and_oversized_page_are_rejected():
     session = ImageSession({LISTING_URL: huge_page})
     assert prepare_listing_image(LISTING_URL, None, session=session) is None
     assert huge_page.closed
+
+
+@pytest.mark.parametrize("malformed", [
+    '<link rel><meta property="og:image" content="' + IMAGE_URL + '">',
+    '<link rel="canonical" href="' + LISTING_URL + '"><meta property>',
+])
+def test_rc19_c7_malformed_none_link_or_meta_attributes_defer_without_crashing(malformed):
+    detail = ImageResponse(malformed.encode(), content_type="text/html; charset=utf-8")
+    session = ImageSession({LISTING_URL: detail})
+    assert prepare_listing_image(LISTING_URL, None, session=session) is None
+    assert [call[0] for call in session.calls] == [LISTING_URL]
+    assert detail.closed
+
+
+def test_rc19_c5_blocked_stream_read_obeys_remaining_wall_clock_deadline():
+    import listing_images
+    from time import perf_counter, sleep
+
+    class SlowResponse(ImageResponse):
+        read_timeout = None
+
+        def iter_content(self, chunk_size):
+            sleep(self.read_timeout)
+            raise requests.Timeout("simulated blocked streaming read")
+
+    response = SlowResponse(chunks=[])
+    class Session(ImageSession):
+        def get(self, url, **kwargs):
+            response.read_timeout = kwargs["timeout"][1]
+            return super().get(url, **kwargs)
+
+    session = Session({IMAGE_URL: response})
+    with listing_images.image_budget() as budget:
+        budget.deadline = listing_images.time.monotonic() + 0.15
+        started = perf_counter()
+        assert prepare_listing_image(LISTING_URL, IMAGE_URL, session=session) is None
+        elapsed = perf_counter() - started
+    assert elapsed < 0.3
+    assert response.read_timeout <= 0.15
+    assert response.closed
+    # A timed-out stream is terminal, so no detail-page request follows.
+    assert [call[0] for call in session.calls] == [IMAGE_URL]
+
+
+def test_rc19_c20_shared_image_phase_stops_after_aggregate_deadline(monkeypatch):
+    import listing_images
+
+    current = [100.0]
+    monkeypatch.setattr(listing_images.time, "monotonic", lambda: current[0])
+
+    class AlmostSlowResponse(ImageResponse):
+        def iter_content(self, chunk_size):
+            current[0] += 7.5
+            yield _png()
+
+    response = AlmostSlowResponse(chunks=[])
+    session = ImageSession({IMAGE_URL: response})
+    second_image_url = IMAGE_URL.replace(
+        "1792990662638j63eeo.jpg", "1792990782154lzf1gj.jpg"
+    )
+    with listing_images.image_budget():
+        first = prepare_listing_image(LISTING_URL, IMAGE_URL, session=session)
+        assert first is not None
+        current[0] += 293.0
+        second = prepare_listing_image(
+            "https://auctions.yahoo.co.jp/jp/auction/t1234567891", second_image_url,
+            session=session,
+        )
+    assert second is None
+    assert len(session.calls) == 1
+    assert response.closed

@@ -730,6 +730,25 @@ def test_rc04_c5_and_c6_non_deal_is_not_stored_and_later_deal_is_sent(
 # ---- RC-19 image-backed daily selection and read-only preview -----------------------
 
 
+@pytest.mark.parametrize("mode", ["preview", "send_preview"])
+def test_rc19_c12_c13_direct_main_preview_rejects_default_database_before_io(
+    monkeypatch, mode
+):
+    monkeypatch.delenv("RAINCHECK_DB_PATH", raising=False)
+    monkeypatch.setenv("RAINCHECK_DRY_RUN", "0")
+    calls = []
+
+    def unexpected_io(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("preview preflight must run before database or network access")
+
+    monkeypatch.setattr(yahoo_scrape, "get_tracked_items", unexpected_io)
+    monkeypatch.setattr(yahoo_scrape, "fetch_yahoo_page", unexpected_io)
+    with pytest.raises(ValueError, match="preview.*RAINCHECK_DB_PATH"):
+        yahoo_scrape.main(**{mode: True})
+    assert calls == []
+
+
 def test_rc19_c8_unpictured_deal_is_not_in_either_body_or_recorded_and_reappears_later(
     yahoo_http, seeded_db, monkeypatch, db_conn
 ):

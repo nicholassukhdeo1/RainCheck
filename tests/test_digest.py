@@ -273,6 +273,14 @@ def test_rc19_c3_image_aware_digest_has_no_remote_image_sources():
     assert [img["src"] for img in soup_of(d).find_all("img")] == ["cid:opaque-cid"]
     assert IMG_1 not in d.html
     assert "Rick Owens Ramones High Top 42" in d.text
+
+
+def test_rc19_c6_portrait_thumbnail_is_rendered_without_stretching():
+    photo = PreparedImage("portrait-cid", "image/jpeg", b"normalized-portrait")
+    d = build_digest([section()], RUN_DATE, inline_images={URL_1: photo})
+    image = soup_of(d).find("img")
+    assert image["src"] == "cid:portrait-cid"
+    assert "object-fit:contain" in image.get("style", "").replace(" ", "")
     assert URL_1 in d.text
 
 
