@@ -458,7 +458,7 @@ def test_rc11_c9_two_brand_yahoo_run_fetches_each_brand_and_sends_one_digest(
     sent = []
     monkeypatch.setattr(yahoo_scrape, "fetch_yahoo_page", fetch)
     monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: 0.0062)
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda *args: sent.append(args) or True)
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda *args, **kwargs: sent.append(args) or True)
     _patch_jobs(monkeypatch, runtime, ebay=lambda: SimpleNamespace(had_failure=False, failed_item_ids=()))
     monkeypatch.setattr(yahoo_scrape, "main", REAL_YAHOO_MAIN)
 
@@ -613,7 +613,7 @@ def test_rc11_c14_post_send_upload_failure_warns_digest_may_repeat(
     ))
     monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: 0.0062)
     sent = []
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda *args: sent.append(args) or True)
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda *args, **kwargs: sent.append(args) or True)
     monkeypatch.setattr(yahoo_scrape, "main", _run_real_yahoo)
     with pytest.raises(Exception):
         _handler(runtime)
@@ -750,6 +750,7 @@ def _yahoo_page(auction_id, title, price_yen):
         "auctionId": auction_id,
         "title": title,
         "price": price_yen,
+        "imageUrl": f"https://auc-pctr.c.yimg.jp/i/test/{auction_id}.jpg",
         "isFixedPrice": True,
         "buyNowPrice": price_yen,
         "isFleamarketItem": False,

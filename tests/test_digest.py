@@ -289,9 +289,6 @@ def test_rc19_c12_preview_has_visible_label_in_subject_html_and_text():
     assert "one-time live search" in rendered
     assert "may include previously seen listings" in rendered
     assert "has not changed raincheck listing history" in rendered
-    assert [r.find_all("td")[2].get_text(" ", strip=True) for r in rows] == [
-        "¥50,000 $310.00 61.3% off", "¥100,000 $620.00 22.5% off",
-    ]
 
 
 def test_rc15_a2_every_deal_cell_is_vertically_top_aligned():

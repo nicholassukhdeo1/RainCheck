@@ -97,7 +97,9 @@ def inline_item(item_id=1, name="rick owens ramones", keywords=("ramones", "ramo
     )
 
 
-def inline_listing(n, title=None, yen=10000, image=None):
+def inline_listing(n, title=None, yen=10000, image="auto"):
+    if image == "auto":
+        image = f"https://auc-pctr.c.yimg.jp/i/test/t{n}.jpg"
     listing = yahoo_scrape.YahooListing(
         auction_id=f"t{n}", url=f"{AUCTION}t{n}", title=title or f"Rick Owens Ramones {n}",
         price_yen=yen, image_url=image,
@@ -111,7 +113,9 @@ def inline_listing(n, title=None, yen=10000, image=None):
     return listing
 
 
-def _fixed_listing(auction_id, url, title, price_yen, image_url=None):
+def _fixed_listing(auction_id, url, title, price_yen, image_url="auto"):
+    if image_url == "auto":
+        image_url = f"https://auc-pctr.c.yimg.jp/i/test/{auction_id}.jpg"
     listing = yahoo_scrape.YahooListing(auction_id, url, title, price_yen, image_url)
     if "is_fixed_price" in {field.name for field in dataclasses.fields(listing)}:
         listing = dataclasses.replace(
@@ -467,7 +471,11 @@ def test_rc08_c10_main_leaves_same_listing_unrecorded_then_sends_it_after_rate_c
     assert sql_rows(seeded_db, "SELECT url FROM listings") == []
     assert sql_rows(seeded_db, "SELECT listing_id FROM listing_matches") == []
     assert sent_emails == []
-    assert any("no new deals" in record.getMessage().lower() for record in caplog.records)
+    assert any(
+        phrase in record.getMessage().lower()
+        for record in caplog.records
+        for phrase in ("no new deals", "no image-backed deals")
+    )
 
     yahoo_scrape.main()
     assert len(rate_calls) == 2
@@ -589,7 +597,11 @@ def test_c47_second_run_inserts_no_new_rows(yahoo_http, seeded_db, sent_emails, 
     assert len(first) == 2
     assert len(sent_emails) == 1
     assert yahoo_scrape.NO_DEALS_LINE == "No new deals; no email sent."
-    assert any("no new deals" in record.getMessage().lower() for record in caplog.records)
+    assert any(
+        phrase in record.getMessage().lower()
+        for record in caplog.records
+        for phrase in ("no new deals", "no image-backed deals")
+    )
 
 
 def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
@@ -599,25 +611,22 @@ def test_rc07_c24_malformed_fixture_pipeline_rows_and_email(
     _add_rate_response(fake_http)
     yahoo_scrape.main()
     rows = {r["url"]: r for r in _rows(db_conn)}
-    assert set(rows) == {X1, Z2, X3}
+    assert set(rows) == {X1, Z2}
     assert rows[Z2]["price_yen"] == 40000
-    assert rows[X3]["image_url"] is None
+    assert X3 not in rows
     assert len(sent_emails) == 1
     html = sent_emails[0][1]
     # The fixed-price flea-market row and the auction's buy-now price are
     # immediately purchasable; the bid-only auction is shown after them as a watch.
-    assert _row_urls(html) == [Z2, X1, X3]
+    assert _row_urls(html) == [Z2, X1]
     soup = _soup(html)
     assert len(soup.find_all("img")) == 2
     first_cells = [tr.find_all("td")[0] for tr in soup.find_all("tr") if tr.find("td")]
     assert first_cells[0].find("img") is not None and first_cells[1].find("img") is not None
-    assert first_cells[2].get_text(strip=True) == "No image"
-    assert first_cells[2].find("img") is None
+    assert len(first_cells) == 2
     rendered = soup.get_text(" ", strip=True)
     assert "69.0% off" in rendered and "65.1% off" in rendered
-    assert "76.8% (not guaranteed; bids may rise)" in rendered
-    assert "84.5% (not guaranteed; bids may rise)" in rendered
-    assert "Auction watch - current price (provisional)" in rendered
+    assert "Auction watch - current price (provisional)" not in rendered
     assert len([call for call in fake_http.calls if call[1] == FRANKFURTER_URL]) == 1
 
 
@@ -636,13 +645,13 @@ def test_rc07_c25_null_market_price_skips_item(
     assert sent_emails == []
     out = "\n".join(record.getMessage() for record in caplog.records)
     assert "rick owens ramones" in out and "no usable market price" in out.lower()
-    assert "no new deals" in out.lower()
+    assert "no new deals" in out.lower() or "no image-backed deals" in out.lower()
 
 
 def test_rc15_c42_deals_are_recorded_only_after_the_send(yahoo_http, seeded_db, monkeypatch):
     seen_during_send = []
 
-    def inspecting_send(subject, html_body, text_body):
+    def inspecting_send(subject, html_body, text_body, **kwargs):
         seen_during_send.append(sql_rows(seeded_db, "SELECT url FROM listings"))
         return True
 
@@ -908,6 +917,7 @@ def test_rc19_c12_preview_cli_prints_cid_digest_without_sending_or_mutating_data
 def test_rc19_c13_send_preview_sends_once_with_cids_and_keeps_database_read_only(
     fake_http, fixtures_dir, seeded_db, monkeypatch
 ):
+    monkeypatch.setenv("RAINCHECK_DRY_RUN", "0")
     sent = []
     _preview_dependencies(fake_http, fixtures_dir, monkeypatch, sent=sent)
     before = _snapshot_database(seeded_db)
@@ -1023,7 +1033,7 @@ def test_rc05_c1_and_c3_refreshes_known_row_before_email_and_records_only_sent_n
     _freeze_rc05_clock(monkeypatch, observed_at)
     state_during_send = []
 
-    def inspecting_send(subject, html_body, text_body):
+    def inspecting_send(subject, html_body, text_body, **kwargs):
         state_during_send.append(
             db_conn.execute(
                 "SELECT last_seen_at FROM listings WHERE url = ?", (URL_1,)
@@ -1092,7 +1102,7 @@ def test_rc05_c4_failed_send_refreshes_known_rows_but_leaves_new_deals_for_retry
     _make_existing_rc05_listing(db_conn)
     observed_at = datetime(2035, 4, 5, 6, 7, 8, tzinfo=timezone.utc)
     _freeze_rc05_clock(monkeypatch, observed_at)
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text: False)
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text, **kwargs: False)
 
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
@@ -1106,7 +1116,7 @@ def test_rc05_c4_failed_send_refreshes_known_rows_but_leaves_new_deals_for_retry
     ] == [URL_1]
     assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 1
 
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text: True)
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda subject, html, text, **kwargs: True)
     yahoo_scrape.main()
     assert [
         row[0] for row in db_conn.execute("SELECT url FROM listings ORDER BY url")
@@ -1182,7 +1192,7 @@ def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
 ):
     calls = []
 
-    def failing_send(subject, html_body, text_body):
+    def failing_send(subject, html_body, text_body, **kwargs):
         calls.append(subject)
         return False
 
@@ -1197,7 +1207,7 @@ def test_rc15_c43_failed_send_exits_1_with_one_error_line_and_records_nothing(
 
     delivered = []
 
-    def ok_send(subject, html_body, text_body):
+    def ok_send(subject, html_body, text_body, **kwargs):
         delivered.append((subject, html_body))
         return True
 
@@ -1213,7 +1223,7 @@ def test_rc15_c43_failed_send_message_uses_singular_for_one_deal(
     yahoo_http, seeded_db, monkeypatch, caplog
 ):
     sql_run(seeded_db, "UPDATE items SET manual_price_usd = 400.0 WHERE name = ?", ("rick owens ramones",))
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda s, h, t: False)
+    monkeypatch.setattr(yahoo_scrape, "send_email", lambda s, h, t, **kwargs: False)
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
     assert exc.value.code == 1
@@ -1304,7 +1314,11 @@ def test_rc15_c50_dry_run_end_to_end_prints_whole_digest_and_records(
     assert [r[0] for r in sql_rows(seeded_db, "SELECT url FROM listings ORDER BY url")] == [URL_1, URL_4]
 
     yahoo_scrape.main()
-    assert any("no new deals" in record.getMessage().lower() for record in caplog.records)
+    assert any(
+        phrase in record.getMessage().lower()
+        for record in caplog.records
+        for phrase in ("no new deals", "no image-backed deals")
+    )
 
 
 def test_rc15_c41_empty_yahoo_page_sends_nothing(
@@ -1632,7 +1646,7 @@ def test_rc10_c21_c22_batch_failure_rolls_back_then_next_run_resends_all_deals(
 ):
     delivered = []
 
-    def ok_send(subject, html_body, text_body):
+    def ok_send(subject, html_body, text_body, **kwargs):
         delivered.append(html_body)
         return True
 
@@ -1868,7 +1882,9 @@ def test_rc10_c20_unsuccessful_send_records_no_deals_and_exits_failure(
     yahoo_http, seeded_db, monkeypatch, db_conn, caplog
 ):
     sent = []
-    monkeypatch.setattr(yahoo_scrape, "send_email", lambda *args: sent.append(args) or False)
+    monkeypatch.setattr(
+        yahoo_scrape, "send_email", lambda *args, **kwargs: sent.append(args) or False
+    )
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
     assert exc.value.code == 1
