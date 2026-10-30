@@ -188,6 +188,13 @@ The user rejected remote-only thumbnails and `No image` rows.
 RainCheck will defer a listing without a verified listing-specific photo, including a time-sensitive auction, and leave it eligible for a later run.
 The implementation will try a conservative detail-page fallback only when current Yahoo markup reliably ties the photo to that exact listing; otherwise it will defer the row.
 
+## Amendments
+
+On 2026-10-29, the resolver safety policy was clarified.
+A missing result image, HTTP error, or corrupt image may trigger the verified detail-page fallback.
+An unsafe result-image URL, redirect response, or transport timeout is terminal for that candidate and triggers no further request for that listing in the run.
+This bounds exposure to untrusted destinations and avoids extra requests after a timeout.
+
 ## Rollback
 
 Restore the prior remote-image renderer and SMTP construction from the previous release, remove the image resolver and preview command modes, and redeploy the previous code package.
