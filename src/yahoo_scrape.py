@@ -494,6 +494,10 @@ def _image_backed_sections(items, brands, listings_by_brand, known, yen_to_usd):
 
 
 def main(*, preview=False, send_preview=False):
+    if preview or send_preview:
+        _preview_database_preflight(send_preview)
+    if send_preview and not preview:
+        raise ValueError("send_preview requires preview=True")
     root = logging.getLogger()
     if not root.handlers:
         handler = logging.StreamHandler()
@@ -608,10 +612,9 @@ if __name__ == "__main__":
     mode.add_argument("--preview", action="store_true", help="print a read-only live preview")
     mode.add_argument("--send-preview", action="store_true", help="email a read-only live preview")
     args = parser.parse_args()
-    if args.preview or args.send_preview:
-        try:
-            _preview_database_preflight(args.send_preview)
-        except ValueError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            raise SystemExit(1)
-    raise SystemExit(main(preview=args.preview or args.send_preview, send_preview=args.send_preview))
+    try:
+        result = main(preview=args.preview or args.send_preview, send_preview=args.send_preview)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    raise SystemExit(result)
