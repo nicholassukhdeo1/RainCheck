@@ -104,11 +104,33 @@ def _scheduled_end_line(end):
     return f"Scheduled end {jst:%Y-%m-%d %H:%M} JST (may change)"
 
 
+def _time_remaining_line(end, created_at):
+    """Format a static countdown from one digest creation instant."""
+    if not isinstance(end, datetime):
+        return "Time remaining unavailable"
+    try:
+        if end.utcoffset() is None:
+            return "Time remaining unavailable"
+        end_utc = end.astimezone(timezone.utc)
+        remaining = end_utc - created_at
+    except (ValueError, OverflowError):
+        return "Time remaining unavailable"
+    if remaining <= timedelta(0):
+        return "Scheduled end reached or passed at email creation; check listing"
+    # Drop fractional seconds before splitting the positive duration into whole minutes.
+    whole_minutes = int(remaining.total_seconds()) // 60
+    if whole_minutes == 0:
+        return "Time remaining at email creation: less than 1m"
+    days, remainder = divmod(whole_minutes, 1440)
+    hours, minutes = divmod(remainder, 60)
+    return f"Time remaining at email creation: {days}d {hours}h {minutes}m"
+
+
 def _potential_line(pct):
     return f"Potential discount at current price: {_pct(pct)} (not guaranteed; bids may rise)"
 
 
-def _html_row(deal, show_buy_now_label=False, prepared_image=None):
+def _html_row(deal, show_buy_now_label=False, prepared_image=None, created_at=None):
     title = _display_title(deal.title)
     safe_url = is_safe_http_url(deal.url)
 
@@ -128,12 +150,14 @@ def _html_row(deal, show_buy_now_label=False, prepared_image=None):
         listing_cell += '<br><strong>Auction watch - current price (provisional)</strong>'
         listing_cell += f'<br>{_e(_potential_line(deal.discount_pct))}'
         listing_cell += f'<br>{_e(_scheduled_end_line(deal.scheduled_end_at))}'
+        listing_cell += f'<br>{_e(_time_remaining_line(deal.scheduled_end_at, created_at))}'
     elif deal.kind == "auction_buy_now":
         listing_cell += '<br><strong>Buy now</strong>'
         if deal.current_price_yen is not None and deal.potential_discount_pct is not None:
             listing_cell += f'<br>Current price (provisional): {_e(_yen(deal.current_price_yen))}'
             listing_cell += f'<br>{_e(_potential_line(deal.potential_discount_pct))}'
         listing_cell += f'<br>{_e(_scheduled_end_line(deal.scheduled_end_at))}'
+        listing_cell += f'<br>{_e(_time_remaining_line(deal.scheduled_end_at, created_at))}'
     elif show_buy_now_label:
         listing_cell += '<br><strong>Buy now</strong>'
 
@@ -162,7 +186,8 @@ def _html_row(deal, show_buy_now_label=False, prepared_image=None):
     )
 
 
-def build_digest(sections: Sequence[ItemDeals], run_date: date, *, inline_images=None, preview=False) -> Digest | None:
+def build_digest(sections: Sequence[ItemDeals], run_date: date, *, inline_images=None, preview=False,
+                 created_at=None) -> Digest | None:
     """Returns the subject, HTML, and text for the shown deals, or None when there are none."""
     # Image-aware callers provide only verified parts; missing rows cannot appear in either body.
     if inline_images is not None:
@@ -177,6 +202,15 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date, *, inline_images
     all_deals = tuple(deal for s in sections for deal in s.deals)
     has_watch = any(deal.kind == "auction_watch" for deal in all_deals)
     has_auction = any(deal.kind != "fixed_price" for deal in all_deals)
+    if has_auction:
+        if not isinstance(created_at, datetime):
+            raise ValueError("created_at must be a timezone-aware datetime for auction digests")
+        try:
+            if created_at.utcoffset() is None:
+                raise ValueError("created_at must be a timezone-aware datetime for auction digests")
+            created_at = created_at.astimezone(timezone.utc)
+        except (OverflowError, ValueError) as exc:
+            raise ValueError("created_at must be a timezone-aware datetime for auction digests") from exc
     # the subject holds only a count and a date, never seller text, so header injection can't happen
     if has_watch:
         count = f"{len(all_deals)} listing" if len(all_deals) == 1 else f"{len(all_deals)} listings"
@@ -243,6 +277,7 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date, *, inline_images
             html_parts.append(_html_row(
                 deal, show_buy_now_label=has_watch,
                 prepared_image=inline_images.get(deal.url) if inline_images is not None else None,
+                created_at=created_at,
             ))
             text_lines.append(f"{number}. {_display_title(deal.title)}")
             if deal.kind == "auction_watch":
@@ -250,6 +285,7 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date, *, inline_images
                 text_lines.append(f"   {_yen(deal.price_yen)} ({_usd(deal.price_usd)})")
                 text_lines.append(f"   {_potential_line(deal.discount_pct)}")
                 text_lines.append(f"   {_scheduled_end_line(deal.scheduled_end_at)}")
+                text_lines.append(f"   {_time_remaining_line(deal.scheduled_end_at, created_at)}")
             else:
                 if has_watch or deal.kind == "auction_buy_now":
                     text_lines.append("   Buy now")
@@ -261,6 +297,7 @@ def build_digest(sections: Sequence[ItemDeals], run_date: date, *, inline_images
                         text_lines.append(f"   Current price (provisional): {_yen(deal.current_price_yen)}")
                         text_lines.append(f"   {_potential_line(deal.potential_discount_pct)}")
                     text_lines.append(f"   {_scheduled_end_line(deal.scheduled_end_at)}")
+                    text_lines.append(f"   {_time_remaining_line(deal.scheduled_end_at, created_at)}")
             # an unsafe URL never reaches the text part either
             if is_safe_http_url(deal.url):
                 text_lines.append(f"   {deal.url}")
