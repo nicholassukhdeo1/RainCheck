@@ -112,13 +112,15 @@ def _time_remaining_line(end, created_at):
         if end.utcoffset() is None:
             return "Time remaining unavailable"
         end_utc = end.astimezone(timezone.utc)
+        # The scheduled end line also needs this instant to fit in JST.
+        end_utc.astimezone(timezone(timedelta(hours=9)))
         remaining = end_utc - created_at
     except (ValueError, OverflowError):
         return "Time remaining unavailable"
     if remaining <= timedelta(0):
         return "Scheduled end reached or passed at email creation; check listing"
     # Drop fractional seconds before splitting the positive duration into whole minutes.
-    whole_minutes = int(remaining.total_seconds()) // 60
+    whole_minutes = remaining.days * 1440 + remaining.seconds // 60
     if whole_minutes == 0:
         return "Time remaining at email creation: less than 1m"
     days, remainder = divmod(whole_minutes, 1440)
