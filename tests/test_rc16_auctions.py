@@ -2,7 +2,7 @@
 import json
 import sqlite3
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -16,6 +16,7 @@ import yahoo_scrape
 MARKET = 800.0
 RATE = 0.0062
 RUN_DATE = date(2026, 10, 27)
+CREATED_AT = datetime(2026, 10, 27, 12, 0, tzinfo=timezone.utc)
 BRAND_ID = 1
 ITEM_ID = 1
 
@@ -321,7 +322,8 @@ def test_rc16_c10_c11_penny_bid_is_potential_not_a_confirmed_discount():
         item, [_listing(1, 1, fixed=False)], set(), RATE
     )[0]
     email = digest.build_digest(
-        [digest.ItemDeals("rick owens ramones", MARKET, (deal,))], RUN_DATE
+        [digest.ItemDeals("rick owens ramones", MARKET, (deal,))], RUN_DATE,
+        created_at=CREATED_AT,
     )
     assert "Auction watch" in email.html
     assert "current price (provisional)" in email.html
@@ -342,14 +344,18 @@ def test_rc16_c13_c14_end_time_is_utc_for_storage_and_jst_in_digest():
     parsed = yahoo_scrape.parse_listings(_page([_record(endTime="2026-11-01T21:00:00+09:00")]))[0]
     assert parsed.scheduled_end_at.isoformat() == "2026-11-01T12:00:00+00:00"
     deal = yahoo_scrape.find_item_deals(_item(), [parsed], set(), RATE)[0]
-    email = digest.build_digest([digest.ItemDeals("Ramones", MARKET, (deal,))], RUN_DATE)
+    email = digest.build_digest(
+        [digest.ItemDeals("Ramones", MARKET, (deal,))], RUN_DATE,
+        created_at=CREATED_AT,
+    )
     assert "Scheduled end 2026-11-01 21:00 JST (may change)" in email.html
     assert "Scheduled end unavailable" not in email.html
 
     no_end = yahoo_scrape.parse_listings(_page([_record(endTime="not-a-time")]))[0]
     no_end_deal = yahoo_scrape.find_item_deals(_item(), [no_end], set(), RATE)[0]
     unavailable = digest.build_digest(
-        [digest.ItemDeals("Ramones", MARKET, (no_end_deal,))], RUN_DATE
+        [digest.ItemDeals("Ramones", MARKET, (no_end_deal,))], RUN_DATE,
+        created_at=CREATED_AT,
     )
     assert "Scheduled end unavailable" in unavailable.html
 
@@ -360,7 +366,8 @@ def test_rc16_c13_end_time_out_of_jst_range_is_unavailable_through_digest():
     )[0]
     deal = yahoo_scrape.find_item_deals(_item(), [parsed], set(), RATE)[0]
     email = digest.build_digest(
-        [digest.ItemDeals("Ramones", MARKET, (deal,))], RUN_DATE
+        [digest.ItemDeals("Ramones", MARKET, (deal,))], RUN_DATE,
+        created_at=CREATED_AT,
     )
 
     assert "Scheduled end unavailable" in email.html
@@ -393,7 +400,7 @@ def test_rc16_c17_immediate_and_watch_caps_are_independent_and_overflow_is_neutr
     kinds = [deal.kind for deal in section.deals]
     assert kinds.count("fixed_price") == 5
     assert kinds.count("auction_watch") == 5
-    email = digest.build_digest([section], RUN_DATE)
+    email = digest.build_digest([section], RUN_DATE, created_at=CREATED_AT)
     assert "more listings not shown" in email.html
     assert "more listings not shown" in email.text
     assert "more new deal" not in email.text
@@ -410,7 +417,8 @@ def test_rc16_c18_c20_mixed_digest_labels_prices_escapes_and_counts_rows():
         _item(), [_listing(3, 40000, fixed=True, title="Ramones fixed")], set(), RATE
     )[0]
     email = digest.build_digest(
-        [digest.ItemDeals("Ramones", MARKET, (buy, fixed, watch))], RUN_DATE
+        [digest.ItemDeals("Ramones", MARKET, (buy, fixed, watch))], RUN_DATE,
+        created_at=CREATED_AT,
     )
     assert email.subject == "RainCheck: 3 listings to review - 2026-10-27"
     soup = BeautifulSoup(email.html, "html.parser")
@@ -432,7 +440,10 @@ def test_rc16_c20_auction_title_and_unsafe_url_follow_existing_escape_rules():
         ITEM_ID, BRAND_ID, "javascript:alert(1)", "<b>Ramones</b> & shoes", 1, 0.0062,
         MARKET, 99.9, None, kind="auction_watch", potential_discount_pct=99.9,
     )
-    email = digest.build_digest([digest.ItemDeals("Ramones", MARKET, (deal,))], RUN_DATE)
+    email = digest.build_digest(
+        [digest.ItemDeals("Ramones", MARKET, (deal,))], RUN_DATE,
+        created_at=CREATED_AT,
+    )
     soup = BeautifulSoup(email.html, "html.parser")
     assert soup.find("b") is None
     assert "&lt;b&gt;Ramones&lt;/b&gt; &amp; shoes" in email.html
