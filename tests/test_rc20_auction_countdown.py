@@ -105,6 +105,21 @@ def test_rc20_c3_countdown_uses_elapsed_instants_across_offsets_and_calendar_day
     assert f"{COUNTDOWN} {expected}" in email.text
 
 
+def test_rc20_c3_very_long_duration_truncates_fractional_seconds_before_minutes():
+    created = datetime(2026, 10, 31, 0, 0, tzinfo=timezone.utc)
+    end = datetime(2999, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+    remaining = end - created
+    whole_minutes = remaining.days * 1440 + remaining.seconds // 60
+    days, remainder = divmod(whole_minutes, 1440)
+    hours, minutes = divmod(remainder, 60)
+    expected = f"{days}d {hours}h {minutes}m"
+
+    email = _render([_deal(end=end)], created_at=created)
+
+    assert f"{COUNTDOWN} {expected}" in email.html
+    assert f"{COUNTDOWN} {expected}" in email.text
+
+
 def test_rc20_c4_buy_now_and_watch_have_countdowns_but_fixed_price_does_not():
     deals = [
         _deal("auction_buy_now", url=URL + "-buy"),
@@ -153,6 +168,7 @@ def test_rc20_c6_elapsed_or_equal_end_warns_without_claiming_auction_closed_or_s
         datetime(2026, 11, 1, 12, 0),
         "not-a-datetime",
         datetime.min.replace(tzinfo=timezone(timedelta(hours=14))),
+        datetime.max.replace(tzinfo=timezone.utc),
     ],
 )
 def test_rc20_c7_missing_naive_malformed_or_unrepresentable_end_is_unavailable(end):
