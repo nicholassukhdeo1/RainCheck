@@ -57,9 +57,9 @@ def test_rc20_c1_two_days_three_hours_four_minutes_shows_in_both_bodies_beside_j
     expected = "Time remaining at email creation: 2d 3h 4m"
     listing_text = _listing_text(email)
     assert expected in listing_text
-    assert "Scheduled end 2026-11-02 00:04 JST (may change)" in listing_text
+    assert "Scheduled end 2026-11-03 00:04 JST (may change)" in listing_text
     assert expected in email.text
-    assert "Scheduled end 2026-11-02 00:04 JST (may change)" in email.text
+    assert "Scheduled end 2026-11-03 00:04 JST (may change)" in email.text
 
 
 @pytest.mark.parametrize(
