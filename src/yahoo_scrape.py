@@ -548,10 +548,12 @@ def main(*, preview=False, send_preview=False):
         sections, images, failed_item_count, matched_count = _image_backed_sections(
             items, brands, listings_by_brand, known, yen_to_usd
         )
+        # Capture after image preparation so every countdown reflects email creation.
+        created_at = datetime.now(timezone.utc)
         digest = build_digest(
             sections,
-            datetime.now().astimezone().date(),
-            inline_images=images, preview=preview,
+            created_at.astimezone().date(),
+            inline_images=images, preview=preview, created_at=created_at,
         )
         if digest is None:
             if matched_count:

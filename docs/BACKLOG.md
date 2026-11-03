@@ -249,3 +249,13 @@ The project is locked to Region `us-east-2`.
   If that is possible, record verified completion times and final prices.
   If it is not, document the limitation and do not infer completion from disappearance.
 - **Resume angle:** Reconciled active and completed auction records without treating missing search results as evidence of a sale.
+
+### RC-20: Auction time remaining in emails
+
+- **Size:** S
+- **Depends on:** RC-16, RC-19
+- **Touches:** `src/digest.py`, `src/yahoo_scrape.py`, digest and Yahoo tests
+- **Why:** Auction listings in the daily digest and one-time preview show a scheduled end time, but the recipient must calculate how long is left before bidding closes.
+- **Scope:** Show the time remaining in days, hours, and minutes for every emailed auction, alongside its scheduled end time.
+  Keep the countdown accurate as of email creation and handle missing or elapsed end times clearly.
+- **Resume angle:** Added a readable auction countdown to deal emails.
