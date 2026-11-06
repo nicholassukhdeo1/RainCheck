@@ -176,6 +176,7 @@ Resources:
           RAINCHECK_SSM_SENDER_PASSWORD: !Ref SenderPasswordParameterName
           RAINCHECK_SSM_RECEIVER_EMAIL: !Ref ReceiverEmailParameterName
           RAINCHECK_DRY_RUN: !Ref DryRun
+          RAINCHECK_MANAGEMENT_PROTOCOL: keyword-v1
       EventInvokeConfig:
         MaximumRetryAttempts: 0
         MaximumEventAgeInSeconds: 3600
