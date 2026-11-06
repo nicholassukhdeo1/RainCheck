@@ -230,6 +230,7 @@ python3 src/live_keywords.py remove 1 --exclude "fake"
 An edit changes one normalized term and marks that item as managed by the CLI.
 A term already in the requested state produces no upload.
 Before a real edit, the command saves a verified database backup and a durable operation record in `~/RainCheck-backups`.
+It restricts that directory to the current user and creates the backup and record as private files.
 It invokes the existing Lambda and checks the exact S3 version that Lambda reports, including its checksum and database rows.
 The daily schedule is not changed.
 

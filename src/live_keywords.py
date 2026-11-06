@@ -145,13 +145,41 @@ def _expected(path, record, target):
 
 
 def _verify_delta(backup, actual, record):
+    """Derive the only permitted row changes from the backed-up rows."""
     _check_database(actual)
-    with tempfile.TemporaryDirectory(prefix="raincheck-expected-") as directory:
-        expected = Path(directory) / "expected.db"
-        if not _expected(backup, record, expected):
-            raise CommandError("Operation did not change the backup")
-        if _rows(expected) != _rows(actual):
-            raise CommandError("Uploaded database contains unexpected row changes")
+    before = _rows(backup)
+    expected = {name: list(rows) for name, rows in before.items()}
+    item_id = record["item_id"]
+    action = record["action"]
+    kind = record["kind"]
+    term = record["keyword"].strip().lower()
+    keyword_row = (item_id, term, kind)
+    if action == "add":
+        if keyword_row in expected["item_keywords"]:
+            raise CommandError("Added term was already in the backup")
+        expected["item_keywords"].append(keyword_row)
+    elif action == "remove":
+        if keyword_row not in expected["item_keywords"]:
+            raise CommandError("Removed term was absent from the backup")
+        expected["item_keywords"].remove(keyword_row)
+    else:
+        raise CommandError("Invalid operation action in record")
+    expected["item_keywords"].sort(key=repr)
+    with closing(sqlite3.connect(backup)) as connection:
+        columns = [row[1] for row in connection.execute("PRAGMA table_info(items)")]
+    owner_column = columns.index("config_source")
+    changed_item = False
+    for index, row in enumerate(expected["items"]):
+        if row[0] == item_id:
+            updated = list(row)
+            updated[owner_column] = "cli"
+            expected["items"][index] = tuple(updated)
+            changed_item = True
+            break
+    if not changed_item:
+        raise CommandError("Operation item is missing from the backup")
+    if expected != _rows(actual):
+        raise CommandError("Uploaded database contains unexpected row changes")
     return _keywords(actual, record["item_id"])[1]
 
 
@@ -228,18 +256,25 @@ def _preflight(session, resources, mutating):
 def _backup_dir():
     path = Path.home() / "RainCheck-backups"
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if path.is_symlink():
+        raise CommandError("Backup directory cannot be a symbolic link")
+    path.chmod(0o700)
     return path
 
 
 def _save_record(path, record):
     # Replace and sync the journal before a possible remote send.
-    temporary = path.with_name(path.name + ".tmp")
-    with temporary.open("w", encoding="utf-8") as output:
-        json.dump(record, output, sort_keys=True, indent=2)
-        output.write("\n")
-        output.flush()
-        os.fsync(output.fileno())
-    os.replace(temporary, path)
+    temporary = path.with_name(path.name + ".tmp-" + uuid.uuid4().hex)
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            json.dump(record, output, sort_keys=True, indent=2)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
     descriptor = os.open(path.parent, os.O_RDONLY)
     try:
         os.fsync(descriptor)
@@ -296,7 +331,8 @@ def _edit(args, bucket, key, function, lambda_client, s3, current, version, etag
     stem = f"raincheck-keywords-{stamp}-{record['operation_id']}"
     backup = directory / f"{stem}.db"
     journal = directory / f"{stem}.json"
-    with backup.open("xb") as output, current.open("rb") as source:
+    descriptor = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as output, current.open("rb") as source:
         shutil.copyfileobj(source, output)
         output.flush()
         os.fsync(output.fileno())
@@ -389,18 +425,22 @@ def _recover(record_path, bucket, key, s3):
         if head.get("Metadata", {}).get("raincheck-operation-id") == record["operation_id"]:
             matched.append(version)
     if len(matched) == 1:
-        with tempfile.TemporaryDirectory(prefix="raincheck-recover-") as directory:
-            applied = Path(directory) / "applied.db"
-            _download(s3, bucket, key, applied, matched[0])
-            _verify_delta(backup, applied, record)
-            latest = Path(directory) / "latest.db"
-            try:
-                _download(s3, bucket, key, latest)
-                _check_database(latest)
-                _, words = _keywords(latest, record["item_id"])
-                latest_text = f"Latest keywords: {words}"
-            except (CommandError, OSError, sqlite3.Error, ClientError):
-                latest_text = "Latest keyword state could not be verified"
+        try:
+            with tempfile.TemporaryDirectory(prefix="raincheck-recover-") as directory:
+                applied = Path(directory) / "applied.db"
+                _download(s3, bucket, key, applied, matched[0])
+                _verify_delta(backup, applied, record)
+                latest = Path(directory) / "latest.db"
+                try:
+                    _download(s3, bucket, key, latest)
+                    _check_database(latest)
+                    _, words = _keywords(latest, record["item_id"])
+                    latest_text = f"Latest keywords: {words}"
+                except (CommandError, OSError, sqlite3.Error, ClientError, BotoCoreError):
+                    latest_text = "Latest keyword state could not be verified"
+        except (CommandError, OSError, sqlite3.Error, ClientError, BotoCoreError):
+            print("Uncertain: operation-tagged S3 version failed verification.")
+            return 1
         record.update({"status": "verified", "new_version_id": matched[0]})
         _save_record(record_path, record)
         print(f"Applied in version {matched[0]}. {latest_text}")
@@ -420,7 +460,7 @@ def main(argv=None):
     except SystemExit as exc:
         return int(exc.code)
     try:
-        session = boto3.Session(profile_name="raincheck", region_name=REGION)
+        session = boto3.Session(profile_name="raincheck")
         if session.region_name not in (None, REGION):
             raise CommandError("Unexpected AWS Region")
         with ExitStack() as resources:
