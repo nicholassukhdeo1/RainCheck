@@ -259,3 +259,16 @@ The project is locked to Region `us-east-2`.
 - **Scope:** Show the time remaining in days, hours, and minutes for every emailed auction, alongside its scheduled end time.
   Keep the countdown accurate as of email creation and handle missing or elapsed end times clearly.
 - **Resume angle:** Added a readable auction countdown to deal emails.
+
+### RC-21: Simple live keyword management
+
+- **Size:** M, subject to planning the production concurrency and recovery procedure
+- **Depends on:** RC-11, RC-14
+- **Touches:** New `src/live_keywords.py`, `src/db.py`, `src/lambda_handler.py`, `template.yaml`, `README.md`, tests
+- **Why:** Updating production keywords currently requires manual database downloads, backups, whole-list replacement, upload verification, and schedule handling.
+  A routine change should not require reconstructing that procedure or retyping every existing keyword.
+- **Scope:** List keywords and add or remove individual include or exclude terms through a reusable command.
+  Use the named RainCheck AWS profile, validate account `510258803420` and region `us-east-2`, preserve other configuration and history, and automate fresh backups, safe production updates, upload verification, and restoration of the prior schedule state.
+  Specify safe behavior for active jobs, concurrent edits, expired credentials, interrupted updates, and recovery without silently overwriting newer data.
+  Preserve the existing matcher and storage architecture; the planner must identify any narrowly necessary runtime coordination changes and surface user decisions before implementation.
+- **Resume angle:** Built a safe operator workflow for small production configuration changes with backups, concurrency protection, and verified recovery.
