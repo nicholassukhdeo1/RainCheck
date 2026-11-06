@@ -1,6 +1,6 @@
 # RC-21: Simple live keyword management
 
-**Status:** Approved
+**Status:** Implemented
 **Backlog item:** RC-21 in `docs/BACKLOG.md`
 
 ## Summary
@@ -176,6 +176,14 @@ If the user wants a command that waits for a running job or always pauses the sc
   Strict validation applies to dictionaries with a management marker, preserving the approved compatibility rule.
 - **2026-11-05:** Review requires independent verification of the allowed row delta, rejection of a mismatched configured profile Region before applying the fixed client Region, and private local backup permissions.
   The command ensures its backup directory is `0700` and creates backups and journals with `0600` permissions, including when the directory already exists.
+
+### Verification
+
+- **2026-11-05:** All 881 offline tests passed without warnings, and the fresh reviewer approved the fixes.
+  End-to-end verification exercised the actual CLI and Lambda handler with fake AWS boundaries and a fresh database containing two items, one listing, one match, and two eBay price observations.
+  Add, remove, no-op, busy, stale-version, protocol refusal, and lost-response recovery checks passed while preserving history.
+  Source-only package staging passed; SAM is not installed locally, and no deployment package was published or deployed.
+  The existing production Lambda must receive the reviewed code and capability marker before live edits are enabled.
 
 ## Rollback
 
