@@ -11,7 +11,9 @@ import hashlib
 import importlib
 import io
 import json
+import os
 import sqlite3
+import stat
 import sys
 from contextlib import closing, redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -585,6 +587,28 @@ def test_rc21_ac12_unrelated_completed_backup_record_does_not_block_edit(
     assert "verified" in capsys_read().lower()
 
 
+def test_rc21_ac6_backup_directory_and_files_are_private_under_permissive_umask(
+    seeded_db, monkeypatch, tmp_path
+):
+    backup_dir = tmp_path / "RainCheck-backups"
+    backup_dir.mkdir(mode=0o755)
+    backup_dir.chmod(0o755)
+    cli = _cli_for_test(monkeypatch)
+    calls = []
+    _install_cli_session(monkeypatch, cli, calls, seeded_db.read_bytes(), tmp_path)
+    previous_umask = os.umask(0o022)
+    try:
+        assert _run_cli(cli, ["add", "1", "--include", "sneakers"]) == 0
+    finally:
+        os.umask(previous_umask)
+
+    assert stat.S_IMODE(backup_dir.stat().st_mode) == 0o700
+    created_files = list(backup_dir.iterdir())
+    assert created_files
+    assert all(stat.S_IMODE(path.stat().st_mode) == 0o600 for path in created_files)
+    assert "verified" in capsys_read().lower()
+
+
 def test_rc21_ac13_commands_never_change_schedule_configuration(seeded_db, monkeypatch, tmp_path):
     cli = _cli_for_test(monkeypatch)
     calls = []
@@ -658,6 +682,44 @@ def test_rc21_ac10_extra_uploaded_schema_object_fails_verification_as_uncertain(
     assert _run_cli(cli, ["add", "1", "--include", "sneakers"]) == 1
     assert "uncertain" in capsys_read().lower()
     assert "success" not in capsys_read().lower()
+
+
+def test_rc21_ac10_unexpected_price_change_is_rejected_during_edit_and_recovery(
+    seeded_db, monkeypatch, tmp_path
+):
+    original_change_keyword = db.change_keyword
+
+    def change_keyword_with_unrelated_price_mutation(item_id, action, kind, keyword):
+        changed = original_change_keyword(item_id, action, kind, keyword)
+        if changed:
+            with closing(sqlite3.connect(db.get_db_path())) as connection:
+                connection.execute(
+                    "UPDATE items SET market_price_usd = ? WHERE id = ?",
+                    (987.65, item_id),
+                )
+                connection.commit()
+        return changed
+
+    monkeypatch.setattr(db, "change_keyword", change_keyword_with_unrelated_price_mutation)
+    cli = _cli_for_test(monkeypatch)
+    calls = []
+    _install_cli_session(
+        monkeypatch, cli, calls, seeded_db.read_bytes(), tmp_path,
+        extra_price_mutation=True,
+    )
+
+    assert _run_cli(cli, ["add", "1", "--include", "sneakers"]) == 1
+    assert "uncertain" in capsys_read().lower()
+    record_path = next(tmp_path.glob("**/*.json"))
+    assert json.loads(record_path.read_text(encoding="utf-8"))["status"] == "uncertain"
+
+    calls.clear()
+    assert _run_cli(cli, ["recover", str(record_path)]) == 1
+    assert "uncertain" in capsys_read().lower()
+    assert json.loads(record_path.read_text(encoding="utf-8"))["status"] == "uncertain"
+    assert not any(name in {"invoke", "put_object"} for name, _ in calls)
+
+
 def test_rc21_ac5_cli_rejects_each_preflight_mismatch_before_invoke(
     seeded_db, monkeypatch, tmp_path
 ):
@@ -674,6 +736,21 @@ def test_rc21_ac5_cli_rejects_each_preflight_mismatch_before_invoke(
         assert not any(name == "invoke" for name, _ in calls), mismatch
 
 
+def test_rc21_ac5_wrong_configured_profile_region_is_rejected_before_invoke(
+    seeded_db, monkeypatch, tmp_path
+):
+    cli = _cli_for_test(monkeypatch)
+    calls = []
+    _install_cli_session(
+        monkeypatch, cli, calls, seeded_db.read_bytes(), tmp_path,
+        profile_region="us-west-2",
+    )
+
+    assert _run_cli(cli, ["add", "1", "--include", "sneakers"]) == 1
+    assert any(name == "session" for name, _ in calls)
+    assert not any(name == "invoke" for name, _ in calls)
+
+
 def _cli_for_test(monkeypatch):
     path = Path(__file__).parents[1] / "src" / "live_keywords.py"
     assert path.is_file(), "RC-21 public CLI is not present"
@@ -682,13 +759,15 @@ def _cli_for_test(monkeypatch):
 
 def _install_cli_session(monkeypatch, cli, calls, data, tmp_path, *, invoke_error=None,
                          preflight_mismatch=None, sts_error=None,
-                         extra_schema_object=False):
+                         extra_schema_object=False, extra_price_mutation=False,
+                         profile_region=REGION):
     """Provide deterministic clients; implementation must use boto3.Session(profile_name=...)."""
     artifacts = tmp_path / "RainCheck-backups"
     s3 = _CliS3(data, calls)
     lambda_client = _CliLambda(
         calls, s3, artifacts, invoke_error=invoke_error,
         extra_schema_object=extra_schema_object,
+        extra_price_mutation=extra_price_mutation,
     )
     sts = _CliSTS(calls, mismatch=preflight_mismatch, error=sts_error)
     cloudformation = _CliCloudFormation(calls, mismatch=preflight_mismatch)
@@ -702,7 +781,7 @@ def _install_cli_session(monkeypatch, cli, calls, data, tmp_path, *, invoke_erro
             assert profile_name == "raincheck"
             if region_name is not None:
                 assert region_name == REGION
-            self.region_name = region_name
+            self.region_name = region_name if region_name is not None else profile_region
 
         def client(self, service, **kwargs):
             calls.append(("client", {"service": service, **kwargs}))
@@ -741,10 +820,11 @@ class _CliCloudFormation:
 
 class _CliLambda:
     def __init__(self, calls, s3, artifacts, invoke_error=None,
-                 extra_schema_object=False):
+                 extra_schema_object=False, extra_price_mutation=False):
         self.calls, self.s3, self.artifacts = calls, s3, artifacts
         self.invoke_error = invoke_error
         self.extra_schema_object = extra_schema_object
+        self.extra_price_mutation = extra_price_mutation
 
     def close(self): pass
 
@@ -776,7 +856,7 @@ class _CliLambda:
             raise ClientError({"Error": {"Code": "ServiceException", "Message": "failed"}}, "Invoke")
         if self.invoke_error == "function-error":
             self._apply(payload)
-            return {"StatusCode": 200, "FunctionError": "Unhandled", "Payload": _Body(b"{}")} 
+            return {"StatusCode": 200, "FunctionError": "Unhandled", "Payload": _Body(b"{}")}
         if self.invoke_error in {None, "timeout", "bad-version-read", "checksum", "corrupt-upload"}:
             self._apply(payload)
         if self.invoke_error == "timeout":
@@ -842,6 +922,11 @@ class _CliLambda:
                 if self.extra_schema_object:
                     connection.execute("CREATE TABLE unexpected_rc21_object (id INTEGER)")
                     connection.execute("INSERT INTO unexpected_rc21_object VALUES (1)")
+                if self.extra_price_mutation:
+                    connection.execute(
+                        "UPDATE items SET market_price_usd = ? WHERE id = ?",
+                        (987.65, payload["item_id"]),
+                    )
                 connection.commit()
                 self.after = {
                     kind: [row[0] for row in connection.execute(

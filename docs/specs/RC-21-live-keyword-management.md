@@ -60,6 +60,7 @@ An unchanged request returns the same operation and original version IDs with `s
 A validly shaped request that is rejected before upload returns `{"status":"rejected","reason":"invalid"|"stale"|"conflict","operation_id":...}`.
 Malformed event shapes raise `RunnerError` before any AWS call, because they may lack a valid operation ID.
 The CLI fetches that exact new version, compares its bytes to the intended snapshot checksum returned by Lambda, repeats the SQLite checks, and confirms only the requested term and the item's `config_source` changed while all other tables and item fields match the backup.
+The allowed row delta is derived directly from the backup rows, independently of `db.change_keyword`, so a mutation bug cannot also corrupt verification's expected result.
 It marks the operation record `verified` only after these checks.
 The uploaded version may no longer be current if a later daily job ran; verification uses its version ID rather than assuming it is still the head object.
 
@@ -173,6 +174,8 @@ If the user wants a command that waits for a running job or always pauses the sc
   The existing daily-run retry configuration is unchanged.
 - **2026-11-05:** Clarified that legacy non-dictionary invocation payloads retain the daily-job behavior already covered by RC-11 tests.
   Strict validation applies to dictionaries with a management marker, preserving the approved compatibility rule.
+- **2026-11-05:** Review requires independent verification of the allowed row delta, rejection of a mismatched configured profile Region before applying the fixed client Region, and private local backup permissions.
+  The command ensures its backup directory is `0700` and creates backups and journals with `0600` permissions, including when the directory already exists.
 
 ## Rollback
 
