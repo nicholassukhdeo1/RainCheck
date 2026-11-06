@@ -485,7 +485,10 @@ def test_rc21_ac10_success_verifies_exact_new_version_and_checksum(
     assert event["expected_version_id"] == "version-1"
     assert invoke["FunctionName"] == FUNCTION
     assert any(kwargs.get("VersionId") == "version-2" for name, kwargs in calls if name == "get_object")
-    assert any(name == "put_object" and kwargs.get("IfMatch") == '"etag-1"' for name, kwargs in calls)
+    assert not any(name == "put_object" for name, _ in calls)
+    assert s3.invoke_response["sha256"] == hashlib.sha256(
+        s3.versions["version-2"]["data"]
+    ).hexdigest()
     assert all(body.closed_by_client for body in s3.bodies)
     assert "verified" in capsys_read().lower()
 
@@ -727,6 +730,7 @@ class _CliLambda:
                     "original_version_id": payload["expected_version_id"],
                     "new_version_id": "version-2", "sha256": digest,
                     "before": self.before, "after": self.after}
+        self.s3.invoke_response = response
         return {"StatusCode": 200, "Payload": _Body(json.dumps(response).encode())}
 
     def _apply(self, payload):
