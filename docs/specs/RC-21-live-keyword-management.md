@@ -55,7 +55,7 @@ Events without that key follow the existing daily-job path, including arbitrary 
 The Lambda downloads the current object and refuses the edit unless its VersionId matches the expected original version.
 It applies the term change to its private SQLite copy through a new transactional `db.change_keyword` helper, using the existing keyword normalization and validation.
 It skips eBay, Yahoo, SSM credential retrieval, and email in management mode.
-It checks the resulting SQLite snapshot, uploads it using the original ETag as `IfMatch` with the operation ID in that S3 version's metadata, and returns `{"status":"changed","operation_id":...,"original_version_id":...,"new_version_id":...,"sha256":...,"before":{"include":[...],"exclude":[...]},"after":{"include":[...],"exclude":[...]}}`.
+It checks the resulting SQLite snapshot, uploads it using the original ETag as `IfMatch` with the operation ID under the `raincheck-operation-id` key in that S3 version's metadata, and returns `{"status":"changed","operation_id":...,"original_version_id":...,"new_version_id":...,"sha256":...,"before":{"include":[...],"exclude":[...]},"after":{"include":[...],"exclude":[...]}}`.
 An unchanged request returns the same operation and original version IDs with `status: "unchanged"`, identical before and after sets, and no new version ID or upload.
 A validly shaped request that is rejected before upload returns `{"status":"rejected","reason":"invalid"|"stale"|"conflict","operation_id":...}`.
 Malformed event shapes raise `RunnerError` before any AWS call, because they may lack a valid operation ID.
@@ -162,6 +162,11 @@ If the user wants a command that waits for a running job or always pauses the sc
 
 - **2026-11-05:** The user approved this written spec, including individual keyword commands, verified backups, edits through the existing Lambda execution slot, an unchanged daily schedule, and explicit recovery for uncertain results.
   Tests and implementation may proceed; production deployment remains a separate reviewed step after the pull request.
+
+### Amendments
+
+- **2026-11-05:** Named the operation receipt's S3 metadata key `raincheck-operation-id` so independent tests and implementation use the same wire convention.
+  This clarifies the approved receipt design without changing its behavior or scope.
 
 ## Rollback
 
