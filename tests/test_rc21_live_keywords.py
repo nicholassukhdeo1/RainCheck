@@ -90,6 +90,11 @@ class _NoUse:
         raise AssertionError(f"management request must not call {name}")
 
 
+class _AllowSSM:
+    def get_parameter(self, **kwargs):
+        return {"Parameter": {"Type": "SecureString", "Value": "synthetic-value"}}
+
+
 def _configure_lambda(monkeypatch, module, s3, *, marker=PROTOCOL, ssm=None):
     services = {"s3": s3, "ssm": ssm or _NoUse()}
     calls = []
@@ -430,6 +435,33 @@ def test_rc21_ac9_stale_or_conditional_conflict_never_succeeds(
         assert s3.puts == []
     else:
         assert len(s3.puts) == 1
+
+
+def test_rc21_ac9_management_upload_timeout_disables_sdk_retry_and_stays_uncertain(
+    seeded_db, lambda_module, monkeypatch
+):
+    s3 = _LambdaS3(seeded_db.read_bytes())
+    s3.put_error = TimeoutError("upload response lost")
+    calls = _configure_lambda(monkeypatch, lambda_module, s3, ssm=_AllowSSM())
+    monkeypatch.setattr(
+        lambda_module.ebay_pricing,
+        "refresh_market_prices",
+        lambda: SimpleNamespace(had_failure=False, failed_item_ids=()),
+    )
+    monkeypatch.setattr(lambda_module.yahoo_scrape, "main", lambda: 0)
+
+    try:
+        result = lambda_module.handler(_management_event(), None)
+    except lambda_module.RunnerError:
+        assert len(s3.puts) == 1
+    else:
+        assert len(s3.puts) == 1
+        assert result.get("status") not in {"rejected", "conflict"}
+
+    s3_client_config = next(kwargs["config"] for service, kwargs in calls if service == "s3")
+    assert s3_client_config.connect_timeout > 0
+    assert s3_client_config.read_timeout > 0
+    assert s3_client_config.retries.get("total_max_attempts") == 1
 
 
 def test_rc21_ac10_success_verifies_exact_new_version_and_checksum(

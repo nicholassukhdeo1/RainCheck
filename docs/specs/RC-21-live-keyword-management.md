@@ -71,7 +71,8 @@ The version check catches earlier equal-content replacements; an out-of-band wri
 CloudWatch metrics or stale logs are never used as proof that the function is idle.
 
 The CLI handles `StatusCode`, `FunctionError`, and the response body separately because a synchronous Lambda invoke can return HTTP 200 for a function error.
-It uses explicit connect and read timeouts on every AWS client, disables automatic SDK retry of the mutating Invoke request, and never waits indefinitely for a running job.
+It uses explicit connect and read timeouts on every AWS client, disables automatic SDK retries of both the mutating Invoke request and the management-mode S3 upload, and never waits indefinitely for a running job.
+An upload whose response is lost must stay uncertain rather than being retried into a misleading conditional-write rejection.
 It atomically syncs the operation record again when it receives a Lambda response, before post-upload verification.
 On a lost response, upload verification failure, or interrupted process, the command leaves the backup and operation record in place, reports `uncertain`, and gives a `recover <record-path>` command.
 Recovery paginates the exact key's S3 versions and checks their metadata for the recorded operation ID.
@@ -167,6 +168,8 @@ If the user wants a command that waits for a running job or always pauses the sc
 
 - **2026-11-05:** Named the operation receipt's S3 metadata key `raincheck-operation-id` so independent tests and implementation use the same wire convention.
   This clarifies the approved receipt design without changing its behavior or scope.
+- **2026-11-05:** Clarified that management-mode S3 uploads also disable SDK retries, preserving the approved uncertain-outcome behavior if an upload succeeds but its response is lost.
+  The existing daily-run retry configuration is unchanged.
 
 ## Rollback
 
