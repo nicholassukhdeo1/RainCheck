@@ -50,7 +50,7 @@ Otherwise it atomically writes and syncs a small operation record beside the bac
 Immediately before Invoke it atomically records `dispatched_at` and `dispatching` status, so a crash cannot leave a possible send labelled safely unsent.
 It then invokes the existing Lambda synchronously with exactly `{"raincheck_management":"keyword-v1","operation_id":<UUID string>,"item_id":<positive integer>,"action":"add"|"remove","kind":"include"|"exclude","keyword":<nonblank string>,"expected_version_id":<nonblank string>}`.
 If a dictionary has the `raincheck_management` key, the Lambda requires this exact shape and its own capability marker, and rejects unknown markers, extra keys, and wrong types before any AWS call.
-Events without that key follow the existing daily-job path, including arbitrary Scheduler event fields.
+Events without a dictionary management marker follow the existing daily-job path, including arbitrary Scheduler event fields and legacy non-dictionary invocation payloads.
 
 The Lambda downloads the current object and refuses the edit unless its VersionId matches the expected original version.
 It applies the term change to its private SQLite copy through a new transactional `db.change_keyword` helper, using the existing keyword normalization and validation.
@@ -136,7 +136,8 @@ Its user-facing output identifies the item, exact changed term, backup path, ori
 - Empty results: `list` prints a clear no-items result; an unknown item ID fails before edit.
 - `None` or missing values: missing object VersionId, ETag, stack output, function setting, or malformed Lambda response fails closed.
 - Network failure or bad HTTP status: preflight fails without a write; an Invoke or verification failure after dispatch is marked uncertain until `recover` inspects S3.
-- Malformed input: non-dictionary events or management events with extra fields, wrong types, or unknown actions cannot reach the write path.
+- Malformed input: a dictionary management event with extra fields, wrong types, or unknown actions cannot reach the management write path.
+  Non-dictionary events retain the existing daily-job behavior.
 - Duplicates: normalized duplicate adds and absent removals are no-ops; a repeated request after an uncertain outcome is inspected through `recover`, not automatically resent.
 
 ## Test plan
@@ -170,6 +171,8 @@ If the user wants a command that waits for a running job or always pauses the sc
   This clarifies the approved receipt design without changing its behavior or scope.
 - **2026-11-05:** Clarified that management-mode S3 uploads also disable SDK retries, preserving the approved uncertain-outcome behavior if an upload succeeds but its response is lost.
   The existing daily-run retry configuration is unchanged.
+- **2026-11-05:** Clarified that legacy non-dictionary invocation payloads retain the daily-job behavior already covered by RC-11 tests.
+  Strict validation applies to dictionaries with a management marker, preserving the approved compatibility rule.
 
 ## Rollback
 

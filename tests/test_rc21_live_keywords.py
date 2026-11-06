@@ -18,7 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, NoCredentialsError, TokenRetrievalError
 
 import db
 from dbhelpers import dump_all, keyword_sets, rows, sha256, user_version
@@ -370,7 +370,6 @@ def test_rc21_ac7_management_lambda_skips_all_daily_job_boundaries(
     {**_management_event(), "item_id": 0},
     {**_management_event(), "action": "replace"},
     {key: value for key, value in _management_event().items() if key != "keyword"},
-    ["malformed"],
 ])
 def test_rc21_ac7_malformed_or_unknown_management_event_fails_before_aws(
     lambda_module, monkeypatch, bad_event
@@ -570,6 +569,22 @@ def test_rc21_ac12_unresolved_operation_blocks_a_second_edit(
     assert "unresolved" in capsys_read().lower() or "recover" in capsys_read().lower()
 
 
+def test_rc21_ac12_unrelated_completed_backup_record_does_not_block_edit(
+    seeded_db, monkeypatch, tmp_path
+):
+    backup_dir = tmp_path / "RainCheck-backups"
+    backup_dir.mkdir()
+    unrelated = backup_dir / "raincheck-before-keywords-other.json"
+    unrelated.write_text(json.dumps({"status": "complete", "operation_id": "unrelated"}))
+    cli = _cli_for_test(monkeypatch)
+    calls = []
+    _install_cli_session(monkeypatch, cli, calls, seeded_db.read_bytes(), tmp_path)
+
+    assert _run_cli(cli, ["add", "1", "--include", "sneakers"]) == 0
+    assert any(name == "invoke" for name, _ in calls)
+    assert "verified" in capsys_read().lower()
+
+
 def test_rc21_ac13_commands_never_change_schedule_configuration(seeded_db, monkeypatch, tmp_path):
     cli = _cli_for_test(monkeypatch)
     calls = []
@@ -607,6 +622,42 @@ def test_rc21_ac11_aws_clients_have_timeouts_and_mutating_invoke_has_no_retries(
                       if name == "client" and kwargs["service"] == "lambda"]
     assert lambda_configs
     assert all(config.retries.get("total_max_attempts") == 1 for config in lambda_configs)
+
+
+@pytest.mark.parametrize("credential_error", [
+    NoCredentialsError(error_msg="synthetic missing credentials"),
+    TokenRetrievalError(provider="synthetic", error_msg="synthetic token failure"),
+])
+def test_rc21_ac5_sts_credential_failures_return_guidance_without_invoke(
+    seeded_db, monkeypatch, tmp_path, credential_error
+):
+    cli = _cli_for_test(monkeypatch)
+    calls = []
+    _install_cli_session(
+        monkeypatch, cli, calls, seeded_db.read_bytes(), tmp_path,
+        sts_error=credential_error,
+    )
+
+    assert _run_cli(cli, ["add", "1", "--include", "sneakers"]) == 1
+    output = capsys_read().lower()
+    assert "traceback" not in output
+    assert any(term in output for term in ("credential", "sign in", "aws login"))
+    assert not any(name == "invoke" for name, _ in calls)
+
+
+def test_rc21_ac10_extra_uploaded_schema_object_fails_verification_as_uncertain(
+    seeded_db, monkeypatch, tmp_path
+):
+    cli = _cli_for_test(monkeypatch)
+    calls = []
+    _install_cli_session(
+        monkeypatch, cli, calls, seeded_db.read_bytes(), tmp_path,
+        extra_schema_object=True,
+    )
+
+    assert _run_cli(cli, ["add", "1", "--include", "sneakers"]) == 1
+    assert "uncertain" in capsys_read().lower()
+    assert "success" not in capsys_read().lower()
 def test_rc21_ac5_cli_rejects_each_preflight_mismatch_before_invoke(
     seeded_db, monkeypatch, tmp_path
 ):
@@ -630,12 +681,16 @@ def _cli_for_test(monkeypatch):
 
 
 def _install_cli_session(monkeypatch, cli, calls, data, tmp_path, *, invoke_error=None,
-                         preflight_mismatch=None):
+                         preflight_mismatch=None, sts_error=None,
+                         extra_schema_object=False):
     """Provide deterministic clients; implementation must use boto3.Session(profile_name=...)."""
     artifacts = tmp_path / "RainCheck-backups"
     s3 = _CliS3(data, calls)
-    lambda_client = _CliLambda(calls, s3, artifacts, invoke_error=invoke_error)
-    sts = _CliSTS(calls, mismatch=preflight_mismatch)
+    lambda_client = _CliLambda(
+        calls, s3, artifacts, invoke_error=invoke_error,
+        extra_schema_object=extra_schema_object,
+    )
+    sts = _CliSTS(calls, mismatch=preflight_mismatch, error=sts_error)
     cloudformation = _CliCloudFormation(calls, mismatch=preflight_mismatch)
     lambda_client.preflight_mismatch = preflight_mismatch
     clients = {"s3": s3, "lambda": lambda_client, "sts": sts,
@@ -660,10 +715,13 @@ def _install_cli_session(monkeypatch, cli, calls, data, tmp_path, *, invoke_erro
 
 
 class _CliSTS:
-    def __init__(self, calls, mismatch=None): self.calls, self.mismatch = calls, mismatch
+    def __init__(self, calls, mismatch=None, error=None):
+        self.calls, self.mismatch, self.error = calls, mismatch, error
     def close(self): pass
     def get_caller_identity(self):
         self.calls.append(("get_caller_identity", {}))
+        if self.error is not None:
+            raise self.error
         return {"Account": "000000000000" if self.mismatch == "account" else ACCOUNT}
 
 
@@ -682,9 +740,11 @@ class _CliCloudFormation:
 
 
 class _CliLambda:
-    def __init__(self, calls, s3, artifacts, invoke_error=None):
+    def __init__(self, calls, s3, artifacts, invoke_error=None,
+                 extra_schema_object=False):
         self.calls, self.s3, self.artifacts = calls, s3, artifacts
         self.invoke_error = invoke_error
+        self.extra_schema_object = extra_schema_object
 
     def close(self): pass
 
@@ -740,7 +800,12 @@ class _CliLambda:
         backups = list(self.artifacts.glob("*.db"))
         records = list(self.artifacts.glob("*.json"))
         assert backups and records
-        record = json.loads(records[-1].read_text(encoding="utf-8"))
+        record = next(
+            json.loads(candidate.read_text(encoding="utf-8"))
+            for candidate in records
+            if json.loads(candidate.read_text(encoding="utf-8")).get("operation_id")
+            == payload["operation_id"]
+        )
         assert record["original_version_id"] == payload["expected_version_id"]
         assert record["original_etag"] == '"etag-1"'
         assert record["dispatched_at"]
@@ -774,6 +839,9 @@ class _CliLambda:
                         (payload["item_id"], keyword, payload["kind"]),
                     )
                 connection.execute("UPDATE items SET config_source = 'cli' WHERE id = ?", (payload["item_id"],))
+                if self.extra_schema_object:
+                    connection.execute("CREATE TABLE unexpected_rc21_object (id INTEGER)")
+                    connection.execute("INSERT INTO unexpected_rc21_object VALUES (1)")
                 connection.commit()
                 self.after = {
                     kind: [row[0] for row in connection.execute(
