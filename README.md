@@ -34,6 +34,7 @@ src/
 ├── digest.py        # builds the digest email (subject, HTML, plain text) from the deals
 ├── sendemail.py     # sends the digest email (text + HTML)
 ├── setup.py         # manage tracked items in the SQLite database
+├── live_keywords.py # manage one keyword in the production S3 database
 ├── catalog.json     # the watchlist of items being tracked
 └── raincheck.db     # the SQLite database (local to each machine, not committed)
 tests/               # offline test suite
@@ -211,6 +212,39 @@ python3 -m pytest
 ```
 
 ## AWS daily run (RC-11)
+
+### Live production keywords (RC-21)
+
+Deploy the reviewed Lambda handler and its `RAINCHECK_MANAGEMENT_PROTOCOL=keyword-v1` setting before using this command.
+From the repository root, configure the named AWS profile `raincheck` for production account `510258803420` in `us-east-2`.
+The command uses that profile and checks the `raincheck` stack outputs, Lambda database settings, dry-run setting, timeout, and single reserved execution slot before any edit.
+It does not read `.env` or the local `src/raincheck.db`.
+
+```bash
+python3 src/live_keywords.py list
+python3 src/live_keywords.py list 1
+python3 src/live_keywords.py add 1 --include "sneakers"
+python3 src/live_keywords.py remove 1 --exclude "fake"
+```
+
+An edit changes one normalized term and marks that item as managed by the CLI.
+A term already in the requested state produces no upload.
+Before a real edit, the command saves a verified database backup and a durable operation record in `~/RainCheck-backups`.
+It restricts that directory to the current user and creates the backup and record as private files.
+It invokes the existing Lambda and checks the exact S3 version that Lambda reports, including its checksum and database rows.
+The daily schedule is not changed.
+
+If Lambda is busy, retry the command later after checking the reported operation record.
+If an Invoke response is lost or verification fails, the outcome is uncertain even when the current S3 head looks unchanged.
+Use the printed path to inspect S3 version receipts without writing to AWS:
+
+```bash
+python3 src/live_keywords.py recover ~/RainCheck-backups/<operation-record>.json
+```
+
+Recovery reports an edit as applied only after checking the operation-tagged version's rows, and displays the latest keywords separately because a later daily job may have written another version.
+Resolve an uncertain operation before starting a fresh edit.
+S3 retains noncurrent database versions for 30 days, so investigate unresolved records before that period ends.
 
 The SAM template is limited to `us-east-2` and rejects a deployment in another selected Region.
 The schedule starts disabled and is set for 09:00 `Asia/Tokyo` each day.

@@ -258,6 +258,14 @@ def test_rc11c_criterion_21_single_reserved_execution_without_vpc_or_public_api(
         for function in functions
     )
     assert all("VpcConfig" not in function["Properties"] for function in functions)
+
+
+def test_rc21_ac5_production_lambda_declares_keyword_management_protocol():
+    template = _template()
+    functions = _resources(template, "AWS::Serverless::Function")
+    assert len(functions) == 1
+    variables = functions[0]["Properties"]["Environment"]["Variables"]
+    assert variables.get("RAINCHECK_MANAGEMENT_PROTOCOL") == "keyword-v1"
     assert all("FunctionUrlConfig" not in function["Properties"] for function in functions)
     assert all(
         event.get("Type") == "ScheduleV2"
