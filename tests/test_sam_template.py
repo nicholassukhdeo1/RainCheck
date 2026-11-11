@@ -222,7 +222,7 @@ def test_rc11c_criterion_19_execution_role_has_only_required_resource_scopes():
         )
 
 
-def test_rc11c_criterion_20_embedded_schedule_is_disabled_local_time_bounded_and_not_retried_by_lambda():
+def test_rc11c_criterion_20_embedded_schedule_is_production_only_local_time_bounded_and_not_retried_by_lambda():
     template = _template()
     functions = _resources(template, "AWS::Serverless::Function")
     schedule_events = [
@@ -233,7 +233,8 @@ def test_rc11c_criterion_20_embedded_schedule_is_disabled_local_time_bounded_and
     ]
     assert schedule_events
     schedule = schedule_events[0]
-    assert schedule["State"] == "DISABLED"
+    # Enabled only in production; a DryRun=1 stack from the same template stays disabled.
+    assert schedule["State"] == {"If": ["IsProductionDeployment", "ENABLED", "DISABLED"]}
     assert schedule["ScheduleExpression"] == "cron(0 9 * * ? *)"
     assert schedule["ScheduleExpressionTimezone"] == "Asia/Tokyo"
     assert schedule["FlexibleTimeWindow"]["Mode"] == "OFF"
@@ -258,6 +259,14 @@ def test_rc11c_criterion_21_single_reserved_execution_without_vpc_or_public_api(
         for function in functions
     )
     assert all("VpcConfig" not in function["Properties"] for function in functions)
+
+
+def test_rc21_ac5_production_lambda_declares_keyword_management_protocol():
+    template = _template()
+    functions = _resources(template, "AWS::Serverless::Function")
+    assert len(functions) == 1
+    variables = functions[0]["Properties"]["Environment"]["Variables"]
+    assert variables.get("RAINCHECK_MANAGEMENT_PROTOCOL") == "keyword-v1"
     assert all("FunctionUrlConfig" not in function["Properties"] for function in functions)
     assert all(
         event.get("Type") == "ScheduleV2"
@@ -671,7 +680,7 @@ def test_rc12_criterion_7_alarm_only_notifies_topic_on_alarm_transition():
     assert not properties.get("InsufficientDataActions")
 
 
-def test_rc12_criterion_8_region_guard_and_disabled_schedule_remain_with_budget_preflight():
+def test_rc12_criterion_8_region_guard_and_production_only_schedule_remain_with_budget_preflight():
     template = _template()
     rules = template.get("Rules", {})
     assert "SelectedRegion" in rules
@@ -683,7 +692,8 @@ def test_rc12_criterion_8_region_guard_and_disabled_schedule_remain_with_budget_
         for event in function.get("Properties", {}).get("Events", {}).values()
         if event.get("Type") == "ScheduleV2"
     ]
-    assert len(schedules) == 1 and schedules[0]["State"] == "DISABLED"
+    assert len(schedules) == 1
+    assert schedules[0]["State"] == {"If": ["IsProductionDeployment", "ENABLED", "DISABLED"]}
 
     runbook = _runbook()
     assert "us-east-2" in runbook

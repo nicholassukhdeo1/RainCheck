@@ -1,3 +1,3 @@
--r requirements.txt
+-r requirements-cli.txt
 pytest==9.1.1
 PyYAML==6.0.3

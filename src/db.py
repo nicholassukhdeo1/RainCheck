@@ -813,6 +813,43 @@ def update_item(item_id, *, keywords=_OMITTED, exclude_keywords=_OMITTED,
     return item_id
 
 
+def change_keyword(item_id: int, action: str, kind: str, keyword: str) -> bool:
+    """Change one term and claim the item only when its keyword set changes."""
+    if action not in ("add", "remove") or kind not in ("include", "exclude"):
+        raise ValueError("Invalid keyword action or kind")
+    if type(item_id) is not int or item_id <= 0:
+        raise ValueError("Item ID must be a positive integer")
+    if not isinstance(keyword, str) or not keyword.strip():
+        raise ValueError("Keyword must be a non-blank string")
+    term = keyword.strip().lower()
+    with _item_transaction() as conn:
+        if conn.execute("SELECT id FROM items WHERE id = ?", (item_id,)).fetchone() is None:
+            raise ValueError(f"Unknown item ID: {item_id}")
+        includes, excludes = _item_keywords(conn, item_id)
+        words = {"include": set(includes), "exclude": set(excludes)}
+        present = term in words[kind]
+        if (action == "add" and present) or (action == "remove" and not present):
+            return False
+        if action == "add":
+            if term in words["exclude" if kind == "include" else "include"]:
+                raise ValueError("A keyword cannot be in both include and exclude sets")
+            conn.execute(
+                "INSERT INTO item_keywords (item_id, keyword, kind) VALUES (?, ?, ?)",
+                (item_id, term, kind),
+            )
+        else:
+            if kind == "include" and len(includes) <= 1:
+                raise ValueError("At least one include keyword is required")
+            conn.execute(
+                "DELETE FROM item_keywords WHERE item_id = ? AND keyword = ? AND kind = ?",
+                (item_id, term, kind),
+            )
+        if not includes and not (action == "add" and kind == "include"):
+            raise ValueError("At least one include keyword is required")
+        conn.execute("UPDATE items SET config_source = 'cli' WHERE id = ?", (item_id,))
+    return True
+
+
 def deactivate_item(item_id):
     with _item_transaction() as conn:
         row = conn.execute("SELECT active FROM items WHERE id = ?", (item_id,)).fetchone()

@@ -34,6 +34,7 @@ src/
 ├── digest.py        # builds the digest email (subject, HTML, plain text) from the deals
 ├── sendemail.py     # sends the digest email (text + HTML)
 ├── setup.py         # manage tracked items in the SQLite database
+├── live_keywords.py # manage one keyword in the production S3 database
 ├── catalog.json     # the watchlist of items being tracked
 └── raincheck.db     # the SQLite database (local to each machine, not committed)
 tests/               # offline test suite
@@ -212,6 +213,41 @@ python3 -m pytest
 
 ## AWS daily run (RC-11)
 
+### Live production keywords (RC-21)
+
+Deploy the reviewed Lambda handler and its `RAINCHECK_MANAGEMENT_PROTOCOL=keyword-v1` setting before using this command.
+Install the local CLI dependencies with `python3 -m pip install -r requirements-cli.txt` in your virtual environment.
+This includes the AWS CRT credential provider required for the `aws login` profile; it is not added to the Lambda package.
+From the repository root, configure the named AWS profile `raincheck` for production account `510258803420` in `us-east-2`.
+The command uses that profile and checks the `raincheck` stack outputs, Lambda database settings, dry-run setting, timeout, and single reserved execution slot before any edit.
+It does not read `.env` or the local `src/raincheck.db`.
+
+```bash
+python3 src/live_keywords.py list
+python3 src/live_keywords.py list 1
+python3 src/live_keywords.py add 1 --include "sneakers"
+python3 src/live_keywords.py remove 1 --exclude "fake"
+```
+
+An edit changes one normalized term and marks that item as managed by the CLI.
+A term already in the requested state produces no upload.
+Before a real edit, the command saves a verified database backup and a durable operation record in `~/RainCheck-backups`.
+It restricts that directory to the current user and creates the backup and record as private files.
+It invokes the existing Lambda and checks the exact S3 version that Lambda reports, including its checksum and database rows.
+The daily schedule is not changed.
+
+If Lambda is busy, retry the command later after checking the reported operation record.
+If an Invoke response is lost or verification fails, the outcome is uncertain even when the current S3 head looks unchanged.
+Use the printed path to inspect S3 version receipts without writing to AWS:
+
+```bash
+python3 src/live_keywords.py recover ~/RainCheck-backups/<operation-record>.json
+```
+
+Recovery reports an edit as applied only after checking the operation-tagged version's rows, and displays the latest keywords separately because a later daily job may have written another version.
+Resolve an uncertain operation before starting a fresh edit.
+S3 retains noncurrent database versions for 30 days, so investigate unresolved records before that period ends.
+
 The SAM template is limited to `us-east-2` and rejects a deployment in another selected Region.
 The schedule starts disabled and is set for 09:00 `Asia/Tokyo` each day.
 No AWS deployment, production database upload, or schedule enablement is part of local development.
@@ -312,8 +348,10 @@ Inspect its logs for success and confirm they contain no digest HTML, synthetic 
 Check that the production bucket's current S3 object version is unchanged.
 The dry-run can never write the production S3 object because its execution role and environment point to the throwaway bucket.
 
-After the CloudShell, parameter, backup, upload, and isolated dry-run checks pass, change only the production `DailySchedule` `State` in `template.yaml` from `DISABLED` to `ENABLED` in a reviewed deployment and inspect its change set before applying it.
-Keep the default checked-in template disabled until that explicit enablement decision.
+The production schedule is enabled: the go-live checks passed and the first scheduled run in the logs is 2026-11-06 00:00 UTC.
+`DailySchedule` `State` is `!If [IsProductionDeployment, ENABLED, DISABLED]`, so the production stack runs daily and a `DryRun=1` stack built from the same template stays disabled.
+To pause production, change the `ENABLED` value in that `!If` to `DISABLED` in a reviewed deployment and inspect its change set before applying it.
+Pausing the schedule in the EventBridge Scheduler console is acceptable in an emergency, but update `template.yaml` afterward, because the console change is not recorded in the repository.
 The schedule uses a fixed 09:00 Tokyo time, no flexible delivery window, and bounded Scheduler delivery attempts and event age.
 
 ## AWS cost and failure alerts (RC-12)
@@ -384,7 +422,7 @@ If alarm email is noisy, first review a change set that disables the alarm actio
 
 ### Rollback
 
-Disable the schedule first by setting its template `State` back to `DISABLED` and deploying the reviewed change.
+Disable the schedule first by changing the production value in its template `State` `!If` to `DISABLED` and deploying the reviewed change.
 If the current database object is bad, inspect a prior S3 version, verify its SQLite integrity and schema version, then restore that version while retaining the bad version for investigation.
 Redeploy the prior Lambda code and SAM template if the code or infrastructure caused the failure.
 Keep the local backup and retained bucket until a replacement has been verified; decide whether to retain or remove billable resources before deleting the stack.
