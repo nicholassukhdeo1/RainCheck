@@ -189,7 +189,9 @@ Resources:
             ScheduleExpressionTimezone: Asia/Tokyo
             FlexibleTimeWindow:
               Mode: 'OFF'
-            State: DISABLED
+            # Production runs daily (enabled by the user's go-live decision, 2026-11);
+            # a DryRun=1 stack built from this same template keeps its schedule off.
+            State: !If [IsProductionDeployment, ENABLED, DISABLED]
             RetryPolicy:
               MaximumRetryAttempts: 0
               MaximumEventAgeInSeconds: 300

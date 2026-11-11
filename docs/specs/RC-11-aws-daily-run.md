@@ -325,3 +325,11 @@ If the latest S3 object is bad, restore a known-good prior S3 version after veri
 Redeploy the prior Lambda code and SAM stack definition if needed.
 Do not remove the database bucket, parameter values, or local backup until a verified replacement is operating.
 If the deployment is abandoned, remove only the RC-11 resources after exporting the last good database version and obtaining the user's choice about retaining the data and any billable resources.
+
+### Amendment (2026-11-11): production schedule enabled in the template
+
+The user enabled the production daily schedule after the go-live checks; CloudWatch shows the first scheduled run at 2026-11-06 00:00 UTC.
+That stack had been deployed from a locally edited template that set `State: ENABLED`, while the checked-in template still said `DISABLED`, so a later deployment from the repository could have switched the daily run off.
+The checked-in `DailySchedule` `State` is now `!If [IsProductionDeployment, ENABLED, DISABLED]`, matching the deployed production stack and keeping any `DryRun=1` stack disabled.
+Criterion 20's "disabled by default" now means disabled for dry-run stacks; production is enabled by this recorded decision.
+

@@ -348,8 +348,10 @@ Inspect its logs for success and confirm they contain no digest HTML, synthetic 
 Check that the production bucket's current S3 object version is unchanged.
 The dry-run can never write the production S3 object because its execution role and environment point to the throwaway bucket.
 
-After the CloudShell, parameter, backup, upload, and isolated dry-run checks pass, change only the production `DailySchedule` `State` in `template.yaml` from `DISABLED` to `ENABLED` in a reviewed deployment and inspect its change set before applying it.
-Keep the default checked-in template disabled until that explicit enablement decision.
+The production schedule is enabled: the go-live checks passed and the first scheduled run in the logs is 2026-11-06 00:00 UTC.
+`DailySchedule` `State` is `!If [IsProductionDeployment, ENABLED, DISABLED]`, so the production stack runs daily and a `DryRun=1` stack built from the same template stays disabled.
+To pause production, change the `ENABLED` value in that `!If` to `DISABLED` in a reviewed deployment and inspect its change set before applying it.
+Pausing the schedule in the EventBridge Scheduler console is acceptable in an emergency, but update `template.yaml` afterward, because the console change is not recorded in the repository.
 The schedule uses a fixed 09:00 Tokyo time, no flexible delivery window, and bounded Scheduler delivery attempts and event age.
 
 ## AWS cost and failure alerts (RC-12)
@@ -420,7 +422,7 @@ If alarm email is noisy, first review a change set that disables the alarm actio
 
 ### Rollback
 
-Disable the schedule first by setting its template `State` back to `DISABLED` and deploying the reviewed change.
+Disable the schedule first by changing the production value in its template `State` `!If` to `DISABLED` and deploying the reviewed change.
 If the current database object is bad, inspect a prior S3 version, verify its SQLite integrity and schema version, then restore that version while retaining the bad version for investigation.
 Redeploy the prior Lambda code and SAM template if the code or infrastructure caused the failure.
 Keep the local backup and retained bucket until a replacement has been verified; decide whether to retain or remove billable resources before deleting the stack.
