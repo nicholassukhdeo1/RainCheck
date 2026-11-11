@@ -168,6 +168,8 @@ If the user wants a command that waits for a running job or always pauses the sc
 
 ### Amendments
 
+- **2026-11-11:** The production CLI smoke check found that botocore's `aws login` credential provider requires its `crt` extra.
+  Add a local CLI requirements file and include it in development setup, while leaving the Lambda package dependencies unchanged.
 - **2026-11-05:** Named the operation receipt's S3 metadata key `raincheck-operation-id` so independent tests and implementation use the same wire convention.
   This clarifies the approved receipt design without changing its behavior or scope.
 - **2026-11-05:** Clarified that management-mode S3 uploads also disable SDK retries, preserving the approved uncertain-outcome behavior if an upload succeeds but its response is lost.
