@@ -457,7 +457,7 @@ def test_rc11_c9_two_brand_yahoo_run_fetches_each_brand_and_sends_one_digest(
 
     sent = []
     monkeypatch.setattr(yahoo_scrape, "fetch_yahoo_page", fetch)
-    monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: 0.0062)
+    monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: yahoo_scrape.YenRate(0.0062, True))
     monkeypatch.setattr(yahoo_scrape, "send_email", lambda *args, **kwargs: sent.append(args) or True)
     _patch_jobs(monkeypatch, runtime, ebay=lambda: SimpleNamespace(had_failure=False, failed_item_ids=()))
     monkeypatch.setattr(yahoo_scrape, "main", REAL_YAHOO_MAIN)
@@ -579,7 +579,7 @@ def test_rc11_c13_smtp_failure_does_not_record_matches_and_preserves_ebay_change
         monkeypatch.setattr(yahoo_scrape, "fetch_yahoo_page", lambda _url: _yahoo_page(
             "SMTP111", "Rick Owens Ramones synthetic", 1000
         ))
-        monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: 0.0062)
+        monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: yahoo_scrape.YenRate(0.0062, True))
         monkeypatch.setattr(yahoo_scrape, "send_email", lambda *_args: False)
         return _run_real_yahoo()
 
@@ -611,7 +611,7 @@ def test_rc11_c14_post_send_upload_failure_warns_digest_may_repeat(
     monkeypatch.setattr(yahoo_scrape, "fetch_yahoo_page", lambda _url: _yahoo_page(
         "UPLOAD111", "Rick Owens Ramones synthetic", 1000
     ))
-    monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: 0.0062)
+    monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: yahoo_scrape.YenRate(0.0062, True))
     sent = []
     monkeypatch.setattr(yahoo_scrape, "send_email", lambda *args, **kwargs: sent.append(args) or True)
     monkeypatch.setattr(yahoo_scrape, "main", _run_real_yahoo)
@@ -632,7 +632,7 @@ def test_rc11_c8_smtp_exception_secret_is_not_exposed(aws_runtime, monkeypatch, 
     monkeypatch.setattr(yahoo_scrape, "fetch_yahoo_page", lambda _url: _yahoo_page(
         "SMTPSECRET1", "Rick Owens Ramones synthetic", 1000
     ))
-    monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: 0.0062)
+    monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: yahoo_scrape.YenRate(0.0062, True))
 
     def smtp_error(*_args):
         raise RuntimeError(secret)
@@ -729,7 +729,7 @@ def test_rc11_c24_dry_run_uses_synthetic_storage_and_suppresses_digest_from_logs
     title = "Rick Owens Ramones synthetic listing"
     html_page = _yahoo_page("DRY111", title, 1000)
     monkeypatch.setattr(yahoo_scrape, "fetch_yahoo_page", lambda _url: html_page)
-    monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: 0.0062)
+    monkeypatch.setattr(yahoo_scrape, "resolve_yen_to_usd_rate", lambda _date: yahoo_scrape.YenRate(0.0062, True))
     _patch_jobs(monkeypatch, runtime, ebay=lambda: SimpleNamespace(had_failure=False, failed_item_ids=()))
     monkeypatch.setattr(yahoo_scrape, "main", REAL_YAHOO_MAIN)
 

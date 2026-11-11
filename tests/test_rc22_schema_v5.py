@@ -153,7 +153,8 @@ def test_rc22_c4_all_null_and_all_set_deal_columns_are_accepted(v5_db):
     stored = rows(
         v5_db,
         "SELECT listing_id, deal_kind, deal_price_yen, deal_market_price_usd, deal_yen_to_usd, "
-        "deal_rate_is_fallback, deal_discount_pct FROM listing_matches ORDER BY listing_id",
+        "deal_rate_is_fallback, deal_discount_pct FROM listing_matches "
+        "WHERE listing_id > 100 ORDER BY listing_id",
     )
     assert stored == [(101, None, None, None, None, None, None), (102, *VALID_DEAL)]
 
@@ -207,19 +208,19 @@ def test_rc22_c5_out_of_range_deal_values_are_rejected_by_a_check(v5_db, column_
 @pytest.mark.parametrize("kind", ["fixed_price", "auction_buy_now", "auction_watch"])
 def test_rc22_c5_each_of_the_three_kinds_is_accepted(v5_db, kind):
     _insert_pair(v5_db, (kind, *VALID_DEAL[1:]))
-    assert rows(v5_db, "SELECT deal_kind FROM listing_matches") == [(kind,)]
+    assert rows(v5_db, "SELECT deal_kind FROM listing_matches WHERE listing_id = 101") == [(kind,)]
 
 
 @pytest.mark.parametrize("fallback", [0, 1])
 def test_rc22_c5_fallback_flag_accepts_zero_and_one(v5_db, fallback):
     _insert_pair(v5_db, (*VALID_DEAL[:4], fallback, VALID_DEAL[5]))
-    assert rows(v5_db, "SELECT deal_rate_is_fallback FROM listing_matches") == [(fallback,)]
+    assert rows(v5_db, "SELECT deal_rate_is_fallback FROM listing_matches WHERE listing_id = 101") == [(fallback,)]
 
 
 @pytest.mark.parametrize("discount", [0.0001, 12.3, 99.9999])
 def test_rc22_c5_discount_strictly_between_zero_and_hundred_is_accepted(v5_db, discount):
     _insert_pair(v5_db, (*VALID_DEAL[:5], discount))
-    assert rows(v5_db, "SELECT deal_discount_pct FROM listing_matches") == [(discount,)]
+    assert rows(v5_db, "SELECT deal_discount_pct FROM listing_matches WHERE listing_id = 101") == [(discount,)]
 
 
 # --- Criterion 6 -------------------------------------------------------------

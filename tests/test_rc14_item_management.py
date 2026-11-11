@@ -167,7 +167,7 @@ def test_rc14_c7_update_manual_fallback_keeps_ebay_and_each_listing_price(seeded
     conn.execute("INSERT INTO listings (brand_id,url,title,price_yen,first_seen_at,last_seen_at) VALUES (1,?,?,?,?,?)",
                  ("https://example.test/auction-2", "Second Pod", 24000, "t2", "t2"))
     listing_id = conn.execute("SELECT id FROM listings WHERE url=?", ("https://example.test/auction-2",)).fetchone()[0]
-    conn.execute("INSERT INTO listing_matches VALUES (?, ?, ?)", (listing_id, item_id, "t2"))
+    conn.execute("INSERT INTO listing_matches (listing_id, item_id, matched_at) VALUES (?, ?, ?)", (listing_id, item_id, "t2"))
     conn.commit()
     conn.close()
     result = run_setup(temp_db, "update", str(item_id), "--manual-price", "250", cwd=tmp_path)
@@ -419,7 +419,7 @@ def test_rc14_c14_c15_v3_upgrade_and_reseed_preserve_unclaimed_items_and_history
     monkeypatch.setenv("RAINCHECK_DB_PATH", str(path))
     before = rows(path, "SELECT id,brand_id,name,market_price_usd,search_query,manual_price_usd,active FROM items")
     db.init_db()
-    assert user_version(path) == 4
+    assert user_version(path) == db.SCHEMA_VERSION
     assert rows(path, "SELECT config_source FROM items WHERE id=41") == [("unclaimed",)]
     db.seed_from_catalog(CATALOG)
     assert rows(path, "SELECT id,brand_id,name,market_price_usd,search_query,manual_price_usd,active FROM items WHERE id IN (41,42) ORDER BY id") == before
@@ -521,7 +521,7 @@ def test_rc14_c19_fresh_schema_matches_migrated_v3_schema(tmp_path, monkeypatch)
     fresh_shape = (columns(fresh, "items"), rows(fresh, "PRAGMA table_info(items)"))
     assert migrated_shape == fresh_shape
     assert "config_source" in columns(fresh, "items")
-    assert user_version(fresh) == 4
+    assert user_version(fresh) == db.SCHEMA_VERSION
 
 
 def test_rc14_c20_readme_documents_complete_cli_lifecycle():

@@ -413,4 +413,7 @@ def test_rc03a_c27_seeding_a_migrated_legacy_database_keeps_ids_and_prices(legac
     before_listings = legacy_before["listings"]
     assert [row[:len(before_listings[0])] for row in listings] == before_listings
     assert all(row[len(before_listings[0]):] == (None, None, None) for row in listings)
-    assert dump_table(legacy_db, "listing_matches") == legacy_before["listing_matches"]
+    # RC-22 appends six NULL deal-time columns; the legacy three must be unchanged.
+    matches = dump_table(legacy_db, "listing_matches")
+    assert [row[:3] for row in matches] == legacy_before["listing_matches"]
+    assert all(row[3:] == (None,) * 6 for row in matches)

@@ -168,7 +168,7 @@ def test_rc21_ac1_cli_list_reports_no_items_clearly(tmp_path, monkeypatch):
     with closing(sqlite3.connect(empty)) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
         connection.executescript((Path(__file__).parents[1] / "src" / "schema.sql").read_text())
-        connection.execute("PRAGMA user_version = 4")
+        connection.execute(f"PRAGMA user_version = {db.SCHEMA_VERSION}")
     cli = _cli_for_test(monkeypatch)
     calls = []
     _install_cli_session(monkeypatch, cli, calls, empty.read_bytes(), tmp_path)
@@ -325,7 +325,7 @@ def test_rc21_ac6_backup_and_dispatch_record_are_durable_before_invoke(
     try:
         assert backup_conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert backup_conn.execute("PRAGMA foreign_key_check").fetchall() == []
-        assert backup_conn.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert backup_conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     finally:
         backup_conn.close()
     journal = json.loads(record.read_text(encoding="utf-8"))
@@ -622,7 +622,7 @@ def test_rc21_ac14_offline_boundary_uses_temp_schema4_database_and_fake_aws(
     seeded_db, monkeypatch, tmp_path
 ):
     assert Path(db.get_db_path()).resolve() == seeded_db.resolve()
-    assert user_version(seeded_db) == 4
+    assert user_version(seeded_db) == db.SCHEMA_VERSION
     cli = _cli_for_test(monkeypatch)
     calls = []
     _install_cli_session(monkeypatch, cli, calls, seeded_db.read_bytes(), tmp_path)

@@ -145,7 +145,7 @@ def test_rc04_c8_schema_v3_and_existing_listing_match_rows_are_preserved(seeded_
 
     assert db.record_listing_match(brand_id, "https://x/new", "New", 30000, None, item_id) is True
 
-    assert user_version(seeded_db) == 4
+    assert user_version(seeded_db) == db.SCHEMA_VERSION
     assert [tuple(row) for row in db_conn.execute("SELECT url FROM listings ORDER BY url").fetchall()] == [
         ("https://x/existing",), ("https://x/new",),
     ]
@@ -164,11 +164,11 @@ def test_rc10_c23_batch_deduplicates_urls_and_associations_and_preserves_existin
     items = _ids(db_conn)
     brand = _brand_id(db_conn)
     original = _deal(items["rick owens ramones"], brand, "https://x/shared", "Original", 10000)
-    assert db.record_listing_matches([original]) == 1
+    assert db.record_listing_matches([original], yen_to_usd_rate=0.0062, rate_is_fallback=False) == 1
     added = db.record_listing_matches([
         _deal(items["pod shorts"], brand, "https://x/shared", "Changed", 99000),
         _deal(items["pod shorts"], brand, "https://x/shared", "Changed again", 98000),
-    ])
+    ], yen_to_usd_rate=0.0062, rate_is_fallback=False)
     assert added == 0
     row = db_conn.execute("SELECT title, price_yen FROM listings WHERE url = ?", ("https://x/shared",)).fetchone()
     assert tuple(row) == ("Original", 10000)
@@ -185,7 +185,7 @@ def test_rc10_c21_batch_transaction_rolls_back_all_rows_on_later_insert_error(se
         _deal(999999, brand, "https://x/second"),
     ]
     with pytest.raises(sqlite3.IntegrityError):
-        db.record_listing_matches(deals)
+        db.record_listing_matches(deals, yen_to_usd_rate=0.0062, rate_is_fallback=False)
     assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 0
     assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 0
 
@@ -197,7 +197,7 @@ def test_rc10_c21_batch_error_closes_connection_without_resource_warning(seeded_
     bad = _deal(999999, _brand_id(db_conn), "https://x/orphan")
     def attempt():
         with pytest.raises(sqlite3.IntegrityError):
-            db.record_listing_matches([bad])
+            db.record_listing_matches([bad], yen_to_usd_rate=0.0062, rate_is_fallback=False)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
