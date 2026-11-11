@@ -216,6 +216,8 @@ python3 -m pytest
 ### Live production keywords (RC-21)
 
 Deploy the reviewed Lambda handler and its `RAINCHECK_MANAGEMENT_PROTOCOL=keyword-v1` setting before using this command.
+Install the local CLI dependencies with `python3 -m pip install -r requirements-cli.txt` in your virtual environment.
+This includes the AWS CRT credential provider required for the `aws login` profile; it is not added to the Lambda package.
 From the repository root, configure the named AWS profile `raincheck` for production account `510258803420` in `us-east-2`.
 The command uses that profile and checks the `raincheck` stack outputs, Lambda database settings, dry-run setting, timeout, and single reserved execution slot before any edit.
 It does not read `.env` or the local `src/raincheck.db`.
