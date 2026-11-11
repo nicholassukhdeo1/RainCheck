@@ -1,0 +1,18 @@
+-- doctor check 5 of 7: no_include_keywords (severity: error)
+--
+-- Finds: active items with no include keyword, including items with no keyword rows at all
+-- and items with only exclude keywords. An item with no include keyword silently never matches
+-- on Yahoo or eBay (matching.title_matches returns False for an empty include set).
+-- Healthy means zero rows.
+--
+-- Parameters: none.
+--
+-- Columns, in this order
+--   item_id  INTEGER  items.id
+--   brand    TEXT     brand name of the item
+--   item     TEXT     items.name
+--
+-- Ordering: item_id ascending.
+--
+-- One statement only, read-only, exactly the columns above.
+-- Write your query below.

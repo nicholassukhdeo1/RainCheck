@@ -1,0 +1,18 @@
+-- doctor check 2 of 7: listing_brand_mismatch (severity: error)
+--
+-- Finds: recorded pairs whose listing's brand_id differs from the item's brand_id, which would
+-- make brand reporting ambiguous. Pairs with a missing parent are left to check 1.
+-- Healthy means zero rows.
+--
+-- Parameters: none.
+--
+-- Columns, in this order
+--   listing_id     INTEGER  listing_matches.listing_id
+--   item_id        INTEGER  listing_matches.item_id
+--   listing_brand  TEXT     name of the listing's brand
+--   item_brand     TEXT     name of the item's brand
+--
+-- Ordering: listing_id, item_id ascending.
+--
+-- One statement only, read-only, exactly the columns above.
+-- Write your query below.

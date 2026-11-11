@@ -1,4 +1,4 @@
--- Schema version 4 (PRAGMA user_version = 4).
+-- Schema version 5 (PRAGMA user_version = 5).
 -- This file always describes the LATEST version, and it is only used to create
 -- a brand new database. An existing database is upgraded by MIGRATIONS in
 -- db.py instead, because CREATE TABLE IF NOT EXISTS cannot add a column to a
@@ -58,6 +58,24 @@ CREATE TABLE IF NOT EXISTS listing_matches (
     listing_id  INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
     item_id     INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
     matched_at  TEXT NOT NULL,
+    -- deal-time pricing of this pair, written once when the deal is recorded.
+    -- all six are NULL (recorded before version 5, or by the single-pair API) or all six are set.
+    -- deal_price_yen is the yen amount the discount used: for an auction_buy_now that is the
+    -- buy-now price, while listings.price_yen holds the current bid.
+    deal_kind              TEXT CHECK (deal_kind IS NULL OR deal_kind IN ('fixed_price', 'auction_buy_now', 'auction_watch')),
+    deal_price_yen         INTEGER CHECK (deal_price_yen IS NULL OR deal_price_yen > 0),
+    deal_market_price_usd  REAL CHECK (deal_market_price_usd IS NULL OR deal_market_price_usd > 0),
+    deal_yen_to_usd        REAL CHECK (deal_yen_to_usd IS NULL OR deal_yen_to_usd > 0),
+    deal_rate_is_fallback  INTEGER CHECK (deal_rate_is_fallback IS NULL OR deal_rate_is_fallback IN (0, 1)),
+    -- last on purpose: its second CHECK mentions the other five, which must exist already
+    -- (the migration adds the columns one by one in this same order)
+    deal_discount_pct      REAL
+        CHECK (deal_discount_pct IS NULL OR (deal_discount_pct > 0 AND deal_discount_pct < 100))
+        CHECK ((deal_kind IS NULL AND deal_price_yen IS NULL AND deal_market_price_usd IS NULL
+                AND deal_yen_to_usd IS NULL AND deal_rate_is_fallback IS NULL AND deal_discount_pct IS NULL)
+            OR (deal_kind IS NOT NULL AND deal_price_yen IS NOT NULL AND deal_market_price_usd IS NOT NULL
+                AND deal_yen_to_usd IS NOT NULL AND deal_rate_is_fallback IS NOT NULL
+                AND deal_discount_pct IS NOT NULL)),
     PRIMARY KEY (listing_id, item_id)
 );
 

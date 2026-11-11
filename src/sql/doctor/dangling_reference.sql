@@ -1,0 +1,27 @@
+-- doctor check 1 of 7: dangling_reference (severity: error)
+--
+-- Finds: rows whose foreign key points at a missing parent. One finding per missing reference,
+-- so a pair missing both parents gives two findings.
+--   listing_matches      -> listings (listing_id) and items (item_id)
+--   item_keywords        -> items
+--   ebay_listing_prices  -> items
+--   listings             -> brands
+--   items                -> brands
+-- Healthy means zero rows. (PRAGMA foreign_key_check finds the same rows; a test compares them.)
+--
+-- Parameters: none.
+--
+-- Columns, in this order
+--   child_table   TEXT     the table holding the bad reference
+--   child_key     TEXT     the child row, in exactly these formats:
+--                            listing_matches      listing_id=<n> item_id=<n>
+--                            item_keywords        item_id=<n> keyword=<keyword>
+--                            ebay_listing_prices  item_id=<n> ebay_listing_id=<id>
+--                            listings and items   id=<n>
+--   parent_table  TEXT     the table the reference should point into
+--   missing_id    INTEGER  the id that does not exist there
+--
+-- Ordering: child_table, parent_table, missing_id, child_key, all ascending.
+--
+-- One statement only, read-only, exactly the columns above.
+-- Write your query below.

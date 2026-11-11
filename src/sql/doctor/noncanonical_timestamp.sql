@@ -1,0 +1,25 @@
+-- doctor check 3 of 7: noncanonical_timestamp (severity: error)
+--
+-- Finds: values that are not canonical UTC text in these columns:
+--   listings.first_seen_at, listings.last_seen_at,
+--   listing_matches.matched_at, ebay_listing_prices.first_seen_at
+-- Canonical means exactly 25 characters shaped YYYY-MM-DDTHH:MM:SS+00:00, or exactly 32 characters
+-- shaped YYYY-MM-DDTHH:MM:SS.ffffff+00:00, with ASCII digits in every digit position.
+-- Only the text shape is checked, not calendar correctness (month 13 is not a finding).
+-- Healthy means zero rows.
+--
+-- Parameters: none.
+--
+-- Columns, in this order
+--   table_name   TEXT  the table name
+--   column_name  TEXT  the column name
+--   row_key      TEXT  the row, in exactly these formats:
+--                        listings             id=<n>
+--                        listing_matches      listing_id=<n> item_id=<n>
+--                        ebay_listing_prices  item_id=<n> ebay_listing_id=<id>
+--   value        TEXT  the offending value, as stored
+--
+-- Ordering: table_name, column_name, row_key ascending.
+--
+-- One statement only, read-only, exactly the columns above.
+-- Write your query below.

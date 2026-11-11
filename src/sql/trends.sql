@@ -1,0 +1,52 @@
+-- trends: recent eBay asking prices per item
+--
+-- Question: for each item, what were the last N eBay asking prices RainCheck discovered,
+-- how did each compare with the one discovered just before it, and what was the rolling average?
+--
+-- Honest definition
+--   These rows are the first-seen asking prices of newly discovered eBay listings
+--   (ebay_listing_prices), with no outlier filtering. They are NOT past values of
+--   items.market_price_usd. change_usd compares two different listings.
+--
+-- Observation order (per item)
+--   first_seen_at ascending, then ebay_listing_id ascending. Rows sharing first_seen_at came
+--   from one pricing run, so first_seen_at alone does not order them.
+--   "Most recent" is the exact reverse of this order.
+--
+-- Window semantics
+--   Change and rolling average are computed over the item's COMPLETE history, and only then
+--   are the latest N rows kept, so the oldest shown row still compares with its true predecessor.
+--   The rolling average covers the row and up to W-1 rows immediately before it, counted as rows
+--   (not by time). Early rows average over what exists; window_rows says how many.
+--
+-- Item selection
+--   Active items only, unless :include_inactive is 1. :item_id, when not NULL, restricts the
+--   output to that one item whether it is active or not. Items with no observations give no rows.
+--
+-- Parameters (named, always bound)
+--   :latest            integer, how many most recent observations to keep per item (N)
+--   :window            integer, rolling window size in rows (W)
+--   :item_id           integer, or NULL when omitted
+--   :include_inactive  0 or 1
+--
+-- Columns, in this order
+--   brand            TEXT     brand name of the item
+--   item_id          INTEGER  items.id
+--   item             TEXT     items.name
+--   recency_rank     INTEGER  1 for the item's most recent observation, 2 for the one before, ...
+--   first_seen_at    TEXT     as stored
+--   ebay_listing_id  TEXT     as stored
+--   price_usd        REAL     first_price_usd rounded to 2 decimals
+--   change_usd       REAL     this price minus the previous observation's price, from unrounded
+--                             prices and then rounded to 2 decimals; NULL for the item's first
+--                             observation ever (never 0)
+--   rolling_avg_usd  REAL     mean of the unrounded prices in the window, rounded to 2 decimals
+--   window_rows      INTEGER  observations in that window: the smaller of W and the row's
+--                             position in the item's history
+--   Only rows with recency_rank at most N are returned.
+--
+-- Ordering: brand ascending, item ascending, item_id ascending, then recency_rank descending
+-- (each item reads oldest to newest, newest last).
+--
+-- One statement only, read-only, named parameters only, exactly the columns above.
+-- Write your query below.

@@ -1,0 +1,41 @@
+-- report: deals per brand
+--
+-- Question: for each brand, how many deals did RainCheck record, how good were they,
+-- and when was the latest one?
+--
+-- Definitions
+--   recorded pair   one listing_matches row (one listing shown for one item in a digest).
+--   deal            a recorded pair whose deal_kind is fixed_price, auction_buy_now, or NULL.
+--                   NULL means the pair was recorded before schema version 5.
+--   watch           a recorded pair whose deal_kind is auction_watch. Watches are counted
+--                   separately and never feed the discount statistics or last_deal_date,
+--                   because their percentage is only a potential discount.
+--   priced deal     a deal whose deal_discount_pct is not NULL.
+--   Pairs are counted, not distinct listings: one listing recorded for two items is two deals.
+--   A pair belongs to the brand of its ITEM (items.brand_id), not listings.brand_id.
+--   Inactive items' pairs still count.
+--
+-- Parameters (named, always bound)
+--   :min_deals  integer, 0 or more. Keeps only brands whose deals value is at least this
+--               (a filter on groups, applied after counting). With 0, every brand appears,
+--               including brands with no items or no pairs.
+--   :since      text YYYY-MM-DD, or NULL when omitted. Keeps only pairs whose matched_at is
+--               on or after 00:00:00 UTC on that date (a filter on single pairs, applied
+--               before grouping). It must not drop zero-deal brands.
+--
+-- Columns, in this order
+--   brand              TEXT     brands.name
+--   deals              INTEGER  count of deals for the brand; 0 when none
+--   watches            INTEGER  count of watches for the brand; 0 when none
+--   priced_deals       INTEGER  count of priced deals; 0 when none
+--   avg_discount_pct   REAL     mean deal_discount_pct over priced deals, rounded to 1 decimal
+--                               AFTER averaging; NULL when priced_deals is 0
+--   best_discount_pct  REAL     largest deal_discount_pct over priced deals, rounded to 1 decimal;
+--                               NULL when priced_deals is 0
+--   last_deal_date     TEXT     UTC calendar date YYYY-MM-DD of the latest matched_at among the
+--                               brand's deals (watches excluded); NULL when deals is 0
+--
+-- Ordering: deals descending, then brand ascending.
+--
+-- One statement only, read-only, named parameters only, exactly the columns above.
+-- Write your query below.

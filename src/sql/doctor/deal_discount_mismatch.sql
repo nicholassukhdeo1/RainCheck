@@ -1,0 +1,21 @@
+-- doctor check 4 of 7: deal_discount_mismatch (severity: error)
+--
+-- Finds: pairs with deal-time values whose stored deal_discount_pct differs by more than the
+-- tolerance from the discount recomputed from the stored inputs: 100 times
+-- (deal_market_price_usd minus deal_price_yen times deal_yen_to_usd), divided by deal_market_price_usd.
+-- Pairs recorded before schema version 5 have NULL deal-time columns and are never findings.
+-- Healthy means zero rows.
+--
+-- Parameters (named, always bound)
+--   :tolerance_pct  REAL, the allowed absolute difference in percentage points (0.001)
+--
+-- Columns, in this order
+--   listing_id    INTEGER  listing_matches.listing_id
+--   item_id       INTEGER  listing_matches.item_id
+--   stored_pct    REAL     deal_discount_pct as stored, unrounded
+--   computed_pct  REAL     the recomputed discount, unrounded
+--
+-- Ordering: listing_id, item_id ascending.
+--
+-- One statement only, read-only, named parameters only, exactly the columns above.
+-- Write your query below.

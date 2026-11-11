@@ -58,9 +58,15 @@ def build_brand_url(yahoo_brand_id: str) -> str:
     return BRAND_URL.format(yahoo_brand_id)
 
 
-def record_listing_matches(deals, *, sources_by_url=None):
+def record_listing_matches(deals, *, sources_by_url=None, yen_to_usd_rate, rate_is_fallback):
     """Forward the digest batch to the database writer at the job boundary."""
-    return db.record_listing_matches(deals, sources_by_url=sources_by_url)
+    # the rate arguments are required here too, so a caller that forgets them fails loudly
+    return db.record_listing_matches(
+        deals,
+        sources_by_url=sources_by_url,
+        yen_to_usd_rate=yen_to_usd_rate,
+        rate_is_fallback=rate_is_fallback,
+    )
 
 
 class YahooPageError(Exception):
@@ -117,16 +123,24 @@ def fetch_yen_to_usd_rate(today_utc: date) -> float:
     return rate
 
 
-def resolve_yen_to_usd_rate(today_utc: date) -> float:
+@dataclass(frozen=True)
+class YenRate:
+    """The run's JPY-to-USD rate, plus whether it is the documented fallback."""
+    rate: float
+    is_fallback: bool
+
+
+def resolve_yen_to_usd_rate(today_utc: date) -> YenRate:
     """Use the provider's rate, or warn once and use the documented fallback."""
     try:
-        return fetch_yen_to_usd_rate(today_utc)
+        return YenRate(fetch_yen_to_usd_rate(today_utc), False)
     except (requests.RequestException, RateDataError) as exc:
         response = getattr(exc, "response", None)
         status = getattr(response, "status_code", None)
         detail = f"HTTP {status}" if status is not None else type(exc).__name__
         logger.warning("Using fallback JPY-to-USD rate %.4f (%s)", YEN_TO_USD, detail)
-        return YEN_TO_USD
+        # the flag is stored with each recorded deal, so reports can tell estimates from live rates
+        return YenRate(YEN_TO_USD, True)
 
 
 # frozen=True makes each record read-only, so a listing can't be changed after it is validated
@@ -540,13 +554,13 @@ def main(*, preview=False, send_preview=False):
             logger.info("Yahoo deals job finished: 0 deals, 0 item failures")
             return 0
         # Resolve once so all items and listings in this run share one conversion.
-        yen_to_usd = resolve_yen_to_usd_rate(datetime.now(timezone.utc).date())
+        yen_rate = resolve_yen_to_usd_rate(datetime.now(timezone.utc).date())
         for item in items:
             if item.effective_price_usd is None:
                 logger.info("Skipping item %d (%s): no usable market price", item.id, item.name)
         known = set() if preview else get_known_listing_urls(listing.url for listing in listings)
         sections, images, failed_item_count, matched_count = _image_backed_sections(
-            items, brands, listings_by_brand, known, yen_to_usd
+            items, brands, listings_by_brand, known, yen_rate.rate
         )
         # Capture after image preparation so every countdown reflects email creation.
         created_at = datetime.now(timezone.utc)
@@ -584,7 +598,12 @@ def main(*, preview=False, send_preview=False):
             return 0
         # record only after a successful send, and only the deals that were shown
         try:
-            record_listing_matches(digest.deals, sources_by_url=sources_by_url)
+            record_listing_matches(
+                digest.deals,
+                sources_by_url=sources_by_url,
+                yen_to_usd_rate=yen_rate.rate,
+                rate_is_fallback=yen_rate.is_fallback,
+            )
         except Exception as exc:
             logger.error("Post-send listing batch recording failed (%s)", type(exc).__name__)
             raise SystemExit(1)

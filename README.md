@@ -35,6 +35,8 @@ src/
 ├── sendemail.py     # sends the digest email (text + HTML)
 ├── setup.py         # manage tracked items in the SQLite database
 ├── live_keywords.py # manage one keyword in the production S3 database
+├── reports.py       # read-only reports: deals per brand, eBay price trends, data-quality checks
+├── sql/             # the report, trends, and doctor queries, one SQL statement per file
 ├── catalog.json     # the watchlist of items being tracked
 └── raincheck.db     # the SQLite database (local to each machine, not committed)
 tests/               # offline test suite
@@ -179,10 +181,51 @@ They require an initialized, current-version database.
   After upgrading, confirm `PRAGMA user_version` is 4, `PRAGMA integrity_check` returns `ok`, `PRAGMA foreign_key_check` is empty, and row counts for `items`, `item_keywords`, `listings`, `listing_matches`, and `ebay_listing_prices` are unchanged.
   All preexisting items should have `config_source = 'unclaimed'`; inspect `python3 src/setup.py list --all` before adopting any row.
   Keep the backup until the CLI and jobs work normally.
+- Schema version 5 (RC-22) adds six nullable `deal_*` columns to `listing_matches`.
+  They record how each deal was priced when it was emailed: its kind, the yen price, the market price, the exchange rate, whether the rate was the fallback, and the discount.
+  Pairs recorded before version 5 keep `NULL` in all six.
+  Upgrade like version 4: stop scheduled jobs, make a `.backup`, run `python3 src/db.py` without `--seed`, then confirm `PRAGMA user_version` is 5, `PRAGMA integrity_check` returns `ok`, `PRAGMA foreign_key_check` is empty, row counts are unchanged, and the new columns are `NULL` on every existing `listing_matches` row.
+  Until the database is upgraded, the jobs and `reports.py` refuse to run on it.
 - To back it up safely, run `sqlite3 src/raincheck.db ".backup '<destination>'"`.
   This makes a consistent copy even if another process is writing, so store it outside the repository.
 - Warning: checking out a commit from before this change (before the RC-02 merge) replaces your local database with the old committed copy without asking.
   Back it up first.
+
+## Reports (RC-22)
+
+`python3 src/reports.py` reads the database and never writes to it.
+It opens the file read-only and runs one hand-written SQL file per question from `src/sql/`.
+It honors `RAINCHECK_DB_PATH` like the jobs, and it needs a version 5 database.
+
+```bash
+python3 src/reports.py report --min-deals 2 --since 2026-10-01
+python3 src/reports.py trends --item 1 --latest 5 --window 3
+python3 src/reports.py doctor
+```
+
+- `report` shows deal statistics per brand: deals, auction watches, priced deals, average and best discount, and the date of the latest deal.
+  `--min-deals N` keeps brands with at least N deals (default 1, and 0 shows every brand).
+  `--since YYYY-MM-DD` keeps pairs recorded on or after that UTC date.
+  Deals recorded before version 5 count as deals but have no discount, and the output says how many.
+- `trends` shows, per active item, the latest eBay asking prices RainCheck discovered, the change from the previous one, and a rolling average.
+  `--latest N` (default 10) and `--window W` (default 5) choose how many rows to show and how many rows each average covers.
+  `--item ID` picks one item, and `--include-inactive` adds inactive items.
+  These are first-seen asking prices of newly discovered listings, not past market prices.
+- `doctor` runs seven data-quality checks: dangling references, listing and item brand mismatches, non-canonical timestamps, stored discounts that do not match their inputs, items with no include keyword, items with no usable price, and items with too few eBay prices.
+  It exits 0 when there are no error findings (warnings are allowed), 3 when there is at least one error finding, and 1 when it could not run.
+- Every command accepts `--json`.
+  Arguments that are not valid exit 2, and any other failure prints one `Error:` line and exits 1.
+
+### Query files
+
+- `src/sql/report.sql`, `src/sql/trends.sql`, and `src/sql/doctor/<check>.sql` each hold exactly one statement.
+  The comment at the top of each file says what the query must return, which parameters it can use, and the column order.
+  A file with only that comment prints `Error: src/sql/<name>.sql has no query yet.`
+- Queries use named parameters such as `:min_deals`, and the program binds every value.
+  Try one in the `sqlite3` shell with `.parameter set :min_deals 1` before running it through `reports.py`.
+- A query must return exactly the columns listed in its header, in that order, or the command fails and shows both lists.
+- To run the reports against production, download a copy of the database from S3 into a directory outside the repository, then set `RAINCHECK_DB_PATH` to that copy.
+  `reports.py` makes no network calls and does not fetch the database itself.
 
 ## Configuration
 

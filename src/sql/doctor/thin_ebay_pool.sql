@@ -1,0 +1,20 @@
+-- doctor check 7 of 7: thin_ebay_pool (severity: warning)
+--
+-- Finds: active items with fewer than :min_observations stored eBay observations, including
+-- items with none. Fewer than five raw observations guarantees no eBay price can be set;
+-- five or more does not guarantee one, because outliers are removed first.
+-- Healthy means zero rows.
+--
+-- Parameters (named, always bound)
+--   :min_observations  integer, the smallest pool size that is not thin (db.MIN_POOL_PRICES)
+--
+-- Columns, in this order
+--   item_id       INTEGER  items.id
+--   brand         TEXT     brand name of the item
+--   item          TEXT     items.name
+--   observations  INTEGER  number of stored eBay observations; 0 for an item with none
+--
+-- Ordering: item_id ascending.
+--
+-- One statement only, read-only, named parameters only, exactly the columns above.
+-- Write your query below.
