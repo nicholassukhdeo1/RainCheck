@@ -259,3 +259,15 @@ The project is locked to Region `us-east-2`.
 - **Scope:** Show the time remaining in days, hours, and minutes for every emailed auction, alongside its scheduled end time.
   Keep the countdown accurate as of email creation and handle missing or elapsed end times clearly.
 - **Resume angle:** Added a readable auction countdown to deal emails.
+
+### RC-22: SQL reporting and data-quality commands
+
+- **Size:** L (one spec, phased on one branch; see the spec's open question 5)
+- **Depends on:** RC-16, RC-21 merged
+- **Touches:** `src/schema.sql`, `src/db.py`, `src/yahoo_scrape.py`, new `src/reports.py`, new `src/sql/`, `README.md`, tests
+- **Why:** Discounts and deal kinds are computed only in memory, so nothing can report deal quality, and auction watches are stored indistinguishably from deals.
+  The user also wants to practice SQL on real RainCheck questions.
+- **Scope:** Schema version 5 records each deal's kind, compared price, market price, exchange rate, fallback flag, and discount on `listing_matches`, with a backup-first production upgrade.
+  A read-only `python3 src/reports.py` provides `report` (deals per brand), `trends` (recent eBay asking prices with change and rolling average), and `doctor` (data-quality checks), with text and JSON output.
+  The user writes every query; at most one index is added, justified by EXPLAIN QUERY PLAN evidence.
+- **Resume angle:** Designed an auditable deal-history schema and a read-only SQL reporting tool with window functions, data-quality checks, and evidence-based indexing.
