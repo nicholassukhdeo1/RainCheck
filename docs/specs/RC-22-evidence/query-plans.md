@@ -478,7 +478,9 @@ No index differs between them, so any difference is noise.
 | 50-row `record_ebay_listing_prices` | 2.61 ms | 2.73 ms (+4.5%) | 2.37 ms (-9.3%) | 2.55 ms (-2.5%) |
 | 10-deal `record_listing_matches` | 1.62 ms | 1.59 ms (-1.7%) | 1.57 ms (-2.8%) | 1.72 ms (+6.0%) |
 
-Identical files differed by up to about 9 percent in this check, so a 10 percent slowdown threshold on a single write reading is close to the noise floor.
+Identical files differed by up to about 9 percent in this check, so a 10 percent slowdown threshold on the median-of-rounds write statistic is close to the noise floor.
+The base file's own write rounds varied even more: its 50-row `record_ebay_listing_prices` round medians were 2.53, 3.34, and 2.57 ms in the main benchmark, a spread larger than the 10 percent threshold by itself.
+This null control is small (three copies, run after the main benchmark rather than interleaved with it), so it supports the noise reading but does not settle it.
 
 ## Decision
 
@@ -499,6 +501,7 @@ What the evidence shows, without guessing beyond it:
 - The absolute gain for attempt 3 is about 15 ms on a command that is run by hand, at a cost of about 3 MB of file size and one more index to keep in step in two files.
 
 Attempt 3 is the one candidate that is close.
+Its read gain is also near the line: the recorded -27.4 percent is 2.4 points past the 25 percent threshold, and an independent reviewer rerun (3 rounds of 15 runs on a freshly built benchmark database) measured -22.7 percent, so any pre-agreed rerun must re-measure both the read and the write criteria.
 If the user wants it, the honest path is a separate, pre-agreed change to the process (for example 100 or more write repetitions per variant, or a noise-based threshold), decided before looking at the result, and then a rerun, not a reinterpretation of this table.
 That would be a new decision by the user, not something this file approves.
 
