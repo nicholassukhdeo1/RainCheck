@@ -18,3 +18,20 @@
 --
 -- One statement only, read-only, exactly the columns above.
 -- Write your query below.
+
+SELECT
+    items.id               AS item_id,
+    brands.name            AS brand,
+    items.name             AS item,
+    -- Returned as stored (NULL, 0.0, or negative) so the finding shows what is actually wrong.
+    items.market_price_usd AS market_price_usd,
+    items.manual_price_usd AS manual_price_usd
+FROM items
+JOIN brands ON brands.id = items.brand_id
+WHERE items.active = 1
+  -- "Unusable" is the opposite of "not NULL and greater than 0". Each side is spelled out as
+  -- IS NULL OR <= 0 because NOT (price > 0) is NULL, not true, for a NULL price, and
+  -- WHERE would silently drop exactly the items with no price at all.
+  AND (items.market_price_usd IS NULL OR items.market_price_usd <= 0)
+  AND (items.manual_price_usd IS NULL OR items.manual_price_usd <= 0)
+ORDER BY items.id ASC

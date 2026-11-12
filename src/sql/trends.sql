@@ -50,3 +50,80 @@
 --
 -- One statement only, read-only, named parameters only, exactly the columns above.
 -- Write your query below.
+
+-- Step 1: compute every window function over each item's COMPLETE history. Filtering to the
+-- latest N rows must wait until step 2, because window functions only see rows that survive
+-- WHERE. Trimming here would make the oldest shown row look like the first observation ever
+-- and would shrink its rolling window.
+WITH observations AS (
+    SELECT
+        brands.name                              AS brand,
+        items.id                                 AS item_id,
+        items.name                               AS item,
+        ebay_listing_prices.first_seen_at        AS first_seen_at,
+        ebay_listing_prices.ebay_listing_id      AS ebay_listing_id,
+        ebay_listing_prices.first_price_usd      AS first_price_usd,
+
+        -- Recency is the EXACT reverse of the observation order: both columns reversed.
+        -- If only first_seen_at were reversed, rows from one pricing run (same timestamp)
+        -- could disagree between this rank and the LAG and average below about who is newest.
+        ROW_NUMBER() OVER (
+            PARTITION BY ebay_listing_prices.item_id
+            ORDER BY ebay_listing_prices.first_seen_at DESC, ebay_listing_prices.ebay_listing_id DESC
+        ) AS recency_rank,
+
+        -- LAG looks one row back in observation order and is NULL on the first row, which is
+        -- the intended change_usd for an item's first observation (it must not become 0).
+        -- The subtraction uses unrounded prices, and rounding happens only in step 2.
+        ebay_listing_prices.first_price_usd - LAG(ebay_listing_prices.first_price_usd) OVER item_order AS raw_change,
+
+        -- The window is the current row plus (W - 1) rows before it, so W rows in total.
+        -- ROWS counts physical rows. The default frame when ORDER BY is present is RANGE,
+        -- which would also pull in later rows that share this row's first_seen_at (same pricing
+        -- run) and would average from the start of history instead of the last W rows.
+        AVG(ebay_listing_prices.first_price_usd) OVER rolling AS raw_avg,
+
+        -- COUNT(*) is fine here: it counts the rows inside the frame, and every row is real.
+        -- Early rows have fewer than W predecessors, so this is the smaller of W and position.
+        COUNT(*) OVER rolling AS window_rows
+    FROM ebay_listing_prices
+    JOIN items  ON items.id  = ebay_listing_prices.item_id
+    JOIN brands ON brands.id = items.brand_id
+    -- Item selection. With no --item, show active items (plus inactive ones on request).
+    -- With --item, show exactly that item, active or not, so the first branch is switched off.
+    -- Doing this before the window functions is safe because each item is its own partition,
+    -- and it lets SQLite skip other items entirely.
+    WHERE (:item_id IS NULL AND (items.active = 1 OR :include_inactive = 1))
+       OR items.id = :item_id
+    -- Named windows so the observation order is written once and cannot drift between functions.
+    WINDOW
+        -- One partition per item (otherwise LAG would compare across items). The order ends
+        -- with ebay_listing_id because first_seen_at ties within a pricing run, and without a
+        -- unique last key SQLite numbers tied rows in an arbitrary order. The id is unique per item.
+        item_order AS (
+            PARTITION BY ebay_listing_prices.item_id
+            ORDER BY ebay_listing_prices.first_seen_at ASC, ebay_listing_prices.ebay_listing_id ASC
+        ),
+        -- Same order, plus an explicit ROWS frame sized by the parameter. W - 1 PRECEDING
+        -- (not W) because the current row is already one of the W rows.
+        rolling AS (item_order ROWS BETWEEN :window - 1 PRECEDING AND CURRENT ROW)
+)
+-- Step 2: keep the latest N rows and format. Rounding is last, after subtracting and averaging,
+-- so no rounded number feeds another calculation and change_usd cannot drift.
+SELECT
+    observations.brand                          AS brand,
+    observations.item_id                        AS item_id,
+    observations.item                           AS item,
+    observations.recency_rank                   AS recency_rank,
+    observations.first_seen_at                  AS first_seen_at,
+    observations.ebay_listing_id                AS ebay_listing_id,
+    ROUND(observations.first_price_usd, 2)      AS price_usd,
+    ROUND(observations.raw_change, 2)           AS change_usd,
+    ROUND(observations.raw_avg, 2)              AS rolling_avg_usd,
+    observations.window_rows                    AS window_rows
+FROM observations
+-- This filter is on the outer query, after the windows were computed in step 1.
+WHERE observations.recency_rank <= :latest
+-- Items alphabetically (item_id breaks ties between same-named items of different brands),
+-- then rank DESCENDING so each item reads oldest to newest with the newest row last.
+ORDER BY observations.brand ASC, observations.item ASC, observations.item_id ASC, observations.recency_rank DESC
