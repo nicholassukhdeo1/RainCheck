@@ -27,7 +27,9 @@ SELECT
     items.market_price_usd AS market_price_usd,
     items.manual_price_usd AS manual_price_usd
 FROM items
-JOIN brands ON brands.id = items.brand_id
+-- LEFT JOIN so this check stands alone: an item whose brand is missing (a dangling brand_id,
+-- which dangling_reference reports) is still listed here, with brand shown as NULL.
+LEFT JOIN brands ON brands.id = items.brand_id
 WHERE items.active = 1
   -- "Unusable" is the opposite of "not NULL and greater than 0". Each side is spelled out as
   -- IS NULL OR <= 0 because NOT (price > 0) is NULL, not true, for a NULL price, and

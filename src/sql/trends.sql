@@ -78,9 +78,12 @@ WITH observations AS (
         ebay_listing_prices.first_price_usd - LAG(ebay_listing_prices.first_price_usd) OVER item_order AS raw_change,
 
         -- The window is the current row plus (W - 1) rows before it, so W rows in total.
-        -- ROWS counts physical rows. The default frame when ORDER BY is present is RANGE,
-        -- which would also pull in later rows that share this row's first_seen_at (same pricing
-        -- run) and would average from the start of history instead of the last W rows.
+        -- The frame must be spelled out. With an ORDER BY and no frame, SQLite's default is
+        -- RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW, which would give a running average
+        -- from the start of the item's history instead of the last W rows. ROWS counts physical
+        -- rows. (RANGE would also pull in peers, rows tied on the whole ORDER BY. Here the order
+        -- ends with ebay_listing_id, unique per item, so no row has a peer. Peers would only
+        -- matter when ordering by first_seen_at alone.)
         AVG(ebay_listing_prices.first_price_usd) OVER rolling AS raw_avg,
 
         -- COUNT(*) is fine here: it counts the rows inside the frame, and every row is real.
@@ -92,21 +95,24 @@ WITH observations AS (
     -- Item selection. With no --item, show active items (plus inactive ones on request).
     -- With --item, show exactly that item, active or not, so the first branch is switched off.
     -- Doing this before the window functions is safe because each item is its own partition,
-    -- and it lets SQLite skip other items entirely.
+    -- and it keeps other items' rows out of the window sorts. (The plan is still a scan of
+    -- ebay_listing_prices, so this saves sorting work, not reading work.)
     WHERE (:item_id IS NULL AND (items.active = 1 OR :include_inactive = 1))
        OR items.id = :item_id
     -- Named windows so the observation order is written once and cannot drift between functions.
-    WINDOW
+    -- The first window starts on the WINDOW line, with its comment inside the parentheses:
+    -- SQLite 3.49 fails to parse a comment placed directly after the WINDOW keyword
+    -- ("near WINDOW: syntax error"), while a comment after "name AS (" is fine.
+    WINDOW item_order AS (
         -- One partition per item (otherwise LAG would compare across items). The order ends
         -- with ebay_listing_id because first_seen_at ties within a pricing run, and without a
         -- unique last key SQLite numbers tied rows in an arbitrary order. The id is unique per item.
-        item_order AS (
-            PARTITION BY ebay_listing_prices.item_id
-            ORDER BY ebay_listing_prices.first_seen_at ASC, ebay_listing_prices.ebay_listing_id ASC
-        ),
-        -- Same order, plus an explicit ROWS frame sized by the parameter. W - 1 PRECEDING
-        -- (not W) because the current row is already one of the W rows.
-        rolling AS (item_order ROWS BETWEEN :window - 1 PRECEDING AND CURRENT ROW)
+        PARTITION BY ebay_listing_prices.item_id
+        ORDER BY ebay_listing_prices.first_seen_at ASC, ebay_listing_prices.ebay_listing_id ASC
+    ),
+    -- Same order, plus an explicit ROWS frame sized by the parameter. W - 1 PRECEDING
+    -- (not W) because the current row is already one of the W rows.
+    rolling AS (item_order ROWS BETWEEN :window - 1 PRECEDING AND CURRENT ROW)
 )
 -- Step 2: keep the latest N rows and format. Rounding is last, after subtracting and averaging,
 -- so no rounded number feeds another calculation and change_usd cannot drift.
@@ -124,6 +130,7 @@ SELECT
 FROM observations
 -- This filter is on the outer query, after the windows were computed in step 1.
 WHERE observations.recency_rank <= :latest
--- Items alphabetically (item_id breaks ties between same-named items of different brands),
--- then rank DESCENDING so each item reads oldest to newest with the newest row last.
+-- Brand, then item name, then item_id. (brand, item) is already unique, so item_id is not
+-- breaking real ties; it is there so the order is guaranteed total, as the contract requires.
+-- Rank DESCENDING last so each item reads oldest to newest with the newest row last.
 ORDER BY observations.brand ASC, observations.item ASC, observations.item_id ASC, observations.recency_rank DESC

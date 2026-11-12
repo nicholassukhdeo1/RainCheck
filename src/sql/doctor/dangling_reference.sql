@@ -97,7 +97,8 @@ FROM items
 LEFT JOIN brands ON brands.id = items.brand_id
 WHERE brands.id IS NULL
 
--- ORDER BY on a compound query can only use the column names of the FIRST branch, which is why
--- that branch has aliases and the others do not. Sorting follows the contract, ending with
--- child_key so the order is total even when one table has several findings.
+-- In a compound query the result column names come from the FIRST branch (the portable rule),
+-- which is why only that branch has aliases, and ORDER BY should refer to those names.
+-- Sorting follows the contract, ending with child_key so the order is total even when one
+-- table has several findings.
 ORDER BY child_table, parent_table, missing_id, child_key

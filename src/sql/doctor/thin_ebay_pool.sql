@@ -27,7 +27,9 @@ SELECT
     -- still produces one all-NULL row, which COUNT(*) would count as 1 instead of the correct 0.
     COUNT(ebay_listing_prices.ebay_listing_id) AS observations
 FROM items
-JOIN brands ON brands.id = items.brand_id
+-- LEFT JOIN so this check stands alone: an item whose brand is missing (a dangling brand_id,
+-- which dangling_reference reports) is still listed here, with brand shown as NULL.
+LEFT JOIN brands ON brands.id = items.brand_id
 -- LEFT JOIN so items with no observations at all are kept (an inner join would hide the
 -- thinnest pools of all). Only this one many-side table is joined, so rows are not multiplied.
 LEFT JOIN ebay_listing_prices ON ebay_listing_prices.item_id = items.id

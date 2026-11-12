@@ -2,7 +2,8 @@
 
 This file is only the harness: it parses arguments, opens the database read-only,
 runs the query files in src/sql/, checks their columns, and prints the rows.
-The queries themselves live in src/sql/ and are written by hand, one statement per file.
+The queries themselves live in src/sql/, one statement per file. The agents wrote them and the
+user reviews them (RC-22 spec, Amendment 1); this file contains no query text.
 """
 
 import argparse

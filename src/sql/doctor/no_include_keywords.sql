@@ -22,7 +22,9 @@ SELECT
     brands.name AS brand,
     items.name  AS item
 FROM items
-JOIN brands ON brands.id = items.brand_id
+-- LEFT JOIN so this check stands alone: an item whose brand is missing (a dangling brand_id,
+-- which dangling_reference reports) is still listed here, with brand shown as NULL.
+LEFT JOIN brands ON brands.id = items.brand_id
 -- Anti-join: LEFT JOIN to only the INCLUDE keywords, then keep items where nothing joined.
 -- The kind test sits in the join condition (not in WHERE) on purpose. In WHERE it would remove
 -- the NULL rows this query is looking for. In the join condition an item with only exclude

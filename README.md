@@ -184,8 +184,10 @@ They require an initialized, current-version database.
 - Schema version 5 (RC-22) adds six nullable `deal_*` columns to `listing_matches`.
   They record how each deal was priced when it was emailed: its kind, the yen price, the market price, the exchange rate, whether the rate was the fallback, and the discount.
   Pairs recorded before version 5 keep `NULL` in all six.
-  Upgrade like version 4: stop scheduled jobs, make a `.backup`, run `python3 src/db.py` without `--seed`, then confirm `PRAGMA user_version` is 5, `PRAGMA integrity_check` returns `ok`, `PRAGMA foreign_key_check` is empty, row counts are unchanged, and the new columns are `NULL` on every existing `listing_matches` row.
+  For a local-only database, upgrade like version 4: stop any scheduled local jobs, make a `.backup`, run `python3 src/db.py` without `--seed`, then confirm `PRAGMA user_version` is 5, `PRAGMA integrity_check` returns `ok`, `PRAGMA foreign_key_check` is empty, row counts are unchanged, and the new columns are `NULL` on every existing `listing_matches` row.
   Until the database is upgraded, the jobs and `reports.py` refuse to run on it.
+  The production database is the versioned S3 object, and its upgrade uses a different procedure that does not disable the schedule: steps U0 to U6 under "Production upgrade" in `docs/specs/RC-22-sql-reporting.md`.
+  Do not run the local-file steps above against production.
 - To back it up safely, run `sqlite3 src/raincheck.db ".backup '<destination>'"`.
   This makes a consistent copy even if another process is writing, so store it outside the repository.
 - Warning: checking out a commit from before this change (before the RC-02 merge) replaces your local database with the old committed copy without asking.
@@ -194,7 +196,8 @@ They require an initialized, current-version database.
 ## Reports (RC-22)
 
 `python3 src/reports.py` reads the database and never writes to it.
-It opens the file read-only and runs one hand-written SQL file per question from `src/sql/`.
+It opens the file read-only and runs one SQL file per question from `src/sql/`.
+The agents wrote those queries and they were reviewed, as recorded in Amendment 1 of the RC-22 spec.
 It honors `RAINCHECK_DB_PATH` like the jobs, and it needs a version 5 database.
 
 ```bash

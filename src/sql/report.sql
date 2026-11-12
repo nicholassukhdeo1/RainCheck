@@ -62,8 +62,10 @@ WITH brand_pairs AS (
     -- ISO-8601 text compares correctly as text because every stored value has the same layout
     -- and the same +00:00 offset. The bare date '2026-10-20' sorts before every timestamp on
     -- that day, so >= means "on or after midnight UTC". Fractional seconds sort correctly too.
-    -- Nothing wraps matched_at in a function, so an index on it stays usable.
-    -- The NULL test on the parameter makes the filter optional without changing the SQL text.
+    -- Nothing wraps matched_at in a function, so a plain "matched_at >= :since" could use an
+    -- index on it. The NULL test on the parameter makes the filter optional without changing
+    -- the SQL text, but that OR forces SQLite to scan the table (it cannot do a range search),
+    -- so the optional form does not use such an index.
     WHERE :since IS NULL OR listing_matches.matched_at >= :since
 )
 SELECT
@@ -97,7 +99,8 @@ LEFT JOIN brand_pairs ON brand_pairs.brand_id = brands.id
 -- a missing one and pick a random row's value, so both are listed even though name is unique.
 GROUP BY brands.id, brands.name
 -- HAVING filters groups after counting, which WHERE cannot do because deals does not exist yet.
--- (SQLite lets HAVING use the alias deals defined above.)
+-- (SQLite and MySQL let HAVING use the alias deals defined above. Standard SQL and PostgreSQL
+-- do not: there the aggregate expression would have to be repeated in HAVING.)
 HAVING deals >= :min_deals
 -- Highest deal count first, then brand name, which is unique, so the order is total and the
 -- tests (and users) always see the same row order.

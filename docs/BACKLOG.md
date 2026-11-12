@@ -282,5 +282,5 @@ The project is locked to Region `us-east-2`.
   The user also wants to practice SQL on real RainCheck questions.
 - **Scope:** Schema version 5 records each deal's kind, compared price, market price, exchange rate, fallback flag, and discount on `listing_matches`, with a backup-first production upgrade.
   A read-only `python3 src/reports.py` provides `report` (deals per brand), `trends` (recent eBay asking prices with change and rolling average), and `doctor` (data-quality checks), with text and JSON output.
-  The user writes every query; at most one index is added, justified by EXPLAIN QUERY PLAN evidence.
+  The agents write every query and the user reviews them (RC-22 spec, Amendment 1, which replaced the original plan for the user to write them by hand); at most one index is added, justified by EXPLAIN QUERY PLAN evidence.
 - **Resume angle:** Designed an auditable deal-history schema and a read-only SQL reporting tool with window functions, data-quality checks, and evidence-based indexing.
