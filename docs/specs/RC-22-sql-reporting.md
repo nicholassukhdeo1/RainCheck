@@ -710,6 +710,19 @@ This spec is safe to approve while RC-21 is in progress, because planning change
 - **2026-11-10, query style and tests:** report queries are read-only and parameterized; tests come first, with hand-built fixture databases and hand-computed expected results, including an empty database and single-row cases.
 - **2026-11-10, authorship:** the user writes every report, trend, and doctor query; this spec and the agents provide definitions and review, not query text.
 
+## Amendments
+
+### Amendment 1 (2026-11-11): the agents write the queries
+
+The user changed the authorship decision after the harness was built: he is targeting data-analysis and fintech roles and asked for the analytical SQL to be implemented by the agents instead of written by hand.
+This supersedes the authorship statements in the Summary, the workflow section, and the 2026-11-10 authorship decision under Resolved decisions.
+
+- The implementer writes every query in `src/sql/report.sql`, `src/sql/trends.sql`, and the seven files in `src/sql/doctor/`, keeping each file's contract header and adding short comments that explain each clause, because the user will study these queries to explain them in interviews.
+- Criterion 49 is replaced: each query file contains its contract header and exactly one SQL statement that satisfies its contract, and `src/reports.py` still contains no query text.
+- The query tests in `tests/test_rc22_queries.py` stay unchanged and must pass against the implementer's queries; their expected values remain the hand-computed literals.
+- The index process (criteria 45 and 46) runs on the implementer's queries as specified, including the `docs/specs/RC-22-evidence/query-plans.md` evidence file.
+- After the queries pass review, the orchestrator walks the user through each query, and the resume fact ledger records that agents wrote them.
+
 ## Rollback
 
 - **Before the production upgrade:** revert the merge commit; no database has changed.
