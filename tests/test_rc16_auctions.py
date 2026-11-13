@@ -86,7 +86,7 @@ def _read_legacy_v2_rows(path):
                 "ended_at, final_price_yen FROM listings ORDER BY id"
             ).fetchall(),
             "listing_matches": conn.execute(
-                "SELECT * FROM listing_matches ORDER BY listing_id, item_id"
+                "SELECT listing_id, item_id, matched_at FROM listing_matches ORDER BY listing_id, item_id"
             ).fetchall(),
             "ebay_listing_prices": conn.execute(
                 "SELECT * FROM ebay_listing_prices ORDER BY item_id, ebay_listing_id"
@@ -151,7 +151,7 @@ def rc16_version2_db(tmp_path):
 
 def test_rc16_c1_fresh_schema_has_version_three_metadata_and_constraints(temp_db, db_conn):
     db.init_db()
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     columns = {row[1]: row for row in db_conn.execute("PRAGMA table_info(listings)")}
     assert {"is_fixed_price", "buy_now_price_yen", "scheduled_end_at"} <= set(columns)
     assert columns["is_fixed_price"][3] == 0
@@ -201,7 +201,7 @@ def test_rc16_c2_c3_v2_migration_preserves_legacy_rows_and_is_idempotent(rc16_ve
             ("https://auctions.yahoo.co.jp/jp/auction/legacy",),
         ).fetchone()
         assert tuple(after_metadata) == (None, None, None)
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     finally:
         conn.close()
     assert _read_legacy_v2_rows(rc16_version2_db) == before
@@ -210,7 +210,7 @@ def test_rc16_c2_c3_v2_migration_preserves_legacy_rows_and_is_idempotent(rc16_ve
     assert _read_legacy_v2_rows(rc16_version2_db) == before
     conn = sqlite3.connect(rc16_version2_db)
     try:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     finally:
         conn.close()
 
@@ -599,13 +599,17 @@ def test_rc16_c22_c23_metadata_snapshot_is_preserved_for_existing_url(seeded_db,
     source = _listing(1, 50000, fixed=False, buy_now=90000)
     deal = digest.Deal(item_id, brand_id, source.url, "Auction", 90000, 558.0,
                        MARKET, 30.25, None, kind="auction_buy_now", current_price_yen=50000)
-    assert db.record_listing_matches([deal], sources_by_url={deal.url: source}) == 1
+    assert db.record_listing_matches(
+        [deal], sources_by_url={deal.url: source}, yen_to_usd_rate=0.0062, rate_is_fallback=False
+    ) == 1
     before = tuple(db_conn.execute(
         "SELECT price_yen, is_fixed_price, buy_now_price_yen, scheduled_end_at FROM listings WHERE url = ?",
         (deal.url,),
     ).fetchone())
     changed = _listing(1, 80000, fixed=False, buy_now=120000, end="2026-12-01T00:00:00+00:00")
-    assert db.record_listing_matches([deal], sources_by_url={deal.url: changed}) == 0
+    assert db.record_listing_matches(
+        [deal], sources_by_url={deal.url: changed}, yen_to_usd_rate=0.0062, rate_is_fallback=False
+    ) == 0
     after = tuple(db_conn.execute(
         "SELECT price_yen, is_fixed_price, buy_now_price_yen, scheduled_end_at FROM listings WHERE url = ?",
         (deal.url,),
@@ -630,7 +634,9 @@ def test_rc16_c26_metadata_batch_failure_rolls_back_all_rows(seeded_db, db_conn)
     )
     db_conn.commit()
     with pytest.raises(sqlite3.IntegrityError, match="second row rejected"):
-        db.record_listing_matches(deals, sources_by_url={first.url: first, second.url: second})
+        db.record_listing_matches(
+            deals, sources_by_url={first.url: first, second.url: second}, yen_to_usd_rate=0.0062, rate_is_fallback=False
+        )
     assert db_conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0] == 0
     assert db_conn.execute("SELECT COUNT(*) FROM listing_matches").fetchone()[0] == 0
 
@@ -668,7 +674,7 @@ def test_rc16_c28_invalid_source_mapping_fails_before_database_access(monkeypatc
 
     monkeypatch.setattr(db, "get_connection", unexpected_connection)
     with pytest.raises(ValueError):
-        db.record_listing_matches([deal], sources_by_url=mapping)
+        db.record_listing_matches([deal], sources_by_url=mapping, yen_to_usd_rate=0.0062, rate_is_fallback=False)
 
 
 def test_rc16_c29_legacy_batch_call_and_single_match_keep_null_metadata(seeded_db, db_conn):
@@ -676,7 +682,7 @@ def test_rc16_c29_legacy_batch_call_and_single_match_keep_null_metadata(seeded_d
     brand_id = db_conn.execute("SELECT id FROM brands LIMIT 1").fetchone()[0]
     deal = digest.Deal(item_id, brand_id, "https://x/legacy", "Legacy", 12345,
                        76.539, MARKET, 90.4, None)
-    assert db.record_listing_matches([deal]) == 1
+    assert db.record_listing_matches([deal], yen_to_usd_rate=0.0062, rate_is_fallback=False) == 1
     assert db.record_listing_match(brand_id, "https://x/single", "Single", 10000, None, item_id)
     for url in (deal.url, "https://x/single"):
         row = db_conn.execute(

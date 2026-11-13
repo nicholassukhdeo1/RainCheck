@@ -272,3 +272,15 @@ The project is locked to Region `us-east-2`.
   Specify safe behavior for active jobs, concurrent edits, expired credentials, interrupted updates, and recovery without silently overwriting newer data.
   Preserve the existing matcher and storage architecture; the planner must identify any narrowly necessary runtime coordination changes and surface user decisions before implementation.
 - **Resume angle:** Built a safe operator workflow for small production configuration changes with backups, concurrency protection, and verified recovery.
+
+### RC-22: SQL reporting and data-quality commands
+
+- **Size:** L (one spec, phased on one branch; see the spec's open question 5)
+- **Depends on:** RC-16, RC-21 merged
+- **Touches:** `src/schema.sql`, `src/db.py`, `src/yahoo_scrape.py`, new `src/reports.py`, new `src/sql/`, `README.md`, tests
+- **Why:** Discounts and deal kinds are computed only in memory, so nothing can report deal quality, and auction watches are stored indistinguishably from deals.
+  The user also wants to practice SQL on real RainCheck questions.
+- **Scope:** Schema version 5 records each deal's kind, compared price, market price, exchange rate, fallback flag, and discount on `listing_matches`, with a backup-first production upgrade.
+  A read-only `python3 src/reports.py` provides `report` (deals per brand), `trends` (recent eBay asking prices with change and rolling average), and `doctor` (data-quality checks), with text and JSON output.
+  The agents write every query and the user reviews them (RC-22 spec, Amendment 1, which replaced the original plan for the user to write them by hand); at most one index is added, justified by EXPLAIN QUERY PLAN evidence.
+- **Resume angle:** Designed an auditable deal-history schema and a read-only SQL reporting tool with window functions, data-quality checks, and evidence-based indexing.

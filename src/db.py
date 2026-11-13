@@ -22,7 +22,7 @@ CATALOG_PATH = SRC_DIR / "catalog.json"
 # the schema version this code expects. it lives inside the database file
 # itself (PRAGMA user_version), so every database knows which shape it has.
 # schema.sql always describes this version.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # how to upgrade an existing database, one step at a time.
 # the key is the version you END UP at, the value is the statements to get there.
@@ -61,7 +61,36 @@ MIGRATIONS = {
         "ALTER TABLE items ADD COLUMN config_source TEXT NOT NULL DEFAULT 'unclaimed' "
         "CHECK (config_source IN ('unclaimed', 'catalog', 'cli'))",
     ),
+    5: (
+        # deal-time pricing of one recorded listing-item pair, so reports can show real discounts.
+        # every existing row gets NULL in all six, and the last column's CHECK keeps them
+        # all-or-nothing. it goes last because every column it mentions must already exist.
+        "ALTER TABLE listing_matches ADD COLUMN deal_kind TEXT "
+        "CHECK (deal_kind IS NULL OR deal_kind IN ('fixed_price', 'auction_buy_now', 'auction_watch'))",
+        "ALTER TABLE listing_matches ADD COLUMN deal_price_yen INTEGER "
+        "CHECK (deal_price_yen IS NULL OR deal_price_yen > 0)",
+        "ALTER TABLE listing_matches ADD COLUMN deal_market_price_usd REAL "
+        "CHECK (deal_market_price_usd IS NULL OR deal_market_price_usd > 0)",
+        "ALTER TABLE listing_matches ADD COLUMN deal_yen_to_usd REAL "
+        "CHECK (deal_yen_to_usd IS NULL OR deal_yen_to_usd > 0)",
+        "ALTER TABLE listing_matches ADD COLUMN deal_rate_is_fallback INTEGER "
+        "CHECK (deal_rate_is_fallback IS NULL OR deal_rate_is_fallback IN (0, 1))",
+        "ALTER TABLE listing_matches ADD COLUMN deal_discount_pct REAL "
+        "CHECK (deal_discount_pct IS NULL OR (deal_discount_pct > 0 AND deal_discount_pct < 100)) "
+        "CHECK ((deal_kind IS NULL AND deal_price_yen IS NULL AND deal_market_price_usd IS NULL "
+        "AND deal_yen_to_usd IS NULL AND deal_rate_is_fallback IS NULL AND deal_discount_pct IS NULL) "
+        "OR (deal_kind IS NOT NULL AND deal_price_yen IS NOT NULL AND deal_market_price_usd IS NOT NULL "
+        "AND deal_yen_to_usd IS NOT NULL AND deal_rate_is_fallback IS NOT NULL "
+        "AND deal_discount_pct IS NOT NULL))",
+        # no index yet: RC-22 decides it later from EXPLAIN QUERY PLAN evidence
+    ),
 }
+
+# an item needs at least this many stored eBay prices before a market price can be set
+MIN_POOL_PRICES = 5
+
+# the Deal.kind values that can be stored on a recorded pair
+DEAL_KINDS = ("fixed_price", "auction_buy_now", "auction_watch")
 
 # The existing Rick Owens ID is retained for tests and compatibility callers.
 DEFAULT_YAHOO_BRAND_ID = "103538"
@@ -220,6 +249,35 @@ def _read_user_version(conn, path):
         ) from None
 
 
+def _require_database_file(path):
+    """sqlite3.connect quietly creates a missing file, so look first."""
+    if not os.path.exists(path):
+        raise SchemaVersionError(
+            f"No database found at {path}. Run python3 src/db.py --seed to create it."
+        )
+
+
+def _check_schema_version(conn, path):
+    """
+    Refuses a database that is not at SCHEMA_VERSION (not a database, empty, older, newer).
+    One helper for both connection openers, so the messages cannot drift apart.
+    The caller closes the connection if this raises.
+    """
+    version = _read_user_version(conn, path)
+    if version != SCHEMA_VERSION:
+        has_tables = bool(_user_tables(conn))
+        if not has_tables:
+            raise SchemaVersionError(
+                f"The database at {path} is empty. Run python3 src/db.py --seed to create it."
+            )
+        newer = " It was created by a newer RainCheck." if version > SCHEMA_VERSION else ""
+        raise SchemaVersionError(
+            f"The database at {path} is at schema version {version} "
+            f"but this code expects version {SCHEMA_VERSION}.{newer} "
+            "Back up the database, then run python3 src/db.py"
+        )
+
+
 def get_connection():
     """
     Opens a connection to the SQLite database.
@@ -231,11 +289,7 @@ def get_connection():
     understand, and nothing changes your data without you running db.py.
     """
     path = get_db_path()
-    # sqlite3.connect quietly creates a missing file, so look first
-    if not os.path.exists(path):
-        raise SchemaVersionError(
-            f"No database found at {path}. Run python3 src/db.py --seed to create it."
-        )
+    _require_database_file(path)
 
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
@@ -244,19 +298,7 @@ def get_connection():
     # garbage collection, which shows up as a ResourceWarning in some random later place.
     # (`with sqlite3.connect(...)` would not help, it commits but does not close.)
     try:
-        version = _read_user_version(conn, path)
-        if version != SCHEMA_VERSION:
-            has_tables = bool(_user_tables(conn))
-            if not has_tables:
-                raise SchemaVersionError(
-                    f"The database at {path} is empty. Run python3 src/db.py --seed to create it."
-                )
-            newer = " It was created by a newer RainCheck." if version > SCHEMA_VERSION else ""
-            raise SchemaVersionError(
-                f"The database at {path} is at schema version {version} "
-                f"but this code expects version {SCHEMA_VERSION}.{newer} "
-                "Back up the database, then run python3 src/db.py"
-            )
+        _check_schema_version(conn, path)
 
         # SQLite ignores FOREIGN KEY constraints unless you turn them on,
         # and it's per-connection, so this has to run every single time.
@@ -267,6 +309,28 @@ def get_connection():
         # could contain the row with all of the data about the
         # marathon you ran in shoe #7.
         conn.execute("PRAGMA foreign_keys = ON")
+    except BaseException:
+        conn.close()
+        raise
+    return conn
+
+
+def get_read_only_connection():
+    """
+    Opens the database for reading only, for reports.py.
+    Same path and schema checks as get_connection(), but it cannot write:
+    mode=ro makes SQLite refuse writes at the file level, and query_only is a second guard.
+    """
+    path = get_db_path()
+    _require_database_file(path)
+
+    # as_uri() percent-encodes spaces and '#', which a plain "file:" + path would not
+    conn = sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    # same reason as get_connection: close on every error path
+    try:
+        _check_schema_version(conn, path)
+        conn.execute("PRAGMA query_only = ON")
     except BaseException:
         conn.close()
         raise
@@ -991,9 +1055,51 @@ def record_listing_match(brand_id, url, title, price_yen, image_url, item_id) ->
             raise
 
 
-def record_listing_matches(deals, *, sources_by_url=None) -> int:
-    """Record a displayed digest's listings and matches in one transaction."""
+def _is_real_number(value):
+    """True for an int or float that is not a bool (bool is a number in Python, but never a price)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _validate_deal_pricing(deals, yen_to_usd_rate, rate_is_fallback):
+    """
+    Checks the deal-time values before any connection is opened, so a bad value
+    writes nothing. The ranges match the CHECKs on listing_matches, so a bad value
+    fails here with a clear message instead of as a database constraint error.
+    """
+    if not _is_real_number(yen_to_usd_rate) or not math.isfinite(yen_to_usd_rate) or yen_to_usd_rate <= 0:
+        raise ValueError("yen_to_usd_rate must be a finite number greater than 0")
+    # exactly a bool: 0 and 1 would also work in SQL, but a loose flag hides caller mistakes
+    if type(rate_is_fallback) is not bool:
+        raise ValueError("rate_is_fallback must be True or False")
+    for deal in deals:
+        if deal.kind not in DEAL_KINDS:
+            raise ValueError(f"deal kind must be one of {', '.join(DEAL_KINDS)}")
+        if isinstance(deal.price_yen, bool) or not isinstance(deal.price_yen, int) or deal.price_yen <= 0:
+            raise ValueError("deal price_yen must be a positive integer")
+        if (
+            not _is_real_number(deal.market_price_usd)
+            or not math.isfinite(deal.market_price_usd)
+            or deal.market_price_usd <= 0
+        ):
+            raise ValueError("deal market_price_usd must be a finite number greater than 0")
+        if (
+            not _is_real_number(deal.discount_pct)
+            or not math.isfinite(deal.discount_pct)
+            or not 0 < deal.discount_pct < 100
+        ):
+            raise ValueError("deal discount_pct must be a finite number between 0 and 100")
+
+
+def record_listing_matches(
+    deals, *, sources_by_url=None, yen_to_usd_rate, rate_is_fallback
+) -> int:
+    """
+    Record a displayed digest's listings and matches in one transaction.
+    Each new pair also stores its deal-time pricing; the rate arguments are required
+    so a caller that forgets them fails with TypeError instead of silently storing NULL.
+    """
     deals = tuple(deals)
+    _validate_deal_pricing(deals, yen_to_usd_rate, rate_is_fallback)
     sources = {}
     if sources_by_url is not None:
         # Check the entire batch before opening a connection or writing any row.
@@ -1047,10 +1153,18 @@ def record_listing_matches(deals, *, sources_by_url=None) -> int:
                 listing = conn.execute(
                     "SELECT id FROM listings WHERE url = ?", (deal.url,)
                 ).fetchone()
+                # DO NOTHING keeps the first recording's values: the first digest to show
+                # a pair wins, like ebay_listing_prices
                 conn.execute(
-                    "INSERT INTO listing_matches (listing_id, item_id, matched_at) "
-                    "VALUES (?,?,?) ON CONFLICT(listing_id, item_id) DO NOTHING",
-                    (listing["id"], deal.item_id, timestamp),
+                    "INSERT INTO listing_matches "
+                    "(listing_id, item_id, matched_at, deal_kind, deal_price_yen, "
+                    "deal_market_price_usd, deal_yen_to_usd, deal_rate_is_fallback, deal_discount_pct) "
+                    "VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(listing_id, item_id) DO NOTHING",
+                    (
+                        listing["id"], deal.item_id, timestamp,
+                        deal.kind, deal.price_yen, deal.market_price_usd,
+                        yen_to_usd_rate, int(rate_is_fallback), deal.discount_pct,
+                    ),
                 )
             conn.commit()
             return inserted_count
@@ -1185,7 +1299,7 @@ def record_ebay_listing_prices(item_id, listings, observed_at=None) -> PoolResul
 
             retained_count = len(retained)
             outlier_count = candidate_count - retained_count
-            mean_usd = statistics.mean(retained) if retained_count >= 5 else None
+            mean_usd = statistics.mean(retained) if retained_count >= MIN_POOL_PRICES else None
             price_updated = False
             # A repeated or empty search is read-only for the current price.
             if new_count and mean_usd is not None:

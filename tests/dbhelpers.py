@@ -87,8 +87,10 @@ def assert_legacy_data_preserved(path, before):
 
     `before` is dump_all() of the legacy database taken before migrating.
     """
-    for table in ("brands", "listing_matches"):
-        assert dump_table(path, table) == before[table], table
+    assert dump_table(path, "brands") == before["brands"], "brands"
+    # Later migrations append deal-time columns to listing_matches; the legacy three must be unchanged.
+    matches_after = dump_table(path, "listing_matches")
+    assert [row[:3] for row in matches_after] == before["listing_matches"], "listing_matches"
 
     # Migrations may append listing metadata columns. Preserve every original
     # value while checking that newly added metadata starts empty.

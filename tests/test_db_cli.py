@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import db
 from conftest import assert_db_is_temp
 from dbhelpers import assert_legacy_data_preserved, dump_all, set_user_version, user_version
 
@@ -186,9 +187,9 @@ def test_rc03a_c38_main_migrates_a_legacy_database(legacy_db, capsys):
 
     db.main([])
 
-    assert user_version(legacy_db) == 4
+    assert user_version(legacy_db) == db.SCHEMA_VERSION
     assert_legacy_data_preserved(legacy_db, before)
-    assert f"Migrated database at {legacy_db} from schema version 0 to 4." in capsys.readouterr().out
+    assert f"Migrated database at {legacy_db} from schema version 0 to {db.SCHEMA_VERSION}." in capsys.readouterr().out
 
 
 def test_rc03a_c39_main_seed_with_invalid_catalog_exits_1_and_changes_no_items(
@@ -213,7 +214,7 @@ def test_rc03a_c39_main_seed_with_invalid_catalog_exits_1_and_changes_no_items(
 def test_rc03a_c40_main_on_a_newer_database_exits_1(temp_db, capsys):
     import db
 
-    set_user_version(temp_db, 5)
+    set_user_version(temp_db, db.SCHEMA_VERSION + 1)
     capsys.readouterr()
 
     with pytest.raises(SystemExit) as exc:

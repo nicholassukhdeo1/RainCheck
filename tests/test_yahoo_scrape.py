@@ -372,7 +372,7 @@ def test_rc08_c4_c5_bad_exchange_data_uses_fallback_and_warns_once(body, fake_ht
     fake_http.add("GET", FRANKFURTER_URL, json=body)
     with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
         rate = yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27))
-    assert rate == 0.0062
+    assert rate == yahoo_scrape.YenRate(0.0062, True)
     warnings = [record for record in caplog.records if record.name == "yahoo_scrape"]
     assert len(warnings) == 1
     message = warnings[0].getMessage().lower()
@@ -383,7 +383,11 @@ def test_rc08_c4_c5_bad_exchange_data_uses_fallback_and_warns_once(body, fake_ht
 def test_rc08_c4_freshness_boundary_is_seven_days_inclusive(published, fake_http):
     _add_rate_response(fake_http, rate=0.0067, published=published)
     rate = yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27))
-    assert rate == (0.0067 if published == "2026-10-20" else 0.0062)
+    expected = (
+        yahoo_scrape.YenRate(0.0067, False) if published == "2026-10-20"
+        else yahoo_scrape.YenRate(0.0062, True)
+    )
+    assert rate == expected
 
 
 @pytest.mark.parametrize("failure", [requests.Timeout("slow"), requests.ConnectionError("offline")])
@@ -395,7 +399,7 @@ def test_rc08_c6_provider_transport_failure_falls_back_and_warns(failure, monkey
 
     monkeypatch.setattr(requests, "get", fail_get)
     with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
-        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.0062
+        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == yahoo_scrape.YenRate(0.0062, True)
     warnings = [record for record in caplog.records if record.name == "yahoo_scrape"]
     assert len(warnings) == 1
     assert "0.0062" in warnings[0].getMessage()
@@ -544,7 +548,7 @@ def test_rc08_c6_http_error_uses_fallback_without_traceback(status, fake_http, c
 
     fake_http.add("GET", FRANKFURTER_URL, status=status)
     with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
-        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.0062
+        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == yahoo_scrape.YenRate(0.0062, True)
     warnings = [record for record in caplog.records if record.name == "yahoo_scrape"]
     assert len(warnings) == 1
     assert warnings[0].exc_info is None
@@ -555,7 +559,7 @@ def test_rc08_c5_invalid_json_uses_fallback(fake_http, caplog):
 
     fake_http.add("GET", FRANKFURTER_URL, text="not json")
     with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
-        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.0062
+        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == yahoo_scrape.YenRate(0.0062, True)
     assert len([record for record in caplog.records if record.name == "yahoo_scrape"]) == 1
 
 
@@ -1168,7 +1172,7 @@ def test_rc05_c5_and_c11_absent_listing_keeps_ended_fields_and_schema_stays_v3(
         "2020-02-01T00:00:00+00:00",
         12345,
     )
-    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert db_conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert tuple(db_conn.execute(
         "SELECT ended_at, final_price_yen FROM listings WHERE url = ?", (URL_4,)
     ).fetchone()) == (None, None)
@@ -1571,7 +1575,7 @@ def test_rc10_c26_yahoo_no_active_items_is_a_successful_no_work_run(
 def test_rc03b_c19_main_on_newer_schema_version_is_a_clean_error(
     temp_db, fake_http, sent_emails, capsys
 ):
-    set_user_version(temp_db, 5)
+    set_user_version(temp_db, db.SCHEMA_VERSION + 1)
     before = sha256(temp_db)
     with pytest.raises(SystemExit) as exc:
         yahoo_scrape.main()
@@ -1673,13 +1677,11 @@ def test_rc10_c21_c22_batch_failure_rolls_back_then_next_run_resends_all_deals(
     real_record_matches = db.record_listing_matches
     calls = []
 
-    def fail_first_batch(deals, *, sources_by_url=None):
+    def fail_first_batch(deals, *, sources_by_url=None, **rate_arguments):
         calls.append(tuple(deals))
         if len(calls) == 1:
             raise RuntimeError("database is locked")
-        if sources_by_url is None:
-            return real_record_matches(deals)
-        return real_record_matches(deals, sources_by_url=sources_by_url)
+        return real_record_matches(deals, sources_by_url=sources_by_url, **rate_arguments)
 
     monkeypatch.setattr(db, "record_listing_matches", fail_first_batch)
     with pytest.raises(SystemExit) as exc:
@@ -1799,7 +1801,7 @@ def test_rc10_c16_rate_retry_uses_provider_without_fallback_warning(fake_http, c
     original = http_retry.request_with_retry
     waits = []
     monkeypatch.setattr(http_retry, "request_with_retry", lambda *a, **kw: original(*a, sleep=waits.append, **kw))
-    assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.007
+    assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == yahoo_scrape.YenRate(0.007, False)
     assert waits == [0.5]
     assert not [record for record in caplog.records if "fallback" in record.getMessage().lower()]
 
@@ -1811,7 +1813,7 @@ def test_rc10_c16_huge_retry_after_uses_frankfurter_fallback_without_overflow(fa
         {"status": 429, "headers": {"Retry-After": "9" * 400}},
     ])
     with caplog.at_level(logging.WARNING, logger="yahoo_scrape"):
-        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == 0.0062
+        assert yahoo_scrape.resolve_yen_to_usd_rate(date(2026, 10, 27)) == yahoo_scrape.YenRate(0.0062, True)
     assert len([call for call in fake_http.calls if call[1] == FRANKFURTER_URL]) == 1
     warnings = [record for record in caplog.records if record.name == "yahoo_scrape"]
     assert len(warnings) == 1
@@ -1917,7 +1919,7 @@ def test_rc10_c21_atomic_batch_failure_rolls_back_every_displayed_deal(
 ):
     calls = []
 
-    def fail_batch(deals, *, sources_by_url=None):
+    def fail_batch(deals, *, sources_by_url=None, **rate_arguments):
         calls.append(tuple(deals))
         raise RuntimeError("forced batch failure")
 
@@ -1937,13 +1939,11 @@ def test_rc10_c22_failed_batch_can_be_offered_again_on_next_run(
     real_batch = getattr(db, "record_listing_matches", None)
     attempts = []
 
-    def fail_once(deals, *, sources_by_url=None):
+    def fail_once(deals, *, sources_by_url=None, **rate_arguments):
         attempts.append(tuple(deals))
         if len(attempts) == 1:
             raise RuntimeError("forced batch failure")
-        if sources_by_url is None:
-            return real_batch(deals)
-        return real_batch(deals, sources_by_url=sources_by_url)
+        return real_batch(deals, sources_by_url=sources_by_url, **rate_arguments)
 
     monkeypatch.setattr(db, "record_listing_matches", fail_once, raising=False)
     with pytest.raises(SystemExit):
