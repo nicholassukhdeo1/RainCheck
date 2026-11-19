@@ -271,8 +271,11 @@ def _fmt(value):
     return "n/a" if value is None else f"{value:.3f}"
 
 
+_PRF_WIDTH = 9
+
+
 def _prf(tp, fp, fn):
-    return " ".join(f"{_fmt(v):>9}" for v in scores(tp, fp, fn))
+    return " ".join(f"{_fmt(v):>{_PRF_WIDTH}}" for v in scores(tp, fp, fn))
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +330,13 @@ def print_report(labels, items, keyword, multi, llm, facts, level_arms, show_err
     if tags:
         print()
         print("== Per-tag slices (precision recall f1 per arm) ==")
-        print((f"{'tag':<14} {'titles':>6}  " + "  ".join(f"{arm:^29}" for arm in arms)).rstrip())
+        # Derive the span from _prf itself: three right-aligned cells joined by single spaces.
+        cell = _PRF_WIDTH
+        span = 3 * cell + 2
+        lead = f"{'':<14} {'':>6}  "
+        print((lead + "  ".join(f"{arm:^{span}}" for arm in arms)).rstrip())
+        print((f"{'tag':<14} {'titles':>6}  "
+               + "  ".join(" ".join(f"{name:>{cell}}" for name in ("P", "R", "F1")) for _ in arms)).rstrip())
         for tag in tags:
             indices = [i for i, label in enumerate(labels) if tag in label.tags]
             cells = "  ".join(_prf(*count(expected, predicted[arm], indices)) for arm in arms)
@@ -618,10 +627,10 @@ def _run(args, client_factory):
     bound = upper_bound_usd(plan, model)
     print(f"Requests: {len(plan)}")
     print(f"Titles to classify: {len(labels)}")
-    print(f"Upper-bound cost estimate: ${bound:.4f} ({model})")
+    print(f"Upper-bound cost estimate (includes one retry per request): ${bound:.4f} ({model})")
     # Checked before the dry-run exit too, so an over-cap estimate is reported immediately.
     if bound > max_usd:
-        raise EvalError(f"upper-bound cost ${bound:.4f} is over the --max-usd cap of ${max_usd:.2f}; "
+        raise EvalError(f"upper-bound cost ${bound:.4f} is over the --max-usd cap of ${max_usd:.4f}; "
                         "raise --max-usd to run")
     if not args.confirm_spend:
         print("Re-run with --confirm-spend to call the API.")
@@ -636,12 +645,20 @@ def _run(args, client_factory):
 
     # Claim the output file before any spend.  Exclusive create ("x") fails if the file exists
     # and cannot race with another run, so an earlier run's predictions are never overwritten.
+    # Remember which directories do not exist yet, so a failed run removes only what it made.
+    new_dirs = []
+    probe = save_path.absolute().parent
+    while not probe.exists() and probe != probe.parent:
+        new_dirs.append(probe)  # deepest first
+        probe = probe.parent
     try:
         save_path.parent.mkdir(parents=True, exist_ok=True)
         handle = save_path.open("x", encoding="utf-8")
     except FileExistsError as exc:
+        _remove_empty_dirs(new_dirs)
         raise EvalError(f"predictions file already exists: {save_path}; choose another --save-predictions path") from exc
     except OSError as exc:
+        _remove_empty_dirs(new_dirs)
         raise EvalError(f"cannot create predictions file {save_path}: {exc.strerror or exc}") from exc
 
     saved = False
@@ -675,9 +692,19 @@ def _run(args, client_factory):
         if not saved:
             # Do not leave an empty claimed file behind when the run failed before writing.
             save_path.unlink(missing_ok=True)
+            _remove_empty_dirs(new_dirs)
     print()
     print(f"Predictions saved to {save_path}")
     return 0
+
+
+def _remove_empty_dirs(directories):
+    """rmdir each directory (deepest first); rmdir refuses a non-empty one, which is the safety."""
+    for directory in directories:
+        try:
+            directory.rmdir()
+        except OSError:
+            break
 
 
 def main(argv=None, *, client_factory=llm_client.make_client):
@@ -690,6 +717,8 @@ def main(argv=None, *, client_factory=llm_client.make_client):
     try:
         return _run(args, client_factory)
     except EvalError as exc:
+        # Flush first so earlier output (counts, estimates) precedes the error even when piped.
+        sys.stdout.flush()
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
