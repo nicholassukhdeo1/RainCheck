@@ -1159,3 +1159,63 @@ def test_c39_failed_run_keeps_a_directory_that_existed_before_the_run(
     assert err.startswith("Error:")
     assert not saved.exists()
     assert existing.is_dir()
+
+
+def test_c39_failed_run_with_dotdot_path_removes_only_what_it_created(
+        capsys, tmp_path, monkeypatch, prompts):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / "existing"
+    existing.mkdir()
+    code, out, err, _ = run(
+        capsys, BASE + ["--llm", "--confirm-spend", "--save-predictions", "x/../existing/sub/f.json"],
+        _factory_without_anthropic())
+    assert code == 1
+    assert err.startswith("Error:")
+    assert existing.is_dir()
+    assert not (existing / "sub").exists()
+    assert not (tmp_path / "x").exists()
+
+
+def test_c39_disk_full_while_saving_exits_1_with_one_error_and_cleans_up(
+        capsys, tmp_path, monkeypatch, prompts):
+    import errno
+    import io
+    import os
+
+    target = tmp_path / "newdir" / "p.json"
+    real_open = Path.open
+
+    class FullRaw(io.RawIOBase):
+        """Every write hits a full disk, so bytes stay buffered and flush/close both raise."""
+
+        def __init__(self, fd, name):
+            super().__init__()
+            self.fd = fd
+            self.name = name  # real file handles expose .name; error messages use it
+
+        def writable(self):
+            return True
+
+        def write(self, data):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        def close(self):
+            if not self.closed:
+                os.close(self.fd)
+            super().close()
+
+    def full_open(self, mode="r", *args, **kwargs):
+        if self == target and "x" in mode:
+            fd = os.open(self, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            return io.TextIOWrapper(io.BufferedWriter(FullRaw(fd, str(self))), encoding="utf-8")
+        return real_open(self, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", full_open)
+    result = run_llm(capsys, tmp_path, monkeypatch, predictions="newdir/p.json")
+    assert result.code == 1
+    assert len(error_lines(result.err)) == 1 and result.err.startswith("Error:")
+    assert "cannot write predictions" in result.err
+    assert "Traceback" not in result.err
+    assert not target.exists()
+    assert not target.parent.exists()
