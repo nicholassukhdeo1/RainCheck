@@ -284,3 +284,15 @@ The project is locked to Region `us-east-2`.
   A read-only `python3 src/reports.py` provides `report` (deals per brand), `trends` (recent eBay asking prices with change and rolling average), and `doctor` (data-quality checks), with text and JSON output.
   The agents write every query and the user reviews them (RC-22 spec, Amendment 1, which replaced the original plan for the user to write them by hand); at most one index is added, justified by EXPLAIN QUERY PLAN evidence.
 - **Resume angle:** Designed an auditable deal-history schema and a read-only SQL reporting tool with window functions, data-quality checks, and evidence-based indexing.
+
+### RC-23: LLM-assisted listing recognition
+
+- **Size:** L (split into RC-23a, RC-23b, RC-23c; see the spec's proposed split)
+- **Depends on:** RC-17, RC-21, RC-22 merged
+- **Touches (RC-23a):** new `src/llm_client.py`, `src/listing_classifier.py`, `src/eval_matching.py`, `src/prompts/`, `eval/listing_match/`, `requirements-cli.txt`, `README.md`, tests
+- **Why:** Keyword matching misses katakana spellings, misspellings, and model codes, and its false matches (laces, empty boxes, lookalikes) are only fixed after a bad deal is emailed.
+- **Scope:** RC-23a adds an offline Claude classifier, constrained to choose one tracked item ID or none, plus an evaluation command that scores keyword-only and keyword-plus-LLM recognition against hand-labeled titles.
+  RC-23b suggests keyword variants for the user to review, and RC-23c runs the classifier in production shadow mode with stored decisions (schema version 6).
+  Letting LLM decisions affect the digest is a later item that requires the evaluation results.
+  The user labels the eval set and writes the prompt; the agents write the plumbing.
+- **Resume angle:** Built and evaluated a schema-constrained LLM classifier against a keyword baseline on hand-labeled data, measuring precision, recall, and F1 before any production use.

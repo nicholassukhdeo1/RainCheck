@@ -30,6 +30,10 @@ _ENV_TO_CLEAR = (
     "RECEIVER_EMAIL",
     "EBAY_CLIENT_ID",
     "EBAY_CLIENT_SECRET",
+    # RC-23: a stray key or proxy URL in a developer shell must never reach an SDK client.
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
 )
 
 

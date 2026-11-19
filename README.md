@@ -37,12 +37,15 @@ src/
 ├── live_keywords.py # manage one keyword in the production S3 database
 ├── reports.py       # read-only reports: deals per brand, eBay price trends, data-quality checks
 ├── sql/             # the report, trends, and doctor queries, one SQL statement per file
+├── eval_matching.py # offline evaluation of keyword matching versus the LLM classifier (RC-23a)
+├── listing_classifier.py, llm_client.py, prompts/  # the constrained classifier, its API helpers, and its prompt
 ├── catalog.json     # the watchlist of items being tracked
 └── raincheck.db     # the SQLite database (local to each machine, not committed)
 tests/               # offline test suite
 scripts/
 └── capture_fixtures.py  # saves real pages for the test fixtures
 docs/                # backlog and feature specs
+eval/listing_match/  # your labeled titles and item snapshot for the evaluation
 ```
 
 Each watchlist item is a dictionary (name, brand, size, search query, market price, keywords).
@@ -229,6 +232,34 @@ python3 src/reports.py doctor
 - A query must return exactly the columns listed in its header, in that order, or the command fails and shows both lists.
 - To run the reports against production, download a copy of the database from S3 into a directory outside the repository, then set `RAINCHECK_DB_PATH` to that copy.
   `reports.py` makes no network calls and does not fetch the database itself.
+
+## Listing recognition evaluation (RC-23a)
+
+`src/eval_matching.py` measures how well today's keyword matcher recognizes which tracked item a Yahoo title refers to, and optionally how well a constrained Claude classifier does.
+It never touches the database or the daily jobs, and nothing in production calls the API.
+You supply `eval/listing_match/items.json` and a hand-labeled `eval/listing_match/labels.jsonl`; their formats and the labeling guide are in `eval/listing_match/README.md`.
+
+```bash
+python3 src/eval_matching.py                        # keyword arm only, offline and free
+python3 src/eval_matching.py --llm                  # prints the request count and an upper-bound cost, then stops
+python3 src/eval_matching.py --llm --confirm-spend  # calls the API
+python3 src/eval_matching.py --from-predictions eval/runs/<file>.json
+```
+
+- The report shows precision, recall, and F1 for four arms: `keyword`, `llm`, `hybrid` (the model decides and keywords are the fail-safe for a failed batch), and `union` (the model can add matches but never veto one).
+  It also shows a confusion summary, per-tag slices, a confidence-threshold table, failure counts, tokens, and cost.
+  No title text is printed unless you pass `--show-errors`.
+- The paid arm needs `--confirm-spend`, and any `--llm` run refuses when the worst-case estimate is over `--max-usd` (default 3.00).
+  `--model` accepts the models with a known price, and `--effort` sets the thinking depth.
+  The estimate includes one SDK retry per request, so a full 300-title Opus run needs `--max-usd 4`.
+- The API key comes from `ANTHROPIC_API_KEY` in your environment or `.env`.
+  It is never printed or logged.
+- The system prompt lives in `src/prompts/listing_match_v1.md`; you write its instructions below the contract header.
+  Create `listing_match_v2.md` for a new idea instead of editing a version that already produced predictions.
+- Each paid run writes a predictions file under `eval/runs/` (ignored by git) with no title text in it.
+  `--from-predictions` recomputes every metric from it for free, and refuses a file made from different labels or items.
+- The `anthropic` package is pinned in `requirements-cli.txt` only, so the Lambda package is unchanged.
+- The tests never call the API: they use a scripted fake client and block the network.
 
 ## Configuration
 

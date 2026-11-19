@@ -26,3 +26,6 @@ sqlTips.txt
 *.db-journal
 *.db-wal
 *.db-shm
+
+# RC-23a: saved evaluation predictions are local run artifacts.
+eval/runs/

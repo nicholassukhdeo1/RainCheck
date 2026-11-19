@@ -1,0 +1,15 @@
+{not json
+["a"]
+{"brand": "Rick Owens", "title": "t3", "expected": null, "extra": 1}
+{"title": "t4", "expected": null}
+{"brand": "Rick Owens", "expected": null}
+{"brand": "Rick Owens", "title": "t6"}
+{"brand": "Rick Owens", "title": "   ", "expected": null}
+{"brand": "Nope Brand", "title": "t8", "expected": null}
+{"brand": "Rick Owens", "title": "t9", "expected": "tabi boots"}
+{"brand": "Rick Owens", "title": "dup", "expected": null}
+{"brand": "Rick Owens", "title": " dup ", "expected": null}
+{"brand": "Rick Owens", "title": "t12", "expected": null, "tags": "katakana"}
+{"brand": "Rick Owens", "title": "t13", "expected": null, "tags": ["ok", "  "]}
+{"brand": "Rick Owens", "title": "t14", "expected": null, "tags": [1]}
+{"brand": "Rick Owens", "title": "t15", "expected": null, "notes": 5}
