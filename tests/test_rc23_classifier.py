@@ -124,12 +124,13 @@ def _install_fake_sdk(monkeypatch):
     return constructed
 
 
-def test_c2_make_client_builds_one_client_with_explicit_timeout_and_retries(monkeypatch):
+def test_c2_make_client_builds_one_client_with_pinned_base_url_timeout_and_retries(monkeypatch):
     import llm_client
 
     constructed = _install_fake_sdk(monkeypatch)
     client = llm_client.make_client("k")
-    assert constructed == [{"api_key": "k", "timeout": 90.0, "max_retries": 1}]
+    assert constructed == [{"api_key": "k", "base_url": "https://api.anthropic.com",
+                            "timeout": 90.0, "max_retries": 1}]
     assert client is not None
 
 

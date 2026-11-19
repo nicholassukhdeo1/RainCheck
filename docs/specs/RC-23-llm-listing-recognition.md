@@ -395,13 +395,17 @@ python3 src/eval_matching.py [--labels PATH] [--items PATH] [--show-errors]
 
 - Without `--llm` or `--from-predictions`, only the keyword arm runs, fully offline; no client is created even when `ANTHROPIC_API_KEY` is set.
 - `--llm` builds every request first (titles grouped by brand in label order, at most `MAX_TITLES_PER_REQUEST` per request, each brand classified only against its own items), then prints the request count, title count, and the upper-bound cost estimate below.
+  - If the upper bound exceeds `--max-usd` (default `3.00`), it exits 1 with an `Error:` line naming both amounts, before creating a client, with or without `--confirm-spend` (amended 2026-11-18, so a dry run reports an over-cap estimate immediately).
   - Without `--confirm-spend`, it then prints `Re-run with --confirm-spend to call the API.` and exits 0 without creating a client.
-  - If the upper bound exceeds `--max-usd` (default `3.00`), it exits 1 before creating a client, even with `--confirm-spend`.
+  - The predictions path is resolved and checked before creating a client: if the file already exists it exits 1 with an `Error:` line, and its parent directory is created then, so an unwritable path fails before any spend (amended 2026-11-18).
   - If the prompt has no instructions, it exits 1 with the `PromptNotReadyError` message before creating a client.
   - If `api_key_from_env()` returns `None` after `load_dotenv()`, it exits 1 with `Error: ANTHROPIC_API_KEY is not set.`
+  - If the `anthropic` package cannot be imported when the client is created, it exits 1 with `Error: the anthropic package is not installed; run pip install -r requirements-cli.txt.` (amended 2026-11-18).
+  - Any `OSError` while reading the prompt file (a directory in its place, a permission error) exits 1 with one `Error:` line, like a missing prompt (amended 2026-11-18).
   - Otherwise it runs the requests sequentially, prints the report, and writes the predictions file.
 - `--from-predictions PATH` recomputes every arm from a saved predictions file with no network and no client; it exits 1 if the file's labels or items SHA-256 differ from the current files.
   It cannot be combined with `--llm`.
+  It also exits 1 with `Error: predictions file is malformed: <reason>` when any value has the wrong type or range: `status` not `ok` or `failed`, a failed row without a string `failure`, an `ok` row whose `confidence` is not `low`, `medium`, or `high`, token counts that are not non-negative integers, or a `cost_usd` that is not a non-negative number (amended 2026-11-18).
 - `--model` must be a key of `PRICES_USD_PER_MTOK`; default `DEFAULT_MODEL`.
   `--effort` defaults to `DEFAULT_EFFORT`, so the user can run the effort sweep the docs recommend.
   `--prompt` defaults to `DEFAULT_PROMPT_VERSION`.
@@ -423,14 +427,16 @@ Titles themselves are not stored in the file; they are joined back from the labe
 - Input tokens per request are estimated as one token per character of `system` plus `payload_json`, plus 500 for the structured-output system prompt the API adds.
   One token per character overestimates English (about four characters per token) and is roughly right to high for Japanese, so it errs toward caution.
 - Output tokens per request are bounded by `MAX_TOKENS`, because `max_tokens` is a hard limit on thinking plus reply.
-- Upper bound = sum over requests of `cost_usd(model, estimated_input, MAX_TOKENS)`.
+- Upper bound = `(1 + MAX_RETRIES)` times the sum over requests of `cost_usd(model, estimated_input, MAX_TOKENS)` (amended 2026-11-18).
+  The factor covers retries: a request that times out on the client may still finish and be billed on the server, and the SDK then sends it again, so each planned request can be billed up to twice.
+- The report's actual cost counts only the usage the API returned, so it does not include a timed-out attempt that was billed; the report says so in one line under the cost.
 
 **Typical cost** (planning numbers, not used by code), assuming a title of up to 80 tokens, a system prompt of up to 1,500 tokens, and about 50 output tokens per classification plus up to 1,500 tokens of low-effort thinking:
 
 | Case | Opus 5.5 ($4 in, $20 out per MTok) | Haiku 5.5 ($0.10 in, $0.50 out) |
 | --- | --- | --- |
-| One full request, 25 titles: about 4,600 input and 2,750 output tokens | about $0.07 (upper bound about $0.14) | about $0.002 |
-| Evaluation of 300 labeled titles, 12 requests | about $0.85 (upper bound about $1.70) | about $0.02 |
+| One full request, 25 titles: about 4,600 input and 2,750 output tokens | about $0.07 (upper bound about $0.28 with the retry factor) | about $0.002 |
+| Evaluation of 300 labeled titles, 12 requests | about $0.85 (upper bound about $3.40 with the retry factor, so a full Opus run needs `--max-usd 4`) | about $0.02 |
 | RC-23c daily shadow run, about 30 new titles per brand, 2 requests | about $0.10 per brand per day, about $3 per month | about $0.10 per month |
 | RC-23c run that hits its 100-title cap, 4 requests | upper bound about $0.56 | about $0.01 |
 
@@ -545,7 +551,7 @@ These cover RC-23a only.
 **Client plumbing**
 
 1. `llm_client.api_key_from_env()` returns the value when `ANTHROPIC_API_KEY` is non-blank and `None` when it is unset, empty, or only whitespace.
-2. `llm_client.make_client("k")`, with `anthropic.Anthropic` replaced by a recorder, constructs exactly one client with `api_key="k"`, `timeout=90.0`, and `max_retries=1`; `make_client("")`, `make_client("  ")`, and `make_client(None)` raise `ValueError` without constructing a client.
+2. `llm_client.make_client("k")`, with `anthropic.Anthropic` replaced by a recorder, constructs exactly one client with `api_key="k"`, `base_url="https://api.anthropic.com"` (amended 2026-11-18, so a stray `ANTHROPIC_BASE_URL` cannot send the key elsewhere), `timeout=90.0`, and `max_retries=1`; `make_client("")`, `make_client("  ")`, and `make_client(None)` raise `ValueError` without constructing a client.
 3. `llm_client.response_text` returns the joined text for `end_turn` with a thinking block followed by a text block, and returns `(None, "refusal")`, `(None, "max_tokens")`, `(None, "unexpected_stop")` for `stop_sequence`, `tool_use`, and a missing stop reason, and `(None, "no_text")` for `end_turn` with only a thinking block.
 4. `llm_client.cost_usd("claude-opus-5-5", 1_000_000, 1_000_000)` is `24.0`, `cost_usd("claude-haiku-5-5", 1_000_000, 1_000_000)` is `0.6`, and an unknown model raises `KeyError`.
 
@@ -603,6 +609,7 @@ These cover RC-23a only.
 36. `tests/conftest.py` clears `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, and `ANTHROPIC_BASE_URL` for every test, and no module imports `anthropic` at module level except through `llm_client.make_client`.
 37. `.gitignore` ignores `eval/runs/`, and `eval/listing_match/README.md` documents both file formats, the tag vocabulary, the bundle rule, and how to run each arm.
 38. The README section documents the keyword-only command, the spend confirmation and cap, where the key comes from, the predictions file, and that tests never call the API.
+39. Amended 2026-11-18, robustness: (a) an over-cap estimate exits 1 with or without `--confirm-spend`, before the factory; (b) an existing `--save-predictions` file exits 1 before the factory and is left unchanged; (c) a factory that raises `ModuleNotFoundError` for `anthropic` gives exit 1 and the install message, with no traceback; (d) a prompt path that is a directory gives exit 1 with one `Error:` line; (e) each malformed-value case listed under `--from-predictions` gives exit 1 with `predictions file is malformed`; (f) the report's per-tag header line has no trailing spaces.
 
 ## Edge cases
 
@@ -682,6 +689,7 @@ The labeled set is committed, the evaluation compares Opus 5.5, Sonnet 5.5, and 
    Tradeoff: bootstrap confidence intervals would make claims like "LLM beats keywords" more rigorous and would be a strong interview point, at the cost of more code and tests; it could be a small follow-up.
 8. **Evaluation spend cap default.**
    Recommendation: `--max-usd 3.00`, which covers about 500 labeled titles on Opus by the upper-bound formula.
+   Amended 2026-11-18: with the retry factor, `3.00` covers about 250 labeled titles on Opus; the user kept the default and passes a higher `--max-usd` deliberately for larger runs.
    Tradeoff: a lower cap is safer, but the user would need to raise it on every realistic run.
 
 ## Rollback
