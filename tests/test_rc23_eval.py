@@ -978,6 +978,32 @@ def test_c39b_existing_predictions_file_exits_1_before_the_factory_and_is_unchan
     assert saved.read_bytes() == b'{"precious": "earlier run"}\n'
 
 
+def test_c39b_unwritable_predictions_directory_exits_1_before_the_factory(
+        capsys, tmp_path, monkeypatch, prompts):
+    import os
+    import stat
+
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("root ignores directory permissions")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        if os.access(locked, os.W_OK):
+            pytest.skip("directory is still writable on this system")
+        saved = locked / "pred.json"
+        code, out, err, factory = run(
+            capsys, BASE + ["--llm", "--confirm-spend", "--save-predictions", str(saved)])
+    finally:
+        locked.chmod(stat.S_IRWXU)
+    assert code == 1
+    assert len(error_lines(err)) == 1 and err.startswith("Error:")
+    assert "Traceback" not in err
+    assert factory.calls == []
+    assert not saved.exists()
+
+
 def test_c39c_missing_anthropic_package_exits_1_with_install_message_and_no_traceback(
         capsys, tmp_path, monkeypatch, prompts):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
@@ -1032,6 +1058,8 @@ MALFORMED = {
     "ok_row_confidence_unknown": _set_row(0, confidence="extreme"),
     "ok_row_confidence_none": _set_row(0, confidence=None),
     "ok_row_confidence_uppercase": _set_row(0, confidence="HIGH"),
+    "ok_row_confidence_list": _set_row(0, confidence=["high"]),
+    "ok_row_item_object": _set_row(0, item={"a": 1}),
     "input_tokens_negative": _set_run(input_tokens=-1),
     "input_tokens_float": _set_run(input_tokens=1.5),
     "input_tokens_string": _set_run(input_tokens="1200"),
