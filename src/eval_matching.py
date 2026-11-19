@@ -8,6 +8,7 @@ Titles are seller text from real listings, so the report never prints them unles
 --show-errors is given; that keeps a report safe to paste into a pull request.
 """
 import argparse
+import contextlib
 import hashlib
 import json
 import sys
@@ -645,14 +646,19 @@ def _run(args, client_factory):
 
     # Claim the output file before any spend.  Exclusive create ("x") fails if the file exists
     # and cannot race with another run, so an earlier run's predictions are never overwritten.
-    # Remember which directories do not exist yet, so a failed run removes only what it made.
+    # Create the directories one at a time and record only the ones this call really made.
+    # mkdir without exist_ok raises FileExistsError for an existing directory (and for a ".."
+    # part), so nothing that was already there can be recorded, let alone removed.
     new_dirs = []
-    probe = save_path.absolute().parent
-    while not probe.exists() and probe != probe.parent:
-        new_dirs.append(probe)  # deepest first
-        probe = probe.parent
     try:
-        save_path.parent.mkdir(parents=True, exist_ok=True)
+        built = None
+        for part in save_path.absolute().parent.parts:
+            built = Path(part) if built is None else built / part
+            try:
+                built.mkdir()
+            except FileExistsError:
+                continue
+            new_dirs.append(built)
         handle = save_path.open("x", encoding="utf-8")
     except FileExistsError as exc:
         _remove_empty_dirs(new_dirs)
@@ -686,9 +692,15 @@ def _run(args, client_factory):
         print_report(llm=results, facts=facts + _llm_facts(run), failed_batches=failed_batches,
                      usage=(input_tokens, output_tokens, cost), **report)
         write_predictions(handle, labels, items, results, run)
+        try:
+            handle.close()  # buffered bytes can still fail here; a truncated file must not survive
+        except OSError as exc:
+            raise EvalError(f"cannot write predictions to {save_path}: {exc.strerror or exc}") from exc
         saved = True
     finally:
-        handle.close()
+        # On failure, let the original error through rather than one from close().
+        with contextlib.suppress(OSError):
+            handle.close()
         if not saved:
             # Do not leave an empty claimed file behind when the run failed before writing.
             save_path.unlink(missing_ok=True)
@@ -699,8 +711,8 @@ def _run(args, client_factory):
 
 
 def _remove_empty_dirs(directories):
-    """rmdir each directory (deepest first); rmdir refuses a non-empty one, which is the safety."""
-    for directory in directories:
+    """rmdir in reverse creation order; rmdir refuses a non-empty one, which is the safety."""
+    for directory in reversed(directories):
         try:
             directory.rmdir()
         except OSError:
