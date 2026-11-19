@@ -440,6 +440,9 @@ def write_predictions(handle, labels, items, results, run):
         })
     try:
         handle.write(json.dumps({"run": run, "predictions": rows}, indent=2, ensure_ascii=False) + "\n")
+        # Flush here so a disk-full error on the final bytes surfaces as this EvalError,
+        # not as an OSError from close() after the run is already marked saved.
+        handle.flush()
     except OSError as exc:
         raise EvalError(f"cannot write predictions to {handle.name}: {exc.strerror or exc}") from exc
 
