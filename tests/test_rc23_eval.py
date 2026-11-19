@@ -1125,3 +1125,37 @@ def test_c39_report_notes_billed_timeout_attempts_are_not_in_the_actual_cost(
     assert len(notes) == 1, f"expected one line about timed-out attempts under the cost:\n{result.out}"
     assert "not" in notes[0].lower()
 
+
+def _factory_without_anthropic():
+    def factory(*args, **kwargs):
+        raise ModuleNotFoundError("No module named 'anthropic'", name="anthropic")
+    return factory
+
+
+def test_c39_failed_run_removes_the_claimed_file_and_the_directory_it_created(
+        capsys, tmp_path, monkeypatch, prompts):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
+    newdir = tmp_path / "newdir"
+    saved = newdir / "p.json"
+    code, out, err, _ = run(
+        capsys, BASE + ["--llm", "--confirm-spend", "--save-predictions", str(saved)],
+        _factory_without_anthropic())
+    assert code == 1
+    assert err.startswith("Error:")
+    assert not saved.exists()
+    assert not newdir.exists()
+
+
+def test_c39_failed_run_keeps_a_directory_that_existed_before_the_run(
+        capsys, tmp_path, monkeypatch, prompts):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
+    existing = tmp_path / "olddir"
+    existing.mkdir()
+    saved = existing / "p.json"
+    code, out, err, _ = run(
+        capsys, BASE + ["--llm", "--confirm-spend", "--save-predictions", str(saved)],
+        _factory_without_anthropic())
+    assert code == 1
+    assert err.startswith("Error:")
+    assert not saved.exists()
+    assert existing.is_dir()
