@@ -1,0 +1,29 @@
+[
+    {
+        "item name": "rick owens ramones",
+        "brand": "Rick Owens",
+        "yahoo_brand_id": "103538",
+        "size": 42,
+        "search_query": "rick owens ramones",
+        "exclude_keywords": ["drkshdw"],
+        "keywords": ["ramones", "ラモーンズ"]
+    },
+    {
+        "item name": "pod shorts",
+        "brand": "Rick Owens",
+        "yahoo_brand_id": "103538",
+        "size": 42,
+        "search_query": "pod shorts",
+        "exclude_keywords": ["fake"],
+        "keywords": ["pod shorts", "pod short"]
+    },
+    {
+        "item name": "tabi boots",
+        "brand": "Maison Margiela",
+        "yahoo_brand_id": "103600",
+        "size": 40,
+        "search_query": "maison margiela tabi boots",
+        "exclude_keywords": ["socks"],
+        "keywords": ["tabi"]
+    }
+]
