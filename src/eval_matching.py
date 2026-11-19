@@ -425,7 +425,7 @@ def _sha(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def write_predictions(path, labels, items, results, run):
+def write_predictions(handle, labels, items, results, run):
     names = _names(items)
     rows = []
     for label, result in zip(labels, results):
@@ -438,13 +438,10 @@ def write_predictions(path, labels, items, results, run):
             "confidence": result.confidence,
             "evidence": result.evidence,
         })
-    path = Path(path)
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"run": run, "predictions": rows}, indent=2, ensure_ascii=False) + "\n",
-                        encoding="utf-8")
+        handle.write(json.dumps({"run": run, "predictions": rows}, indent=2, ensure_ascii=False) + "\n")
     except OSError as exc:
-        raise EvalError(f"cannot write predictions to {path}: {exc.strerror or exc}") from exc
+        raise EvalError(f"cannot write predictions to {handle.name}: {exc.strerror or exc}") from exc
 
 
 def _malformed(reason):
@@ -503,9 +500,10 @@ def read_predictions(path, labels, items, labels_sha, items_sha):
             raise EvalError("predictions file does not match the labels")
         if row["status"] == "ok":
             brand_ids = {item.name: item.id for item in items if item.brand == label.brand}
-            if row["confidence"] not in CONFIDENCE_RANK:
+            # Type first: a list or object is unhashable, so `in` on a dict would raise TypeError.
+            if not isinstance(row["confidence"], str) or row["confidence"] not in CONFIDENCE_RANK:
                 raise _malformed(f"line {label.line} has an unknown confidence")
-            if row["item"] is not None and row["item"] not in brand_ids:
+            if row["item"] is not None and (not isinstance(row["item"], str) or row["item"] not in brand_ids):
                 raise _malformed(f"line {label.line} names an item outside its brand")
             if not isinstance(row["evidence"], str):
                 raise _malformed(f"line {label.line} evidence must be a string")
@@ -626,44 +624,54 @@ def _run(args, client_factory):
         print("Re-run with --confirm-spend to call the API.")
         return 0
 
-    # Resolve the output path now: an existing or unwritable path must fail before any spend.
     started_at = datetime.now(timezone.utc)
     save_path = Path(args.save_predictions or (
         DEFAULT_RUNS_DIR / f"{started_at.strftime('%Y%m%dT%H%M%SZ')}-{model}-{prompt.version}.json"))
-    if save_path.exists():
-        raise EvalError(f"predictions file already exists: {save_path}; choose another --save-predictions path")
-    try:
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise EvalError(f"cannot create {save_path.parent}: {exc.strerror or exc}") from exc
-
     api_key = llm_client.api_key_from_env()
     if api_key is None:
         raise EvalError("ANTHROPIC_API_KEY is not set.")
-    try:
-        client = client_factory(api_key)
-    except ImportError as exc:  # the SDK is only a local-command dependency
-        raise EvalError("the anthropic package is not installed; run pip install -r requirements-cli.txt.") from exc
-    results, input_tokens, output_tokens, failed_batches = run_llm(client, labels, plan, prompt, model, effort)
-    cost = llm_client.cost_usd(model, input_tokens, output_tokens)
-    run = {
-        "model": model,
-        "effort": effort,
-        "prompt_version": prompt.version,
-        "prompt_sha256": prompt.sha256,
-        "labels_sha256": labels_sha,
-        "items_sha256": items_sha,
-        "max_titles_per_request": listing_classifier.MAX_TITLES_PER_REQUEST,
-        "started_at": started_at.isoformat(),
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "cost_usd": cost,
-    }
-    print()
-    print_report(llm=results, facts=facts + _llm_facts(run), failed_batches=failed_batches,
-                 usage=(input_tokens, output_tokens, cost), **report)
 
-    write_predictions(save_path, labels, items, results, run)
+    # Claim the output file before any spend.  Exclusive create ("x") fails if the file exists
+    # and cannot race with another run, so an earlier run's predictions are never overwritten.
+    try:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = save_path.open("x", encoding="utf-8")
+    except FileExistsError as exc:
+        raise EvalError(f"predictions file already exists: {save_path}; choose another --save-predictions path") from exc
+    except OSError as exc:
+        raise EvalError(f"cannot create predictions file {save_path}: {exc.strerror or exc}") from exc
+
+    saved = False
+    try:
+        try:
+            client = client_factory(api_key)
+        except ImportError as exc:  # the SDK is only a local-command dependency
+            raise EvalError("the anthropic package is not installed; run pip install -r requirements-cli.txt.") from exc
+        results, input_tokens, output_tokens, failed_batches = run_llm(client, labels, plan, prompt, model, effort)
+        cost = llm_client.cost_usd(model, input_tokens, output_tokens)
+        run = {
+            "model": model,
+            "effort": effort,
+            "prompt_version": prompt.version,
+            "prompt_sha256": prompt.sha256,
+            "labels_sha256": labels_sha,
+            "items_sha256": items_sha,
+            "max_titles_per_request": listing_classifier.MAX_TITLES_PER_REQUEST,
+            "started_at": started_at.isoformat(),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_usd": cost,
+        }
+        print()
+        print_report(llm=results, facts=facts + _llm_facts(run), failed_batches=failed_batches,
+                     usage=(input_tokens, output_tokens, cost), **report)
+        write_predictions(handle, labels, items, results, run)
+        saved = True
+    finally:
+        handle.close()
+        if not saved:
+            # Do not leave an empty claimed file behind when the run failed before writing.
+            save_path.unlink(missing_ok=True)
     print()
     print(f"Predictions saved to {save_path}")
     return 0
