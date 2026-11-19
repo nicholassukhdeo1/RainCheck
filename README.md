@@ -249,8 +249,9 @@ python3 src/eval_matching.py --from-predictions eval/runs/<file>.json
 - The report shows precision, recall, and F1 for four arms: `keyword`, `llm`, `hybrid` (the model decides and keywords are the fail-safe for a failed batch), and `union` (the model can add matches but never veto one).
   It also shows a confusion summary, per-tag slices, a confidence-threshold table, failure counts, tokens, and cost.
   No title text is printed unless you pass `--show-errors`.
-- The paid arm needs `--confirm-spend` and refuses to run when the worst-case estimate is over `--max-usd` (default 3.00).
+- The paid arm needs `--confirm-spend`, and any `--llm` run refuses when the worst-case estimate is over `--max-usd` (default 3.00).
   `--model` accepts the models with a known price, and `--effort` sets the thinking depth.
+  The estimate includes one SDK retry per request, so a full 300-title Opus run needs `--max-usd 4`.
 - The API key comes from `ANTHROPIC_API_KEY` in your environment or `.env`.
   It is never printed or logged.
 - The system prompt lives in `src/prompts/listing_match_v1.md`; you write its instructions below the contract header.

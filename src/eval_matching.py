@@ -327,7 +327,7 @@ def print_report(labels, items, keyword, multi, llm, facts, level_arms, show_err
     if tags:
         print()
         print("== Per-tag slices (precision recall f1 per arm) ==")
-        print(f"{'tag':<14} {'titles':>6}  " + "  ".join(f"{arm:^29}" for arm in arms))
+        print((f"{'tag':<14} {'titles':>6}  " + "  ".join(f"{arm:^29}" for arm in arms)).rstrip())
         for tag in tags:
             indices = [i for i, label in enumerate(labels) if tag in label.tags]
             cells = "  ".join(_prf(*count(expected, predicted[arm], indices)) for arm in arms)
@@ -350,6 +350,7 @@ def print_report(labels, items, keyword, multi, llm, facts, level_arms, show_err
         print(f"Input tokens: {input_tokens:,}")
         print(f"Output tokens: {output_tokens:,}")
         print(f"Actual cost: ${cost:.4f}")
+        print("This counts only usage the API returned; timed-out attempts that were billed are not included.")
 
     if show_errors:
         print()
@@ -383,13 +384,18 @@ def plan_requests(labels, items, prompt, model, effort):
 
 
 def upper_bound_usd(plan, model):
-    """Worst-case cost: 1 token per character of input (over-estimates), max_tokens of output."""
+    """Worst-case cost: 1 token per character of input, max_tokens of output, retries included.
+
+    One token per character is a cautious guess, not a guarantee: emoji and rare kanji can
+    use more than one token per character.  The (1 + MAX_RETRIES) factor covers a request
+    that timed out on our side but was still billed, and is then sent again by the SDK.
+    """
     total = 0.0
     for _, _, _, request in plan:
         estimated_input = (len(request["system"]) + len(request["messages"][0]["content"])
                            + STRUCTURED_OUTPUT_OVERHEAD_TOKENS)
         total += llm_client.cost_usd(model, estimated_input, listing_classifier.MAX_TOKENS)
-    return total
+    return total * (1 + llm_client.MAX_RETRIES)
 
 
 def run_llm(client, labels, plan, prompt, model, effort):
@@ -441,33 +447,76 @@ def write_predictions(path, labels, items, results, run):
         raise EvalError(f"cannot write predictions to {path}: {exc.strerror or exc}") from exc
 
 
+def _malformed(reason):
+    return EvalError(f"predictions file is malformed: {reason}")
+
+
+def _is_count(value):
+    # bool is an int subclass, so True must not pass as a token count.
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
 def read_predictions(path, labels, items, labels_sha, items_sha):
-    """Returns (run, results).  Refuses a file made from different labels or items."""
+    """Returns (run, results).  Refuses a file made from different labels or items.
+
+    Every value is type-checked, because a hand-edited or truncated file must give one
+    clear error instead of a traceback or a silently wrong report.
+    """
     try:
         document = json.loads(_decode(_read_bytes(path, "predictions file"), "predictions file"))
     except ValueError as exc:
         raise EvalError(f"predictions file is not valid JSON: {exc}") from exc
-    try:
-        run, rows = document["run"], document["predictions"]
-        if run["labels_sha256"] != labels_sha or run["items_sha256"] != items_sha:
-            raise EvalError("predictions file was made from different labels or items; re-run with --llm")
-        if len(rows) != len(labels):
+
+    if not isinstance(document, dict) or not isinstance(document.get("run"), dict) \
+            or not isinstance(document.get("predictions"), list):
+        raise _malformed("expected an object with run and predictions")
+    run, rows = document["run"], document["predictions"]
+
+    required = ("model", "effort", "prompt_version", "prompt_sha256", "labels_sha256", "items_sha256",
+                "input_tokens", "output_tokens", "cost_usd")
+    missing = [key for key in required if key not in run]
+    if missing:
+        raise _malformed("run is missing " + ", ".join(missing))
+    for key in ("model", "effort", "prompt_version", "prompt_sha256", "labels_sha256", "items_sha256"):
+        if not isinstance(run[key], str):
+            raise _malformed(f"run.{key} must be a string")
+    if not _is_count(run["input_tokens"]) or not _is_count(run["output_tokens"]):
+        raise _malformed("token counts must be non-negative integers")
+    cost = run["cost_usd"]
+    if isinstance(cost, bool) or not isinstance(cost, (int, float)) or not 0 <= cost < float("inf"):
+        raise _malformed("cost_usd must be a non-negative number")
+
+    if run["labels_sha256"] != labels_sha or run["items_sha256"] != items_sha:
+        raise EvalError("predictions file was made from different labels or items; re-run with --llm")
+    if len(rows) != len(labels):
+        raise EvalError("predictions file does not match the labels")
+
+    results = []
+    for label, row in zip(labels, rows):
+        if not isinstance(row, dict):
+            raise _malformed("every prediction must be an object")
+        missing = [key for key in ("line", "title_sha256", "status", "failure", "item", "confidence", "evidence")
+                   if key not in row]
+        if missing:
+            raise _malformed(f"line {label.line} is missing " + ", ".join(missing))
+        if row["line"] != label.line or row["title_sha256"] != _sha(label.title):
             raise EvalError("predictions file does not match the labels")
-        results = []
-        for label, row in zip(labels, rows):
-            if row["line"] != label.line or row["title_sha256"] != _sha(label.title):
-                raise EvalError("predictions file does not match the labels")
-            if row["status"] == "ok":
-                brand_ids = {item.name: item.id for item in items if item.brand == label.brand}
-                item_id = None if row["item"] is None else brand_ids[row["item"]]
-                results.append(LlmResult(True, None, item_id, row["confidence"], row["evidence"]))
-            else:
-                results.append(LlmResult(False, row["failure"]))
-        for key in ("model", "effort", "prompt_version", "prompt_sha256", "input_tokens",
-                    "output_tokens", "cost_usd"):
-            run[key]
-    except (KeyError, TypeError, AttributeError) as exc:
-        raise EvalError("predictions file is malformed") from exc
+        if row["status"] == "ok":
+            brand_ids = {item.name: item.id for item in items if item.brand == label.brand}
+            if row["confidence"] not in CONFIDENCE_RANK:
+                raise _malformed(f"line {label.line} has an unknown confidence")
+            if row["item"] is not None and row["item"] not in brand_ids:
+                raise _malformed(f"line {label.line} names an item outside its brand")
+            if not isinstance(row["evidence"], str):
+                raise _malformed(f"line {label.line} evidence must be a string")
+            item_id = None if row["item"] is None else brand_ids[row["item"]]
+            results.append(LlmResult(True, None, item_id, row["confidence"], row["evidence"]))
+        elif row["status"] == "failed":
+            if not isinstance(row["failure"], str):
+                raise _malformed(f"line {label.line} failure must be a string")
+            results.append(LlmResult(False, row["failure"]))
+        else:
+            raise _malformed(f"line {label.line} status must be ok or failed")
     return run, results
 
 
@@ -561,23 +610,40 @@ def _run(args, client_factory):
         raise EvalError(f"prompt file not found: {exc.filename}") from exc
     except ValueError as exc:  # bad version, or PromptNotReadyError
         raise EvalError(str(exc)) from exc
+    except OSError as exc:  # a directory in its place, a permission error, ...
+        raise EvalError(f"cannot read prompt file: {exc.strerror or exc}") from exc
 
     plan = plan_requests(labels, items, prompt, model, effort)
     bound = upper_bound_usd(plan, model)
     print(f"Requests: {len(plan)}")
     print(f"Titles to classify: {len(labels)}")
     print(f"Upper-bound cost estimate: ${bound:.4f} ({model})")
+    # Checked before the dry-run exit too, so an over-cap estimate is reported immediately.
+    if bound > max_usd:
+        raise EvalError(f"upper-bound cost ${bound:.4f} is over the --max-usd cap of ${max_usd:.2f}; "
+                        "raise --max-usd to run")
     if not args.confirm_spend:
         print("Re-run with --confirm-spend to call the API.")
         return 0
-    if bound > max_usd:
-        raise EvalError(f"upper-bound cost ${bound:.4f} is over --max-usd ${max_usd:.2f}; raise --max-usd to run")
+
+    # Resolve the output path now: an existing or unwritable path must fail before any spend.
+    started_at = datetime.now(timezone.utc)
+    save_path = Path(args.save_predictions or (
+        DEFAULT_RUNS_DIR / f"{started_at.strftime('%Y%m%dT%H%M%SZ')}-{model}-{prompt.version}.json"))
+    if save_path.exists():
+        raise EvalError(f"predictions file already exists: {save_path}; choose another --save-predictions path")
+    try:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise EvalError(f"cannot create {save_path.parent}: {exc.strerror or exc}") from exc
+
     api_key = llm_client.api_key_from_env()
     if api_key is None:
         raise EvalError("ANTHROPIC_API_KEY is not set.")
-
-    started_at = datetime.now(timezone.utc)
-    client = client_factory(api_key)
+    try:
+        client = client_factory(api_key)
+    except ImportError as exc:  # the SDK is only a local-command dependency
+        raise EvalError("the anthropic package is not installed; run pip install -r requirements-cli.txt.") from exc
     results, input_tokens, output_tokens, failed_batches = run_llm(client, labels, plan, prompt, model, effort)
     cost = llm_client.cost_usd(model, input_tokens, output_tokens)
     run = {
@@ -597,11 +663,9 @@ def _run(args, client_factory):
     print_report(llm=results, facts=facts + _llm_facts(run), failed_batches=failed_batches,
                  usage=(input_tokens, output_tokens, cost), **report)
 
-    path = args.save_predictions or str(
-        DEFAULT_RUNS_DIR / f"{started_at.strftime('%Y%m%dT%H%M%SZ')}-{model}-{prompt.version}.json")
-    write_predictions(path, labels, items, results, run)
+    write_predictions(save_path, labels, items, results, run)
     print()
-    print(f"Predictions saved to {path}")
+    print(f"Predictions saved to {save_path}")
     return 0
 
 

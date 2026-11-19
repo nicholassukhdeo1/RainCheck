@@ -73,7 +73,10 @@ python3 src/eval_matching.py --llm --confirm-spend
 python3 src/eval_matching.py --llm --confirm-spend --model claude-haiku-5-5 --effort low --prompt listing_match_v2
 ```
 
-`--confirm-spend` is required to call the API, and a run is refused when the upper bound is over `--max-usd` (default 3.00).
+`--confirm-spend` is required to call the API.
+Any `--llm` run is refused when the upper bound (which includes one SDK retry per request) is over `--max-usd` (default 3.00).
+A full 300-title Opus run needs `--max-usd 4`.
+It also refuses to overwrite an existing predictions file.
 `ANTHROPIC_API_KEY` is read from the environment or `.env`.
 
 Each paid run saves its predictions under `eval/runs/` (ignored by git), or at `--save-predictions PATH`.

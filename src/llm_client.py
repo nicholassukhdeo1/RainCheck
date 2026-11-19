@@ -20,6 +20,9 @@ REQUEST_TIMEOUT_SECONDS = 90.0
 # while keeping the worst case near 2 * REQUEST_TIMEOUT_SECONDS per request.
 MAX_RETRIES = 1
 
+# Pin the endpoint so a stray ANTHROPIC_BASE_URL in the shell cannot send the key elsewhere.
+BASE_URL = "https://api.anthropic.com"
+
 # (input, output) USD per million tokens, from the pricing page as of 2026-11-18.
 # The keys are the only models the evaluation accepts: cost cannot be estimated for others.
 PRICES_USD_PER_MTOK = {
@@ -46,7 +49,7 @@ def make_client(api_key):
 
     # The key is passed explicitly so a stray ANTHROPIC_* variable cannot swap credentials.
     return anthropic.Anthropic(
-        api_key=api_key, timeout=REQUEST_TIMEOUT_SECONDS, max_retries=MAX_RETRIES
+        api_key=api_key, base_url=BASE_URL, timeout=REQUEST_TIMEOUT_SECONDS, max_retries=MAX_RETRIES
     )
 
 
