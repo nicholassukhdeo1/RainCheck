@@ -442,7 +442,8 @@ def _expected_upper_bound(model="claude-opus-5-5"):
         estimated_input = len(request["system"]) + len(request["messages"][0]["content"]) + 500
         total += llm_client.cost_usd(model, estimated_input, 6000)
         requests += 1
-    return requests, total
+    # Amended 2026-11-18: each request can be billed again by one SDK retry.
+    return requests, total * (1 + llm_client.MAX_RETRIES)
 
 
 def test_c27_llm_without_confirm_prints_estimate_and_exits_0_without_a_client(capsys, prompts):
@@ -941,3 +942,158 @@ def test_c38_readme_section_documents_the_evaluation():
         assert needle in lowered, f"README section must mention {needle!r}"
     assert any("test" in l.lower() and "never" in l.lower() and "api" in l.lower() for l in section.splitlines()), (
         "README section must say the tests never call the API")
+
+# ---------------------------------------------------------------------------
+# Criterion 39 (amended 2026-11-18): robustness
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("confirm", [[], ["--confirm-spend"]], ids=["dry_run", "confirm_spend"])
+def test_c39a_over_cap_exits_1_naming_both_amounts_before_the_factory(
+        capsys, tmp_path, monkeypatch, prompts, confirm):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
+    saved = tmp_path / "pred.json"
+    code, out, err, factory = run(
+        capsys, BASE + ["--llm", *confirm, "--max-usd", "0.01", "--save-predictions", str(saved)])
+    _, upper_bound = _expected_upper_bound()
+    assert upper_bound > 0.01
+    assert code == 1
+    assert len(error_lines(err)) == 1 and err.startswith("Error:")
+    assert prints_number(err, upper_bound, 3), f"estimate {upper_bound:.6f} not named:\n{err}"
+    assert prints_number(err, 0.01, 2), f"cap not named:\n{err}"
+    assert "Re-run with --confirm-spend" not in out
+    assert factory.calls == []
+    assert not saved.exists()
+
+
+def test_c39b_existing_predictions_file_exits_1_before_the_factory_and_is_unchanged(
+        capsys, tmp_path, monkeypatch, prompts):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
+    saved = tmp_path / "pred.json"
+    saved.write_bytes(b'{"precious": "earlier run"}\n')
+    code, out, err, factory = run(
+        capsys, BASE + ["--llm", "--confirm-spend", "--save-predictions", str(saved)])
+    assert code == 1
+    assert len(error_lines(err)) == 1 and err.startswith("Error:")
+    assert factory.calls == []
+    assert saved.read_bytes() == b'{"precious": "earlier run"}\n'
+
+
+def test_c39c_missing_anthropic_package_exits_1_with_install_message_and_no_traceback(
+        capsys, tmp_path, monkeypatch, prompts):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
+    calls = []
+
+    def factory(*args, **kwargs):
+        calls.append(1)
+        raise ModuleNotFoundError("No module named 'anthropic'", name="anthropic")
+
+    saved = tmp_path / "pred.json"
+    code, out, err, _ = run(
+        capsys, BASE + ["--llm", "--confirm-spend", "--save-predictions", str(saved)], factory)
+    assert code == 1
+    assert calls == [1]
+    assert ("Error: the anthropic package is not installed; "
+            "run pip install -r requirements-cli.txt.") in err
+    assert "Traceback" not in err and "Traceback" not in out
+    assert len(error_lines(err)) == 1
+    assert not saved.exists()
+
+
+def test_c39d_prompt_path_that_is_a_directory_exits_1_with_one_error_line(
+        capsys, monkeypatch, prompts):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
+    (prompts / "listing_match_v1.md").unlink()
+    (prompts / "listing_match_v1.md").mkdir()
+    code, out, err, factory = run(capsys, BASE + ["--llm", "--confirm-spend"])
+    assert code == 1
+    assert len(error_lines(err)) == 1 and err.startswith("Error:")
+    assert "Traceback" not in err
+    assert factory.calls == []
+
+
+def _set_row(index, **changes):
+    def mutate(document):
+        document["predictions"][index].update(changes)
+    return mutate
+
+
+def _set_run(**changes):
+    def mutate(document):
+        document["run"].update(changes)
+    return mutate
+
+
+# predictions[0] is an ok row (line 1); predictions[10] is a failed row (line 11).
+MALFORMED = {
+    "status_not_ok_or_failed": _set_row(0, status="maybe"),
+    "status_missing_value_none": _set_row(0, status=None),
+    "failed_row_failure_none": _set_row(10, failure=None),
+    "failed_row_failure_not_string": _set_row(10, failure=7),
+    "ok_row_confidence_unknown": _set_row(0, confidence="extreme"),
+    "ok_row_confidence_none": _set_row(0, confidence=None),
+    "ok_row_confidence_uppercase": _set_row(0, confidence="HIGH"),
+    "input_tokens_negative": _set_run(input_tokens=-1),
+    "input_tokens_float": _set_run(input_tokens=1.5),
+    "input_tokens_string": _set_run(input_tokens="1200"),
+    "output_tokens_negative": _set_run(output_tokens=-5),
+    "output_tokens_none": _set_run(output_tokens=None),
+    "cost_negative": _set_run(cost_usd=-0.01),
+    "cost_string": _set_run(cost_usd="0.0158"),
+    "cost_none": _set_run(cost_usd=None),
+}
+
+
+@pytest.mark.parametrize("name", sorted(MALFORMED))
+def test_c39e_malformed_prediction_values_exit_1_with_malformed_message(
+        capsys, tmp_path, monkeypatch, prompts, name):
+    result = run_llm(capsys, tmp_path, monkeypatch)
+    assert result.code == 0, result.err
+    document = json.loads(result.saved.read_text(encoding="utf-8"))
+    MALFORMED[name](document)
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps(document), encoding="utf-8")
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    code, out, err, factory = run(capsys, BASE + ["--from-predictions", str(bad)])
+    assert code == 1
+    assert err.startswith("Error:") and "predictions file is malformed" in err
+    assert len(error_lines(err)) == 1
+    assert "Traceback" not in err
+    assert factory.calls == []
+    assert parse_report(out)["metrics"] == {}  # no report was printed
+
+
+def test_c39e_valid_boundary_values_are_still_accepted(capsys, tmp_path, monkeypatch, prompts):
+    result = run_llm(capsys, tmp_path, monkeypatch)
+    document = json.loads(result.saved.read_text(encoding="utf-8"))
+    document["run"].update(input_tokens=0, output_tokens=0, cost_usd=0)
+    ok = tmp_path / "zero.json"
+    ok.write_text(json.dumps(document), encoding="utf-8")
+    code, out, err, _ = run(capsys, BASE + ["--from-predictions", str(ok)])
+    assert code == 0, err
+
+
+def test_c39f_per_tag_header_has_no_trailing_spaces(capsys, tmp_path, monkeypatch, prompts):
+    result = run_llm(capsys, tmp_path, monkeypatch)
+    assert result.code == 0, result.err
+    lines = result.out.splitlines()
+    start = next(i for i, l in enumerate(lines) if "per-tag" in l.lower())
+    first_tag = next(i for i, l in enumerate(lines)
+                     if i > start and l.split() and l.split()[0].lower() in TAG_NAMES)
+    header = lines[start:first_tag]
+    assert len(header) >= 2, "expected a section title and a column header before the tag rows"
+    for line in header:
+        assert line == line.rstrip(), f"trailing spaces in {line!r}"
+
+
+def test_c39_report_notes_billed_timeout_attempts_are_not_in_the_actual_cost(
+        capsys, tmp_path, monkeypatch, prompts):
+    result = run_llm(capsys, tmp_path, monkeypatch)
+    assert result.code == 0, result.err
+    lines = result.out.splitlines()
+    cost_at = next(i for i, l in enumerate(lines) if "actual cost" in l.lower())
+    notes = [l for l in lines[cost_at + 1:]
+             if "timed" in l.lower() and not l.lower().startswith("predictions saved")]
+    assert len(notes) == 1, f"expected one line about timed-out attempts under the cost:\n{result.out}"
+    assert "not" in notes[0].lower()
+
